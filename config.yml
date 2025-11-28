@@ -1,0 +1,10 @@
+tunnel: <UUID>
+credentials-file: C:\Users\<WINDOWS_USER>\.cloudflared\<UUID>.json
+
+ingress:
+  # Main route for the portfolio
+  - hostname: quickbitlabs.com
+    service: http://localhost:8000
+  
+  # Catch-all for 404s
+  - service: http_status:404
