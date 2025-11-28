@@ -9,6 +9,8 @@ from fastapi.templating import Jinja2Templates
 import uvicorn
 import requests # Imported as requested for external calls
 
+from mypy_util import config
+
 # --- App Configuration ---
 app = FastAPI(
     title="QuickBitLabs",
@@ -18,9 +20,6 @@ app = FastAPI(
 
 # Mount static directory
 app.mount("/static", StaticFiles(directory="static"), name="static")
-
-# Setup Templates
-# Ensure the folder Q:\quickbitlabs\templates exists
 templates = Jinja2Templates(directory="templates")
 
 @app.get("/", response_class=HTMLResponse)
@@ -28,6 +27,7 @@ async def read_root(request: Request):
     """
     Root endpoint serving a simple HTML page using Jinja2.
     """
+    tunnel_name = config.get_secret("cloudflare", "tunnelname") or "No Secret Found"
     return templates.TemplateResponse("index.html", {
         "request": request, 
         "message": "Welcome to QuickBitLabs",

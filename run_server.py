@@ -4,37 +4,39 @@ import os
 import sys
 import json
 
-# Add the project root to the python path
+# Add the project root to the python path so we can import mypy_util
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
-def load_config():
-    """Loads Uvicorn settings from .secrets.json"""
-    secrets_path = ".\\.secrets.json"
-    with open(secrets_path, 'r') as f:
-        json_data = json.load(f)
-        return json_data.get("Uvicorn")
+from mypy_util import config
 
 if __name__ == "__main__":
-    # Load settings
-    config = load_config()
-
-    # Parse settings with type conversion (JSON strings -> Python types)
-    host = config.get("host")
-    port = int(config.get("port"))
-    log_level = config.get("log_level")
-    reload_val = (config.get("reload").lower() == "true")
-    workers = int(config.get("workers"))
-
-    # Console output for testing.
     print("Starting QuickBitLabs Server (Uvicorn)...")
-    print(f"Config: Loaded from .secrets.json")
+    
+    # Load settings using your centralized config
+    # We use defaults (or "127.0.0.1") to prevent crashes if JSON is missing keys
+    host = config.get_secret("uvicorn", "host") or "127.0.0.1"
+    
+    # Type conversion: Strings from JSON need to be int/bool
+    port_str = config.get_secret("uvicorn", "port")
+    port = int(port_str) if port_str else 8000
+    
+    log_level = config.get_secret("uvicorn", "log_level") or "info"
+    
+    reload_str = config.get_secret("uvicorn", "reload")
+    # robust boolean check (handles "True", "true", "TRUE")
+    reload_val = str(reload_str).lower() == "true"
+    
+    workers_str = config.get_secret("uvicorn", "workers")
+    workers = int(workers_str) if workers_str else 1
+
+    print(f"Config: Loaded via mypy_util")
+    print(f"Target: http://{host}:{port}")
+
     uvicorn.run(
-        "main:app", 
-        host=host, 
-        port=port, 
+        "main:app",
+        host=host,
+        port=port,
         log_level=log_level,
         reload=reload_val,
-        workers=workers 
+        workers=workers
     )
-    print(f"Local URL: http://{host}:{port}")
-    print("Server is running")

@@ -1,10 +1,17 @@
-tunnel: <UUID>
-credentials-file: C:\Users\<WINDOWS_USER>\.cloudflared\<UUID>.json
+# Cloudflare Tunnel Configuration File
+# Save this file as config.yml in the cloudflared directory
+# 
+tunnel: 6c62ec13-b13d-4f6c-a557-4c4070d675c0
+credentials-file: C:\cloudflared\6c62ec13-b13d-4f6c-a557-4c4070d675c0.json
+protocol: http2
+
+# Optional: distinct log file for the tunnel service
+logfile: Q:\quickbitlabs\logs\cloudflared.log
 
 ingress:
-  # Main route for the portfolio
+  # Route traffic to your FastAPI app running on port 8000
   - hostname: quickbitlabs.com
     service: http://localhost:8000
   
-  # Catch-all for 404s
+  # Catch-all rule (required)
   - service: http_status:404
