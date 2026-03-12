@@ -1,0 +1,31 @@
+# Logs
+logs
+*.log
+node_modules
+dist
+dist-ssr
+*.local
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# Local stuff
+__pycache__
+.trash
+.bin
+.venv
+.pytest_cache
+pyrightconfig.json
+
+# Environment files
+*secret*
+*data*
+*env*

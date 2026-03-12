@@ -1,0 +1,18 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "quickbitlabs"
+version = "0.1.0"
+description = "olympus"
+requires-python = ">=3.11"
+dependencies = [
+]
+
+[tool.setuptools]
+packages = ["quickbitlabs"]
+
+[tool.pytest.ini_options]
+pythonpath = [".."]
+testpaths = ["tests"]

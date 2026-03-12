@@ -1,0 +1,239 @@
+:root {
+  /* Basic Colors */
+  --cherry: rgb(187, 0, 41);
+  --red: rgb(100, 0, 0);
+  --red-dark: rgb(41, 0, 0);
+  --green: rgb(0, 41, 0);
+  --blue: rgb(0, 0, 41);
+  --yellow: rgb(255, 255, 0);
+  --orange: rgb(255, 123, 0);
+  --purple: rgb(20, 0, 41);
+  --pink: rgb(131, 0, 131);
+  --turquoise: rgb(0, 41, 41);
+  --cyan: rgb(0, 90, 122);
+  --sky: rgb(0, 187, 255);
+
+  /* GitHub Theme Colors */
+  --git-dark: rgb(3, 4, 9);
+  --git-green: rgb(66, 134, 60);
+  --git-navy: rgb(13, 17, 23);
+  --git-blue: rgb(14, 17, 24);
+  --git-grey: rgb(159, 159, 159);
+  --git-white: rgb(255, 255, 255);
+
+  /* Cloud Voyages Theme Colors */
+  --cv-deep-blue: #041221;
+  --cv-dark-blue: #062438;
+  --cv-deep-azure: #143f56;
+  --cv-dark-azure: #2a5d75;
+  --cv-azure: #1a72a2;
+  --cv-light-azure: #4eacc8;
+  --cv-sky: #32b8d8;
+  --cv-dark-sky: #9acce0;
+  --cv-dark-cloud: #4a7084;
+  --cv-grey-cloud: #6195ad;
+  --cv-storm-cloud: #59889e;
+  --cv-cloud: #d7f1f6;
+
+  /* my Custom Colors */
+  --my-orange: rgb(226, 96, 24);
+  --my-navy: #050611;
+  --my-cyan: rgb(0, 238, 255);
+  --my-light-orange: rgb(243, 110, 33);
+  --my-black: rgb(0, 0, 0);
+  --my-green: rgb(105, 155, 95);
+  --my-light-green: rgb(79, 187, 68);
+  --my-yellow: rgb(242, 178, 54);
+  --my-white: rgb(255, 255, 255);
+  --my-grey: #e0e0e0;
+  --my-gray: var(--my-grey);
+
+  --panel: #f6f8fa;
+  --border: #d0d7de;
+  --hover: #eef1f4;
+  --active: #eaeef2;
+  --shadow: 0 1px 0 rgba(27, 31, 36, 0.04);
+
+  --radius: 10px;
+  --radius-sm: 8px;
+
+  --mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono",
+    "Courier New", monospace;
+  --sans:  -apple-system, BlinkMacSystemFont,"Segoe UI", Helvetica, Arial, sans-serif, 
+    "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol";
+
+  /* Tints and Transparencies */
+  --transparent: rgba(0, 0, 0, 0);
+
+  --tint-0: rgba(0, 0, 0, .1);
+  --tint-25: rgba(0, 0, 0, 0.25);
+  --tint-50: rgba(0, 0, 0, 0.5);
+  --tint-75: rgba(0, 0, 0, 0.75);
+  --tint-100: rgba(0, 0, 0, .9);
+
+  --light-0: rgba(255, 255, 255, 0.1);
+  --light-25: rgba(255, 255, 255, 0.25);
+  --light-50: rgba(255, 255, 255, 0.5);
+  --light-75: rgba(255, 255, 255, 0.75);
+  --light-100: rgba(255, 255, 255, .9);
+
+
+  /* Text Styles */
+  --text-color: var(--my-white);
+  --text-1: var(--text-color);
+  --text-2: var(--git-grey);
+  --bg: var(--my-navy);
+  --bg-1: var(--bg);
+  --bg-2: var(--tint-50);
+  --accent-1: var(--git-grey); 
+  --accent-2: var(--light-50);
+  --item-1: var(--my-green);
+  --item-2: var(--my-blue);
+
+  --text-font: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  --text-Stroke: 1px rgba(0, 0, 0, 0.9);
+
+  --text-shadow: 0 2px 6px rgba(0,0,0,0.6);
+  --text-shadow-depth:
+    -1px -1px 0 rgba(0,0,0,0.95),
+     1px -1px 0 rgba(0,0,0,0.95),
+    -1px  1px 0 rgba(0,0,0,0.95),
+     1px  1px 0 rgba(0,0,0,0.95),
+     0px  3px 10px rgba(0,0,0,0.55); /* depth */
+
+  /* Borders */
+  --border-section: 2px solid color-mix(in srgb, var(--text-color) 50%, transparent 50%) ;
+  --border-tint: color-mix(in srgb, var(--text-color) 50%, transparent 50%);
+  --border-mix: color-mix(in srgb, var(--text-color) 50%, srgb var(--bg), 50%);
+  --border-1: 1px solid color-mix(in srgb, var(--text-color) 50%, transparent 50%);
+  --border-2: 1px solid color-mix(in srgb, var(--bg) 50%, transparent 50%);
+  --border-3: 1px solid color-mix(in srgb, var(--accent-1) 50%, transparent 50%);
+  --border-4: 1px solid color-mix(in srgb, var(--item-1) 50%, transparent 50%);
+
+
+  /* Elevation  */
+  --shadow-1: 0 12px 30px rgba(0, 0, 0, 0.25);
+  --shadow-2: 0 16px 40px rgba(0, 0, 0, 0.35);
+  --shadow-3: 0 20px 50px rgba(0, 0, 0, 0.45);
+  
+  --glow-green: 0 0 6px var(--my-LightGreen),
+    0 0 18px color-mix(in srgb, var(--my-LightGreen) 70%, transparent),
+    0 0 40px color-mix(in srgb, var(--my-LightGreen) 45%, transparent);
+
+  /* Focus ring */
+  --focus-ring: 2px solid var(--text-color);
+  --focus-offset: 2px;
+
+  --box-shadow-1: 25px 25px 50px -12px color-mix(in srgb, var(--accent-1) 50%, in srgb, rgba(0, 0, 0, 0.25), 50%);
+  --box-shadow-2: 0 16px 44px color-mix(in srgb, var(--item-1) 50%, in srgb, rgba(0, 0, 0, 0.25), 50%);
+
+  --glass-1: color-mix(in srgb, var(--bg) 50%, in srgb, rgba(0, 0, 0, 0.1), 50%);
+  --glass-2: color-mix(in srgb, var(--bg) 50%, in srgb, rgba(0, 0, 0, 0.25), 50%);
+  --glass-3: color-mix(in srgb, var(--bg) 50%, in srgb, rgba(0, 0, 0, 0.5), 50%);
+  --glass-4: color-mix(in srgb, var(--bg) 50%, in srgb, rgba(0, 0, 0, 0.75), 50%);
+
+  --text-shadow-1: 0 12px 30px color-mix(in srgb, var(--bg) 12%, in srgb, rgba(0, 0, 0, 0), 88%);
+  --text-shadow-2: 0 16px 44px color-mix(in srgb, var(--bg) 18%, in srgb, rgba(0, 0, 0, 0), 82%);
+}
+
+html[data-theme="my-theme"] {
+  --text-color: var(--my-white);
+  --text-1: var(--text-color);
+  --text-2: var(--my-grey);
+  --bg: var(--my-navy);
+  --bg-1: var(--bg);
+  --bg-2: var(--git-navy);
+  --accent-1: var(--my-light-green); 
+  --accent-2: var(--purple);
+  --item-1: var(--green);
+  --item-2: var(--blue);
+
+  --blur: blur(3px);
+  --webkit-back-blur: blur(2px);
+}
+
+
+html[data-theme="dark"] {
+
+  --text-color: #ffffff;
+  --text-1: var(--text-color);
+  --text-2: var(--my-grey);
+  --bg: #000000;
+  --bg-1: var(--bg);
+  --bg-2: var(--my-navy);
+  --accent-1: var(--my-grey); 
+  --accent-2: var(--git-grey);
+  --item-1: var(--green);
+  --item-2: var(--git-navy);
+
+  --blur: blur(3px);
+  --webkit-back-blur: blur(2px);
+}
+
+html[data-theme="light"] {
+  --text-color: #000000;
+  --text-1: var(--text-color);
+  --text-2: var(--my-gray);
+  --bg: #ffffff;
+  --bg-1: var(--bg);
+  --bg-2: color-mix(in srgb, var(--bg) 50%, in srgb, rgb(150, 150, 150), 50%);
+  --accent-1: var(--my-gray);
+  --accent-2: var(--git-grey);
+  --item-1: var(--green);
+  --item-2: var(--blue);
+
+  --blur: blur(3px);
+  --webkit-back-blur: blur(2px);
+}
+
+html[data-theme="git"] {
+  --text-color: var(--my-white);
+  --text-1: var(--text-color);
+  --text-2: var(--git-grey);
+  --text-3: #24292f;
+  --bg: var(--git-navy);
+  --bg-1: var(--bg);
+  --bg-2: var(--git-dark);
+  --bg-3: #161b22;
+  --accent-1: var(--git-grey); 
+  --accent-2: rgb(87, 96, 106);
+  --accent-3: #30363d;
+  --accent-4: #1f2630;;
+  --item-1: var(--git-green);
+  --item-2: var(--blue);
+  --border-1: var(--accent-3);
+  --hover-1: var(--accent-4);
+  --panel: var(--bg-3);
+  --active-1: #222a35;
+  --box-shadow-1: 0 1px 0 rgba(1, 4, 9, 0.6);
+  --blur: blur(3px);
+  --webkit-back-blur: blur(2px);
+}
+
+html[data-theme="cv"] {
+
+  --text-font: 'ansi-serif', 'Roboto', serif;
+
+  --text-color: var(--cv-dark-blue);
+  --text-1: var(--text-color);
+  --text-2: var(--cv-dark-cloud);
+  --text-3: var(--text-color);
+  --bg: white;
+  --bg-1: var(--cv-cloud);
+  --bg-2: var(--cv-light-azure);
+  --bg-3: #b9d6ff;
+  --accent-1: var(--cv-grey-cloud); 
+  --accent-2: var(--cv-dark-azure);
+  --accent-3: var(--cv-deep-azure);
+  --accent-4: var(--cv-dark-blue);
+  --item-1: var(--cv-sky);
+  --item-2: var(--cv-azure);
+  --border-1: var(--cv-dark-blue);
+  --hover-1: var(--cv-cloud);
+  --panel: var(--cv-storm-cloud);
+  --active-1: var(--cv-storm-cloud);
+  --box-shadow-1: 0 1px 0 rgba(1, 4, 9, 0.6);
+  --blur: blur(3px);
+  --webkit-back-blur: blur(2px);
+}
+/*-------------------------------------------------------------------------------------------------------*/
