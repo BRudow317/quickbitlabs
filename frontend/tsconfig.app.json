@@ -28,7 +28,7 @@
     "noFallthroughCasesInSwitch": true,
     "noUncheckedSideEffectImports": true
   },
-  "include": ["client"],
+  "include": ["src"],
   "exclude": [
     "dist",
     "bin",

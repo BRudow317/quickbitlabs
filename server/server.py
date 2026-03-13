@@ -1,3 +1,4 @@
+from __future__ import annotations
 import uvicorn
 from fastapi.staticfiles import StaticFiles
 from server.app import create_app

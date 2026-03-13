@@ -2,7 +2,7 @@ from __future__ import annotations
 import csv
 from pathlib import Path
 from dataclasses import dataclass, field
-from typing import Iterator, TYPE_CHECKING, Union, Type
+from typing import Iterator,  Union, Type, cast #TYPE_CHECKING, Optional
 from .base import AbstractSource
 from .exceptions import AlignmentError
 import logging
@@ -11,7 +11,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class Csv(AbstractSource):
     source_path: Path
-    file_headers: list[str] = field(default_factory=list)
+    file_headers: list[str] = field(default_factory=lambda: [])
     file_name: str = ''
     col_count: int = 0
     row_count: int = 0
@@ -28,7 +28,7 @@ class Csv(AbstractSource):
         self.csv_sniff()
         with self.open() as f:
             reader = csv.reader(f, dialect=self.dialect)
-            self.file_headers = next(reader, [])
+            self.file_headers = next(reader, cast(list[str], []))
         if not self.file_headers:
             raise AlignmentError('CSV file has no headers.', source_path=str(self.source_path), row_number=1, expected=1, got=0)
         for i, h in enumerate(self.file_headers):

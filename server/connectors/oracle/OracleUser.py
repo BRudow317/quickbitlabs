@@ -14,7 +14,7 @@ class OracleUser:
     oracle_port: int | None = field(default_factory=lambda: int(os.environ.get('ORACLE_PORT', '1521')))
     oracle_sid: str | None = field(default_factory=lambda: os.environ.get('ORACLE_SID'))
     _current_connection: oracledb.Connection | None = None
-    _open_cursors: list[oracledb.Cursor] = field(default_factory=list)
+    _open_cursors: list[oracledb.Cursor | None] = field(default_factory=list)
     def get_con(self) -> oracledb.Connection:
         try:
             logger.debug('Enter: OracleUser.get_con')
@@ -68,8 +68,12 @@ class OracleUser:
             with cursor:
                 cursor.prepare(sql)
                 cursor.execute(sql)
+
+                if cursor.
+
                 if 'select' not in sql.lower():
                     self.get_con().commit()
+
         except Exception as e:
             self.get_con().rollback()
             logger.error(f'Error executing SQL: {sql} Error: {e}')

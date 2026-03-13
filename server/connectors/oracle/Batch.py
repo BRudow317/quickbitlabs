@@ -1,12 +1,19 @@
 from __future__ import annotations
 import itertools, logging
 from dataclasses import dataclass
-from typing import Iterator
-logger = logging.getLogger(__name__)
 
+# local imports
+from normalize_data import normalize_cell
+
+# Type Checking
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
+    from typing import Any, cast
     from .Job import Job
+    from oracledb import Cursor, Connection
+    from collections.abc import Iterable, Iterator
+
+logger = logging.getLogger(__name__)
 
 @dataclass
 class Batch:
@@ -17,7 +24,7 @@ class Batch:
     all_rows_failed: bool = False
     @staticmethod
     def batch_exec(job: Job, row_stream: Iterator[list[str]], size: int) -> Batch:
-        from .normalize_data import normalize_cell
+        
         batch = Batch()
         raw_rows = list(itertools.islice(row_stream, size))
         if not raw_rows: return batch
@@ -28,7 +35,13 @@ class Batch:
             for row in raw_rows
         ]
         batch.rows_processed_count = len(formatted_data)
-        batch.error_count = batch.batch_execute_inserts(sql=job.oracle_table.insert_sql_stmt, row_list=formatted_data, input_sizes=job.oracle_table.build_input_sizes(), connection=job.oracle_table.session.get_con(), test_run=job.test_run)
+        batch.error_count = batch.batch_execute_inserts(
+                sql=job.oracle_table.insert_sql_stmt, 
+                row_list=formatted_data, 
+                input_sizes=job.oracle_table.build_input_sizes(), 
+                connection=job.oracle_table.session.get_con(), 
+                test_run=job.test_run
+                )
         if batch.error_count > 0:
             batch.all_rows_failed = batch.error_count == batch.total_rows
             batch.message = f"""------ Batch Has Errors ------
@@ -40,16 +53,24 @@ class Batch:
         else:
             batch.message = 'Batch Success'; logger.info(batch.message)
         return batch
-    def batch_execute_inserts(self, sql, row_list, connection, input_sizes=None, batcherrors=True, test_run=False) -> int:
+    
+    def batch_execute_inserts(self, 
+                              sql: str, 
+                              row_list: list[dict[str, Any]], 
+                              connection: Connection, 
+                              input_sizes: dict[str, Any] | None = None, 
+                              batcherrors: bool = True, 
+                              test_run: bool = False
+                            ) -> int:
         try:
-            cursor = connection.cursor(); total_errors = 0; iterator = iter(row_list); batch_size = 10000
+            cursor: Cursor = connection.cursor(); total_errors = 0; iterator = iter(row_list); batch_size = 10000
             while True:
                 chunk = list(itertools.islice(iterator, batch_size))
                 if not chunk: break
                 with cursor:
                     if input_sizes: cursor.setinputsizes(**input_sizes)
                     cursor.executemany(sql, chunk, batcherrors=batcherrors)
-                    batch_errors = cursor.getbatcherrors()
+                    batch_errors: list[dict[str, Any]] = cast(list[dict[str, Any]], cursor.getbatcherrors())
                     if batch_errors:
                         total_errors += len(batch_errors)
                         logger.error(f'Batch Errors in chunk: {batch_errors}')
