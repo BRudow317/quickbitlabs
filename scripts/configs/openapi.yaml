@@ -1,0 +1,95 @@
+openapi: 3.1.0
+info:
+  title: Quote and Authentication API
+  version: 1.0.0
+servers:
+  - url: /api
+paths:
+  /quote:
+    post:
+      summary: Submit a quote request
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/QuoteRequest'
+      responses:
+        '200':
+          description: Quote request accepted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QuoteResponse'
+  /auth/login:
+    post:
+      summary: Login with username and password
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '200':
+          description: Login success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginResponse'
+        '401':
+          description: Invalid credentials
+  /account/recover:
+    post:
+      summary: Send account recovery email
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RecoveryRequest'
+      responses:
+        '200':
+          description: Recovery email dispatched
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RecoveryResponse'
+components:
+  schemas:
+    QuoteRequest:
+      type: object
+      properties:
+        name: { type: string }
+        email: { type: string }
+        address: { type: string }
+        phone: { type: string }
+        details: { type: string }
+        type: { type: string }
+      required: [name, email, details]
+    QuoteResponse:
+      type: object
+      properties:
+        id: { type: string }
+        status: { type: string }
+        message: { type: string }
+    LoginRequest:
+      type: object
+      properties:
+        username: { type: string }
+        password: { type: string }
+      required: [username, password]
+    LoginResponse:
+      type: object
+      properties:
+        token: { type: string }
+        username: { type: string }
+    RecoveryRequest:
+      type: object
+      properties:
+        email: { type: string }
+      required: [email]
+    RecoveryResponse:
+      type: object
+      properties:
+        message: { type: string }

@@ -1,0 +1,35 @@
+/mvnw text eol=lf
+*.cmd text eol=crlf
+# Force all text files to use Linux line endings (LF) in the working directory.
+# This fixes the "every file changed" issue when mounting into a Linux container.
+* text=auto eol=lf
+
+# binary files should not be modified
+*.jar binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.pdf binary
+*.zip binary
+*.tar binary
+*.gz binary
+*.mp3 binary
+*.mp4 binary
+*.mov binary
+*.wmv binary
+*.avi binary
+*.exe binary
+*.dll binary
+*.so binary
+*.bin binary
+*.class binary
+*.o binary
+*.a binary
+*.lib binary
+*.pdb binary
+*.iso binary
+*.dmg binary
+*.ttf binary
+*.woff binary

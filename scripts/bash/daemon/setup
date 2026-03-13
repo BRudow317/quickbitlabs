@@ -1,0 +1,22 @@
+# Ubuntu install + setup
+sudo apt-get update && sudo apt-get install -y socat
+
+# Create dedicated user
+sudo useradd -r -s /usr/sbin/nologin portdaemon || true
+
+# Install scripts
+sudo install -m 0755 port-daemon.sh /usr/local/bin/port-daemon.sh
+sudo install -m 0755 port-daemon-handler.sh /usr/local/bin/port-daemon-handler.sh
+
+# Install systemd unit
+sudo install -m 0644 port-daemon@.service /etc/systemd/system/port-daemon@.service
+sudo systemctl daemon-reload
+
+# Start on port 9000
+sudo systemctl enable --now port-daemon@9000.service
+
+# Test from another terminal
+# nc 127.0.0.1 9000
+
+# Logs
+sudo journalctl -u port-daemon@9000.service -f

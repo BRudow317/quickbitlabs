@@ -1,0 +1,20 @@
+# Ubuntu install/run steps
+sudo apt-get update && sudo apt-get install -y socat
+
+sudo useradd -r -s /usr/sbin/nologin httpbash || true
+
+sudo install -m 0755 http-daemon.sh  /usr/local/bin/http-daemon.sh
+sudo install -m 0755 http-handler.sh /usr/local/bin/http-handler.sh
+sudo install -m 0755 http-app.sh     /usr/local/bin/http-app.sh
+
+sudo install -m 0644 http-daemon@.service /etc/systemd/system/http-daemon@.service
+sudo systemctl daemon-reload
+sudo systemctl enable --now http-daemon@9000.service
+
+# Test
+curl -i http://127.0.0.1:9000/health
+curl -i "http://127.0.0.1:9000/hello?name=Human"
+curl -i -X POST http://127.0.0.1:9000/echo -d "test body"
+
+# Logs
+sudo journalctl -u http-daemon@9000.service -f

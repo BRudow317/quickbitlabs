@@ -1,0 +1,24 @@
+# This is my Dev composer
+version: "3.9"
+services:
+  mlm:
+    container_name: mlm-dev-container
+    build:
+      context: .
+      target: build  # <---This tells Docker to stop at Stage)
+      dockerfile: Dockerfile
+    image: mlm:${IMAGE_TAG:-local}
+    ports:
+      - "8080:8080"
+    environment:
+      SPRING_DATASOURCE_URL: "${SPRING_DATASOURCE_URL}"
+      SPRING_DATASOURCE_USERNAME: "${SPRING_DATASOURCE_USERNAME}"
+      SPRING_DATASOURCE_PASSWORD: "${SPRING_DATASOURCE_PASSWORD}"
+    
+    # Keep container running so VS Code can attach
+    entrypoint: ["sh", "-c", "tail -f /dev/null"]
+
+    volumes:
+      - .:/app       # Sync folder to app/ dir in container.
+      # - /app/target    # 2. ISOLATE the Jar and build files to the container.
+      # - /app/frontend/node_modules  # 3. ISOLATE the Node Modules to the container.
