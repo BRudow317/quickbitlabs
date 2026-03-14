@@ -55,13 +55,13 @@ class SfSession:
     """
 
     # init params
-    session_id: Optional[str] = None
-    instance: Optional[str] = None
-    instance_url: Optional[str] = None
+    session_id: str | None = None
+    instance: str | None = None
+    instance_url: str | None = None
     session: requests.Session = field(default_factory=requests.Session)
     domain: str = 'login'
-    consumer_key: Optional[str] = None
-    consumer_secret: Optional[str] = None
+    consumer_key: str | None = None
+    consumer_secret: str | None = None
     sf_version: str = API_VERSION
     parse_float: Optional[Callable[[str], Any]] = None
     object_pairs_hook: Optional[Callable[[list[tuple[Any, Any]]], Any]] = field(
@@ -716,8 +716,8 @@ DEFAULT_QUERY_PAGE_SIZE = 50000
 
 
 def _split_csv(
-        filename: Optional[str] = None,
-        records: Optional[str] = None,
+        filename: str | None = None,
+        records: str | None = None,
         max_records: Optional[int] = None,
         line_ending: LineEnding = LineEnding.LF,
         column_delimiter: ColumnDelimiter = ColumnDelimiter.COMMA,
@@ -802,8 +802,8 @@ def _split_csv(
 
 
 def _count_csv(
-        filename: Optional[str] = None,
-        data: Optional[str] = None,
+        filename: str | None = None,
+        data: str | None = None,
         skip_header: bool = False,
         line_ending: LineEnding = LineEnding.LF,
         column_delimiter: ColumnDelimiter = ColumnDelimiter.COMMA,
@@ -837,7 +837,7 @@ def _convert_dict_to_csv(
         line_ending: LineEnding = LineEnding.LF,
         quoting: _QuotingType = csv.QUOTE_MINIMAL,
         sort_keys: bool = False,
-        ) -> Optional[str]:
+        ) -> str | None:
     """Converts list of dicts to CSV like object."""
     if not data:
         return None
@@ -860,7 +860,7 @@ def _convert_dict_to_csv(
 
 
 def _get_csv_fieldnames(
-        filename: Optional[str] = None,
+        filename: str | None = None,
         records: Optional[list[dict[str, str]]] = None,
         line_ending: LineEnding = LineEnding.LF,
         column_delimiter: ColumnDelimiter = ColumnDelimiter.COMMA,
@@ -954,8 +954,8 @@ class _Bulk2Client:
 
     def _get_headers(
             self,
-            request_content_type: Optional[str] = None,
-            accept_content_type: Optional[str] = None
+            request_content_type: str | None = None,
+            accept_content_type: str | None = None
             ) -> dict[str, str]:
         """Get content-type/accept override headers for bulk 2.0 API request"""
         return {
@@ -965,7 +965,7 @@ class _Bulk2Client:
 
     def _construct_request_url(
             self,
-            job_id: Optional[str],
+            job_id: str | None,
             is_query: bool
             ) -> str:
         """Construct bulk 2.0 API request URL"""
@@ -983,10 +983,10 @@ class _Bulk2Client:
     def create_job(
             self,
             operation: Operation,
-            query: Optional[str] = None,
+            query: str | None = None,
             column_delimiter: ColumnDelimiter = ColumnDelimiter.COMMA,
             line_ending: LineEnding = LineEnding.LF,
-            external_id_field: Optional[str] = None,
+            external_id_field: str | None = None,
             ) -> Any:
         """Create job
 
@@ -1201,7 +1201,7 @@ class _Bulk2Client:
             self,
             job_id: str,
             data: str,
-            content_url: Optional[str] = None
+            content_url: str | None = None
             ) -> None:
         """Upload job data"""
         if not data:
@@ -1286,7 +1286,7 @@ class SfBulk2Type:
             data: Union[str, tuple[int, str]],
             column_delimiter: ColumnDelimiter = ColumnDelimiter.COMMA,
             line_ending: LineEnding = LineEnding.LF,
-            external_id_field: Optional[str] = None,
+            external_id_field: str | None = None,
             wait: int = 5,
             ) -> dict[str, int]:
         """Upload data to Salesforce"""
@@ -1332,8 +1332,8 @@ class SfBulk2Type:
 
     def _constrain_id_only(
             self,
-            csv_file: Optional[str] = None,
-            records: Optional[list[dict[str, str]]] = None,
+            csv_file: str | None = None,
+            records: list[dict[str, str]] | None = None,
             column_delimiter: ColumnDelimiter = ColumnDelimiter.COMMA,
             line_ending: LineEnding = LineEnding.LF,
             quoting: _QuotingType = csv.QUOTE_MINIMAL,
@@ -1352,13 +1352,13 @@ class SfBulk2Type:
     def _upload_file(
             self,
             operation: Operation,
-            csv_file: Optional[str] = None,
-            records: Optional[str] = None,
+            csv_file: str | None = None,
+            records: str | None = None,
             batch_size: Optional[int] = None,
             column_delimiter: ColumnDelimiter = ColumnDelimiter.COMMA,
             line_ending: LineEnding = LineEnding.LF,
             quoting: _QuotingType = csv.QUOTE_MINIMAL,
-            external_id_field: Optional[str] = None,
+            external_id_field: str | None = None,
             concurrency: int = 1,
             wait: int = 5,
             ) -> list[dict[str, int]]:
@@ -1418,13 +1418,13 @@ class SfBulk2Type:
 
     def delete(
             self,
-            csv_file: Optional[str] = None,
+            csv_file: str | None = None,
             records: Optional[list[dict[str, str]]] = None,
             batch_size: Optional[int] = None,
             column_delimiter: ColumnDelimiter = ColumnDelimiter.COMMA,
             line_ending: LineEnding = LineEnding.LF,
             quoting: _QuotingType = csv.QUOTE_MINIMAL,
-            external_id_field: Optional[str] = None,
+            external_id_field: str | None = None,
             wait: int = 5,
             ) -> list[dict[str, int]]:
         """soft delete records"""
@@ -1454,7 +1454,7 @@ class SfBulk2Type:
 
     def insert(
             self,
-            csv_file: Optional[str] = None,
+            csv_file: str | None = None,
             records: Optional[list[dict[str, str]]] = None,
             batch_size: Optional[int] = None,
             concurrency: int = 1,
@@ -1483,7 +1483,7 @@ class SfBulk2Type:
 
     def upsert(
             self,
-            csv_file: Optional[str] = None,
+            csv_file: str | None = None,
             records: Optional[list[dict[str, str]]] = None,
             external_id_field: str = 'Id',
             batch_size: Optional[int] = None,
@@ -1512,7 +1512,7 @@ class SfBulk2Type:
 
     def update(
             self,
-            csv_file: Optional[str] = None,
+            csv_file: str | None = None,
             records: Optional[list[dict[str, str]]] = None,
             batch_size: Optional[int] = None,
             column_delimiter: ColumnDelimiter = ColumnDelimiter.COMMA,
@@ -1539,7 +1539,7 @@ class SfBulk2Type:
 
     def hard_delete(
             self,
-            csv_file: Optional[str] = None,
+            csv_file: str | None = None,
             records: Optional[list[dict[str, str]]] = None,
             batch_size: Optional[int] = None,
             column_delimiter: ColumnDelimiter = ColumnDelimiter.COMMA,
@@ -1696,29 +1696,29 @@ class SfBulk2Type:
             results.append(result)
         return results
 
-    def _retrieve_ingest_records(self,job_id: str, results_type: str,file: Optional[str] = None) -> str:
+    def _retrieve_ingest_records(self,job_id: str, results_type: str,file: str | None = None) -> str:
         """ Retrieves the Salesforce records for a given job and result type, either returning the results as a string or downloading them to a file if a file path is provided. """
         if not file:
             return self._client.get_ingest_results(job_id, results_type)
         self._client.download_ingest_results(file, job_id, results_type)
         return ""
 
-    def get_failed_records(self, job_id: str,file: Optional[str] = None) -> str:
+    def get_failed_records(self, job_id: str,file: str | None = None) -> str:
         """Retrieve the records that failed in a specific batch job, optionally downloading them to a file if a file path is provided."""
         return self._retrieve_ingest_records(job_id, ResultsType.failed, file)
 
-    def get_unprocessed_records(self, job_id: str, file: Optional[str] = None) -> str:
+    def get_unprocessed_records(self, job_id: str, file: str | None = None) -> str:
         """Retrieve the records that were not processed in a specific batch job, optionally downloading them to a file if a file path is provided."""
         return self._retrieve_ingest_records(job_id, ResultsType.unprocessed, file)
 
-    def get_successful_records(self, job_id: str, file: Optional[str] = None) -> str:
+    def get_successful_records(self, job_id: str, file: str | None = None) -> str:
         """Retrieve the records that were successfully processed in a specific batch job, optionally downloading them to a file if a file path is provided."""
         return self._retrieve_ingest_records(job_id, ResultsType.successful, file)
 
     def get_all_ingest_records(
             self,
             job_id: str,
-            file: Optional[str] = None
+            file: str | None = None
             ) -> dict[str, list[Any]]:
         successful_records = csv.DictReader(
             self.get_successful_records(

@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import pytest
 
-from olympus.utils.parse_args import parse_args, _PROGRAM_NAME
+from utils.parse_args import parse_args, _PROGRAM_NAME
 
 
 class TestParseArgs:

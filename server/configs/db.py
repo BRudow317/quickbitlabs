@@ -1,5 +1,5 @@
 from sqlmodel import create_engine, Session, SQLModel
-from server.configs.settings import settings
+from configs.settings import settings
 
 # sqlite:///./database/pyscript.db
 # check_same_thread=False is mandatory for SQLite + FastAPI
@@ -11,8 +11,8 @@ engine = create_engine(
 
 def init_db():
     # Important: Import models here so SQLModel knows about them
-    from server.models.user import User
-    from server.models.lead import Lead
+    from models.user import User
+    from models.lead import Lead
     SQLModel.metadata.create_all(engine)
 
 def get_session():

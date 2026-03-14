@@ -2,20 +2,24 @@ from __future__ import annotations
 import cmd
 import logging
 import sys
-from typing import Any, Iterable, TYPE_CHECKING
 import json
+import re
 from datetime import datetime
+from typing import Any, TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from api import SfSession
+    from collections.abc import Iterable
+    # Import the new Facade client instead of the old SfSession
+    from connectors.sf.client import SalesforceClient
+    from connectors.sf.services import bulk2
+    from connectors.sf.services import rest
 
 logger = logging.getLogger(__name__)
 
 class Repl(cmd.Cmd):
-    intro = 'Welcome to the Project SfSession Console. Type help or ? to list commands.\n'
+    intro = 'Welcome to the Project Olympus Salesforce Console. Type help or ? to list commands.\n'
     
-    # Accept a custom stdout stream (defaults to None, which cmd resolves to sys.stdout)
-    def __init__(self, sf_instance: SfSession, stdout: Any = None) -> None:
+    def __init__(self, sf_instance: SalesforceClient, stdout: Any = None) -> None:
         super().__init__(stdout=stdout)
         self.sf = sf_instance
         self.api_mode = 'rest'  # Default mode
@@ -67,9 +71,9 @@ class Repl(cmd.Cmd):
 
         try:
             if self.api_mode == 'bulk':
-                bulk2_handler: Any = getattr(self.sf, 'bulk2')
+                # Access the explicit bulk2 property
+                bulk2_handler = self.sf.bulk2
                 
-                import re
                 match = re.search(r'from\s+(\w+)', arg, re.IGNORECASE)
                 if not match:
                     print("*** Error: Could not parse SObject from query.", file=self.stdout)
@@ -86,8 +90,6 @@ class Repl(cmd.Cmd):
                     print(chunk_text[:1000] + suffix, file=self.stdout)
                     
                     prompt_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-                    # Note: input() always writes its prompt to sys.stdout. 
-                    # If you need this strictly routed to self.stdout, we write it explicitly.
                     self.stdout.write(f"\n[{prompt_time}] Fetch next batch? (y/n): ")
                     self.stdout.flush()
                     cont = sys.stdin.readline().strip().lower()
@@ -100,8 +102,8 @@ class Repl(cmd.Cmd):
                         break
 
             else:
-                # REST Mode
-                results = self.sf.query(arg)
+                # REST Mode: explicitly target sf.rest.query
+                results = self.sf.rest.query(arg)
                 records = results.get('records', [])
                 print(f"\n--- REST Results (Total: {results.get('totalSize')}) ---", file=self.stdout)
                 print(json.dumps(records[:50], indent=2), file=self.stdout)
@@ -109,9 +111,7 @@ class Repl(cmd.Cmd):
                     print(f"... and {len(records) - 50} more records.", file=self.stdout)
 
         except Exception as e:
-            print(f"*** SfSession Error: {e}", file=self.stdout)
-            # Optional: Send exceptions directly to your logger as well
-            # logger.error(f"SfSession Error: {e}", exc_info=True)
+            print(f"*** SalesforceClient Error: {e}", file=self.stdout)
 
     def do_describe(self, arg: str) -> None:
         """Describe an object's metadata. Usage: describe Account"""
@@ -119,9 +119,8 @@ class Repl(cmd.Cmd):
             print("*** Error: Object name required.", file=self.stdout)
             return
         try:
-            meta: Any = getattr(self.sf, arg).describe()
-            # fields = [f['name'] for f in meta['fields']]
-            # print(f"Fields in {arg}: {', '.join(fields[:20])}...",file=self.stdout)
+            # Target sf.rest for SObject magic attribute access
+            meta: Any = getattr(self.sf.rest, arg).describe()
             print(json.dumps(meta, indent=2), file=self.stdout)
             
         except Exception as e:
@@ -137,9 +136,12 @@ class Repl(cmd.Cmd):
         return True
 
 def main() -> None:
-    from api import SfSession
-    sf = SfSession()
-    # If your bootstrap overrides sys.stdout, passing it here wires the REPL to it.
+    # Import the Facade
+    from connectors.sf.client import SalesforceClient
+    
+    # The new client relies on your auth.py os.getenv defaults if no args are passed
+    sf = SalesforceClient()
+    
     Repl(sf, stdout=sys.stdout).cmdloop()
 
 if __name__ == '__main__':

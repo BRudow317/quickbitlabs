@@ -5,7 +5,7 @@ import logging
 from pathlib import Path
 
 # Adjust this import to match your actual module location
-from olympus.utils.setup_logging import setup_logging, _PROGRAM_NAME
+from utils.setup_logging import setup_logging, _PROGRAM_NAME
 
 
 class TestSetupLogging:
@@ -39,8 +39,8 @@ class TestSetupLogging:
         assert logging.FileHandler in handler_types
 
     def test_log_dir_creates_log_file(self, tmp_path: Path):
-        setup_logging(log_dir=str(tmp_path), program_name="test_olympus")
-        log_files = list(tmp_path.glob("*_test_olympus.log"))
+        setup_logging(log_dir=str(tmp_path), program_name="test_server")
+        log_files = list(tmp_path.glob("*_test_server.log"))
         assert len(log_files) == 1
 
     def test_log_dir_creates_directory_if_missing(self, tmp_path: Path):

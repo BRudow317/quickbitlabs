@@ -5,7 +5,7 @@ import os
 import pytest
 from pathlib import Path
 
-from olympus.utils.parse_config_file import parse_config_file
+from utils.parse_config_file import parse_config_file
 
 
 class TestParseConfigBasic:

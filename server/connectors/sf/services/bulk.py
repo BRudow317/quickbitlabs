@@ -6,7 +6,7 @@ from collections import OrderedDict
 from functools import partial
 from time import sleep
 from typing import Any, Iterable, List, Optional, Union, cast
-from hades.api import SfSession
+from salesforce.api import SfSession
 from utils.list_from_generator import list_from_generator
 import json
 from typing import NamedTuple, Any, List, Mapping, MutableMapping

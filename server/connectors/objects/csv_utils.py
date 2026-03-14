@@ -1,12 +1,19 @@
+from __future__ import annotations
 
-## https://developer.salesforce.com/docs/atlas.en-us.api_asynch.meta/api_asynch/datafiles_prepare_csv.htm
 import csv
 import io
-from enum import Enum
 import os
 import sys
-from typing import Generator, Iterator, Optional, Literal
+from typing import TYPE_CHECKING
 
+if TYPE_CHECKING:
+    from enum import Enum
+    from collections.abc import Iterator, Generator
+    from typing import Literal
+
+"""Utilities for handling CSV files for Salesforce Bulk API 2.0.
+# https://developer.salesforce.com/docs/atlas.en-us.api_asynch.meta/api_asynch/datafiles_prepare_csv.htm
+# """
 
 
 class ColumnDelimiter(str, Enum):
@@ -29,6 +36,7 @@ DELIMITERS: dict[str,str] = {
 class LineEnding(str,Enum):
     LF = "LF"
     CRLF = "CRLF"
+
 LINE_ENDINGS: dict[str,str] = {LineEnding.LF: "\n", LineEnding.CRLF: "\r\n"}
 
 QUOTING_TYPE = Literal[0, 1, 2, 3, 4, 5]
@@ -38,9 +46,9 @@ MAX_INGEST_JOB_PARALLELISM = 10  # TODO: ? Salesforce limits
 DEFAULT_QUERY_PAGE_SIZE = 50000
 
 def split_csv(
-        filename: Optional[str] = None,
-        records: Optional[str] = None,
-        max_records: Optional[int] = None,
+        filename: str | None = None,
+        records: str | None = None,
+        max_records: int | None = None,
         line_ending: LineEnding = LineEnding.LF,
         column_delimiter: ColumnDelimiter = ColumnDelimiter.COMMA,
         quoting: QUOTING_TYPE = csv.QUOTE_MINIMAL
@@ -133,8 +141,8 @@ def split_csv(
 
 
 def count_csv(
-        filename: Optional[str] = None,
-        data: Optional[str] = None,
+        filename: str | None = None,
+        data: str | None = None,
         skip_header: bool = False,
         line_ending: LineEnding = LineEnding.LF,
         column_delimiter: ColumnDelimiter = ColumnDelimiter.COMMA,
@@ -163,13 +171,13 @@ def count_csv(
 
 
 def convert_dict_to_csv(
-        data: Optional[list[dict[str, str]]],
+        data: list[dict[str, str]] | None = None,
         column_delimiter: ColumnDelimiter = ColumnDelimiter.COMMA,
         line_ending: LineEnding = LineEnding.LF,
         quoting: QUOTING_TYPE = csv.QUOTE_MINIMAL,
         sort_keys: bool = False,
-        ) -> Optional[str]:
-    """Converts list of dicts to CSV like object."""
+        ) -> str | None:
+    """Converts list of dicts to CSV string. Returns None if data is empty."""
     if not data:
         return None
     dl = DELIMITERS[column_delimiter]
@@ -191,8 +199,8 @@ def convert_dict_to_csv(
 
 
 def get_csv_fieldnames(
-        filename: Optional[str] = None,
-        records: Optional[list[dict[str, str]]] = None,
+        filename: str | None = None,
+        records: list[dict[str, str]] | None = None,
         line_ending: LineEnding = LineEnding.LF,
         column_delimiter: ColumnDelimiter = ColumnDelimiter.COMMA,
         quoting: QUOTING_TYPE = csv.QUOTE_MINIMAL

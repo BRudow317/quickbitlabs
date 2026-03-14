@@ -1,1 +1,1 @@
-from .apollo import main
+from .oracle import main
