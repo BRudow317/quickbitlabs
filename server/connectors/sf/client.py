@@ -1,22 +1,27 @@
 from __future__ import annotations
 
-import logging
+# locals
 from core.http import HttpClient
-from sf.auth import fetch_client_credentials
+from auth import fetch_client_credentials
+from services.rest import SfRest
+from services.bulk2 import SfBulk2Handler
+from models import API_VERSION
 
-# 1. Import the service classes we just built
-from sf.services.rest import SfRest
-from sf.services.bulk2 import SfBulk2Handler
-
+# logging
+import logging
 logger = logging.getLogger(__name__)
 
 class SalesforceClient:
+    consumer_key: str | None
+    consumer_secret: str | None
+    instance_url: str | None
+    api_version: str
     def __init__(
         self, 
         consumer_key: str | None = None, 
         consumer_secret: str | None = None, 
         instance_url: str | None = None,
-        api_version: str = '63.0'
+        api_version: str = API_VERSION
     ):
         self.consumer_key = consumer_key
         self.consumer_secret = consumer_secret

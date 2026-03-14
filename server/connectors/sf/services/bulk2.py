@@ -11,32 +11,33 @@ from contextlib import closing
 from functools import partial
 from time import sleep
 import http.client as http_status
+from collections.abc import Generator
+from collections import OrderedDict
 
 # Dependencies
 import tempfile
 from more_itertools import chunked
 
-# Local imports
+# locals
 from core.http import HttpClient
-from sf.models import (
+from models import (
     Operation, JobState, ColumnDelimiter, LineEnding, ResultsType,
     QueryRecordsResult, QueryFileResult, QueryParameters
 )
-from sf.utils.csv_utils import (
-    ColumnDelimiter, DELIMITERS, LineEnding, QUOTING_TYPE,
+from utils.csv_utils import (
+    ColumnDelimiter, LineEnding, QUOTING_TYPE,
     split_csv, count_csv, convert_dict_to_csv, get_csv_fieldnames,
-    MAX_INGEST_JOB_FILE_SIZE, MAX_INGEST_JOB_PARALLELISM, DEFAULT_QUERY_PAGE_SIZE
+    MAX_INGEST_JOB_FILE_SIZE, MAX_INGEST_JOB_PARALLELISM, DEFAULT_QUERY_PAGE_SIZE # DELIMITERS, 
 )
-from sf.utils.date_to_iso8601 import date_to_iso8601
-from sf.utils.filter_null_bytes import filter_null_bytes
+from utils.date_to_iso8601 import date_to_iso8601
+from utils.filter_null_bytes import filter_null_bytes
 
 # Type Checking
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from typing import Any, Literal
     from enum import Enum
-    from collections.abc import Generator
-    from collections import OrderedDict
+    
 
 # Logging
 import logging

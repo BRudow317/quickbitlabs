@@ -1,17 +1,17 @@
 from __future__ import annotations
-from typing import TYPE_CHECKING
-
-if TYPE_CHECKING:
-    from typing import Any, NamedTuple, TypedDict
-    from collections.abc import Mapping, MutableMapping
-    from enum import Enum
+from collections.abc import Mapping, MutableMapping
+from enum import Enum
+from typing import NamedTuple, TypedDict
+# types
+# from typing import TYPE_CHECKING
+# if TYPE_CHECKING:
+    
 
 API_VERSION: str = '63.0'
-OAUTH_URI: str = '/services/oauth2/token'
 
 # --- Common Types ---
 Headers = MutableMapping[str, str]
-BulkDataAny = list[Mapping[str, Any]]
+BulkDataAny = list[Mapping[str, any]]
 BulkDataStr = list[Mapping[str, str]]
 
 # --- REST Models ---

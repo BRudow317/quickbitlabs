@@ -1,8 +1,10 @@
 import pytest
 from unittest.mock import patch, MagicMock
 
-# Note: Change 'your_module' to the actual filename where your SfSession class is saved.
-from hades.api import SfSession
+# locals
+from connectors.sf.client import SalesforceClient
+from connectors.sf.core.http import HttpClient
+from connectors.sf.auth import fetch_client_credentials
 
 @pytest.fixture
 def sf():
@@ -10,10 +12,7 @@ def sf():
     Creates an SfSession using the 'direct' authentication path. 
     This allows us to test the REST methods without triggering the OAuth flow.
     """
-    return SfSession(
-        session_id="dummy_test_session_token",
-        instance_url="https://test-org.salesforce.com"
-    )
+    return fetch_client_credentials()
 
 @pytest.fixture
 def mock_request():
@@ -30,7 +29,7 @@ def mock_request():
         mock.return_value = mock_response
         yield mock
 
-def test_insert_record(sf: SfSession, mock_request: MagicMock):
+def test_insert_record(sf: SalesforceClient, mock_request: MagicMock):
     """Demo: Inserting (Creating) a new record."""
     contact_data = {
         "FirstName": "John",
@@ -39,7 +38,7 @@ def test_insert_record(sf: SfSession, mock_request: MagicMock):
     }
     
     # Using the magic __getattr__ to access the Contact SObject type
-    response = sf.Contact.create(contact_data)
+    response = sf.rest.Contact.create(contact_data)
     
     # Assert the method returns the mocked JSON
     assert response["success"] is True
@@ -52,24 +51,24 @@ def test_insert_record(sf: SfSession, mock_request: MagicMock):
     assert "sobjects/Contact/" in args[1]
     assert '{"FirstName": "John"' in kwargs["data"]
 
-def test_get_record(sf: SfSession, mock_request: MagicMock):
+def test_get_record(sf: SalesforceClient, mock_request: MagicMock):
     """Demo: Fetching a record by its Salesforce ID."""
     record_id = "003000000000001AAA"
     
-    sf.Contact.get(record_id)
+    sf.rest.Contact.get(record_id)
     
     mock_request.assert_called_once()
     args, _ = mock_request.call_args
     assert args[0] == "GET"
     assert args[1].endswith(f"sobjects/Contact/{record_id}")
 
-def test_update_record(sf: SfSession, mock_request: MagicMock):
+def test_update_record(sf: SalesforceClient, mock_request: MagicMock):
     """Demo: Updating an existing record by its Salesforce ID."""
     record_id = "003000000000001AAA"
     update_data = {"Title": "Senior Developer"}
     
     # Update returns the status code by default (200, 201, 204)
-    sf.Contact.update(record_id, update_data)
+    sf.rest.Contact.update(record_id, update_data)
     
     mock_request.assert_called_once()
     args, kwargs = mock_request.call_args
@@ -77,28 +76,28 @@ def test_update_record(sf: SfSession, mock_request: MagicMock):
     assert args[1].endswith(f"sobjects/Contact/{record_id}")
     assert '{"Title": "Senior Developer"}' in kwargs["data"]
 
-def test_upsert_record(sf: SfSession, mock_request: MagicMock):
+def test_upsert_record(sf: SalesforceClient, mock_request: MagicMock):
     """Demo: Upserting a record."""
     record_id = "003000000000001AAA"
     upsert_data = {"Email": "new.email@example.com"}
     
     # Note: In your specific implementation, 'upsert' utilizes the exact 
     # same base_url and record_id endpoint as 'update' (PATCH to /ID).
-    sf.Contact.upsert(record_id, upsert_data)
+    sf.rest.Contact.upsert(record_id, upsert_data)
     
     mock_request.assert_called_once()
     args, kwargs = mock_request.call_args
     assert args[0] == "PATCH"
     assert args[1].endswith(f"sobjects/Contact/{record_id}")
 
-def test_delete_record(sf: SfSession, mock_request: MagicMock):
+def test_delete_record(sf: SalesforceClient, mock_request: MagicMock):
     """Demo: Deleting a record by its Salesforce ID."""
     record_id = "003000000000001AAA"
     
     # Set the mock to return a 204 No Content (standard Salesforce delete response)
     mock_request.return_value.status_code = 204
     
-    status_code = sf.Contact.delete(record_id)
+    status_code = sf.rest.Contact.delete(record_id)
     
     assert status_code == 204
     mock_request.assert_called_once()
@@ -106,7 +105,7 @@ def test_delete_record(sf: SfSession, mock_request: MagicMock):
     assert args[0] == "DELETE"
     assert args[1].endswith(f"sobjects/Contact/{record_id}")
 
-def test_soql_query(sf: SfSession, mock_request: MagicMock):
+def test_soql_query(sf: SalesforceClient, mock_request: MagicMock):
     """Demo: Running a standard SOQL query."""
     # Override the mock JSON to simulate a query result
     mock_request.return_value.json.return_value = {
@@ -115,7 +114,7 @@ def test_soql_query(sf: SfSession, mock_request: MagicMock):
         "records": [{"Id": "003000000000001AAA", "Name": "John Doe"}]
     }
     
-    result = sf.query("SELECT Id, Name FROM Contact LIMIT 1")
+    result = sf.rest.query("SELECT Id, Name FROM Contact LIMIT 1")
     
     assert result["totalSize"] == 1
     assert result["records"][0]["Name"] == "John Doe"

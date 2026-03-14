@@ -1,19 +1,21 @@
+"""
+python master.py --config ./.env -l ./logs --exec server/connectors/sf/repl.py
+"""
 from __future__ import annotations
+
 import cmd
-import logging
 import sys
 import json
 import re
 from datetime import datetime
-from typing import Any, TYPE_CHECKING
+from typing import Any
+from collections.abc import Iterable
 
-if TYPE_CHECKING:
-    from collections.abc import Iterable
-    # Import the new Facade client instead of the old SfSession
-    from connectors.sf.client import SalesforceClient
-    from connectors.sf.services import bulk2
-    from connectors.sf.services import rest
+# locals
+from client import SalesforceClient
 
+# logging
+import logging
 logger = logging.getLogger(__name__)
 
 class Repl(cmd.Cmd):
@@ -112,6 +114,134 @@ class Repl(cmd.Cmd):
 
         except Exception as e:
             print(f"*** SalesforceClient Error: {e}", file=self.stdout)
+    
+    
+    def do_insert(self, arg: str) -> None:
+        """Insert a new record (or records).
+        Usage: insert Contact {"FirstName": "John", "LastName": "Doe"}
+               insert Account [{"Name": "Acme"}, {"Name": "Globex"}] (Bulk Mode)
+        """
+        if not arg:
+            print("*** Error: Object name and JSON payload required.", file=self.stdout)
+            return
+
+        # Split the argument into two pieces: ObjectName and the JSON string
+        parts = arg.split(maxsplit=1)
+        if len(parts) < 2:
+            print("*** Error: Please provide both an SObject name and a JSON payload.", file=self.stdout)
+            return
+
+        # Capitalize the object name (e.g., 'contact' -> 'Contact') to match Salesforce API specs
+        object_name = parts[0].strip().title()
+        json_str = parts[1].strip()
+
+        try:
+            # Safely parse the user's JSON string into a Python dictionary or list
+            payload = json.loads(json_str)
+        except json.JSONDecodeError as e:
+            print(f"*** Error: Invalid JSON format. {e}", file=self.stdout)
+            return
+
+        print(f'Submitting {self.api_mode.upper()} Insert for {object_name}...', file=self.stdout)
+
+        try:
+            if self.api_mode == 'bulk':
+                # Bulk V2 expects a list of dictionaries. Wrap it if the user only provided one.
+                records = [payload] if isinstance(payload, dict) else payload
+                
+                bulk_obj_handler = getattr(self.sf.bulk2, object_name)
+                results = bulk_obj_handler.insert(records=records)
+                
+                print(f"\n--- BULK Insert Results ---", file=self.stdout)
+                print(json.dumps(results, indent=2), file=self.stdout)
+
+            else:
+                # REST mode expects a single dictionary
+                if not isinstance(payload, dict):
+                    print("*** Error: REST insert requires a single JSON object (dictionary).", file=self.stdout)
+                    return
+                
+                # Dynamically call self.sf.rest.ObjectName.create()
+                rest_obj_handler = getattr(self.sf.rest, object_name)
+                result = rest_obj_handler.create(payload)
+                
+                print(f"\n--- REST Insert Result ---", file=self.stdout)
+                print(json.dumps(result, indent=2), file=self.stdout)
+
+        except Exception as e:
+            print(f"*** SalesforceClient Error: {e}", file=self.stdout)
+
+
+    def do_delete(self, arg: str) -> None:
+        """Delete a record (or records).
+        Usage: delete Contact {"Id": "003fj00000jJV30AAG"}
+               delete Account [{"Id": "001..."}, {"Id": "002..."}] (Bulk Mode)
+        """
+        if not arg:
+            print("*** Error: Object name and JSON payload required.", file=self.stdout)
+            return
+
+        parts = arg.split(maxsplit=1)
+        if len(parts) < 2:
+            print("*** Error: Please provide both an SObject name and a JSON payload.", file=self.stdout)
+            return
+
+        object_name = parts[0].strip().title()
+        json_str = parts[1].strip()
+
+        try:
+            payload = json.loads(json_str)
+        except json.JSONDecodeError as e:
+            print(f"*** Error: Invalid JSON format. {e}", file=self.stdout)
+            return
+
+        print(f'Submitting {self.api_mode.upper()} Delete for {object_name}...', file=self.stdout)
+
+        try:
+            if self.api_mode == 'bulk':
+                records = [payload] if isinstance(payload, dict) else payload
+                
+                # Bulk V2 STRICTLY requires the key to be "Id" (not "id"). 
+                # We normalize it here so the user's JSON doesn't cause a CSV header error.
+                cleaned_records = []
+                for r in records:
+                    rec_id = r.get('Id') or r.get('id')
+                    if not rec_id:
+                        print(f"*** Error: Record missing 'Id' field: {r}", file=self.stdout)
+                        return
+                    cleaned_records.append({"Id": rec_id})
+                
+                bulk_obj_handler = getattr(self.sf.bulk2, object_name)
+                results = bulk_obj_handler.delete(records=cleaned_records)
+                
+                print(f"\n--- BULK Delete Results ---", file=self.stdout)
+                print(json.dumps(results, indent=2), file=self.stdout)
+
+            else:
+                # REST Mode
+                if not isinstance(payload, dict):
+                    print("*** Error: REST delete requires a single JSON object.", file=self.stdout)
+                    return
+                
+                # Extract the ID from the payload
+                record_id = payload.get('Id') or payload.get('id')
+                if not record_id:
+                    print("*** Error: JSON payload must contain an 'Id' or 'id' key.", file=self.stdout)
+                    return
+                
+                rest_obj_handler = getattr(self.sf.rest, object_name)
+                status_code = rest_obj_handler.delete(record_id)
+                
+                # Salesforce returns 204 No Content on a successful REST delete
+                if status_code == 204:
+                    print(f"\n--- REST Delete Result ---", file=self.stdout)
+                    print(f"Success! (HTTP 204: Record Deleted)", file=self.stdout)
+                else:
+                    print(f"\n--- REST Delete Result ---", file=self.stdout)
+                    print(f"Unexpected Status: HTTP {status_code}", file=self.stdout)
+
+        except Exception as e:
+            print(f"*** SalesforceClient Error: {e}", file=self.stdout)
 
     def do_describe(self, arg: str) -> None:
         """Describe an object's metadata. Usage: describe Account"""
@@ -136,12 +266,7 @@ class Repl(cmd.Cmd):
         return True
 
 def main() -> None:
-    # Import the Facade
-    from connectors.sf.client import SalesforceClient
-    
-    # The new client relies on your auth.py os.getenv defaults if no args are passed
     sf = SalesforceClient()
-    
     Repl(sf, stdout=sys.stdout).cmdloop()
 
 if __name__ == '__main__':

@@ -4,12 +4,10 @@ import csv
 import io
 import os
 import sys
-from typing import TYPE_CHECKING
-
-if TYPE_CHECKING:
-    from enum import Enum
-    from collections.abc import Iterator, Generator
-    from typing import Literal
+from enum import Enum
+from collections.abc import Iterator, Generator
+from typing import Literal 
+    
 
 """Utilities for handling CSV files for Salesforce Bulk API 2.0.
 # https://developer.salesforce.com/docs/atlas.en-us.api_asynch.meta/api_asynch/datafiles_prepare_csv.htm

@@ -1,14 +1,18 @@
 import pytest
 from unittest.mock import patch, MagicMock
 
-
-from hades.api import SfSession, JobState
+# locals
+from connectors.sf.client import SalesforceClient
+from connectors.sf.core.http import HttpClient
+from connectors.sf.auth import fetch_client_credentials
+from connectors.sf.services.bulk2 import JobState
 
 @pytest.fixture
-def sf():
+def sf() -> SalesforceClient:
     """Creates a direct SfSession so we bypass OAuth."""
-    return SfSession(
-        session_id="dummy_bulk_session_token",
+    return SalesforceClient(
+        consumer_key="dummy_bulk_session_token",
+        consumer_secret="dummy_bulk_session_secret",
         instance_url="https://test-bulk-org.salesforce.com"
     )
 

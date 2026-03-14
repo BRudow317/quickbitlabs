@@ -1,9 +1,13 @@
+from __future__ import annotations
+
 import re
-import requests
+import requests 
 from collections import OrderedDict
+from collections.abc import Callable
 from typing import TYPE_CHECKING, Any, NamedTuple
+
 if TYPE_CHECKING:
-    from collections.abc import MutableMapping, Callable
+    from collections.abc import MutableMapping
 
 import logging
 logger = logging.getLogger(__name__)
@@ -19,15 +23,21 @@ class PerAppUsage(NamedTuple):
 
 class HttpClient:
     """A resilient HTTP wrapper that handles retries, headers, and JSON parsing."""
-    
+    base_url: str
+    access_token: str
+    refresh_callback: Callable[[], str] | None
+    parse_float: Callable[[str], Any] | None
+    object_pairs_hook: Callable
+
     def __init__(
         self, 
-        base_url: str, 
-        access_token: str, 
-        refresh_callback: Callable[[], str] | None = None,
-        parse_float: Callable[[str], Any] | None = None,
+        base_url, 
+        access_token, 
+        refresh_callback = None,
+        parse_float = None,
         object_pairs_hook: Callable = OrderedDict
-    ):
+        ) -> None:
+
         self.base_url = base_url
         self.session = requests.Session()
         self.refresh_callback = refresh_callback

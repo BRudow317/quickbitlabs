@@ -2,12 +2,19 @@ import base64
 import json
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Iterator, Optional, Union
-from urllib.parse import quote_plus
+from typing import Any
+from collections.abc import Iterator
 import requests
 
+# dependencies
+from urllib.parse import quote_plus
+
+# locals
 from core.http import HttpClient
 from utils.date_to_iso8601 import date_to_iso8601
+
+import logging
+logger = logging.getLogger(__name__)
 
 
 class SfRest:
@@ -27,7 +34,7 @@ class SfRest:
             return super().__getattribute__(name)
         return SfObjType(object_name=name, http_client=self._http)
 
-    def describe(self, **kwargs: Any) -> Optional[Any]:
+    def describe(self, **kwargs: Any) -> dict[str, Any]:
         """Describe all available objects (Global Describe)."""
         response = self._http.request('GET', 'sobjects', **kwargs)
         return self._http.parse_json(response)
@@ -38,7 +45,7 @@ class SfRest:
         records = result.get('records', [{'IsSandbox': False}])
         return records[0].get('IsSandbox', False)
 
-    def restful(self, path: str, params: Optional[dict[str, Any]] = None, method: str = 'GET', **kwargs: Any) -> Optional[Any]:
+    def restful(self, path: str, params: dict[str, Any] | None = None, method: str = 'GET', **kwargs: Any) -> dict[str, Any] | None:
         """Make a direct REST call by relative path."""
         response = self._http.request(method, path, params=params, **kwargs)
         return self._http.parse_json(response)
@@ -104,37 +111,37 @@ class SfObjType:
         self._base_endpoint = f"sobjects/{self.object_name}"
 
     # Metadata / Describe
-    def metadata(self, headers: Optional[dict] = None) -> dict[str, Any]:
+    def metadata(self, headers: dict | None = None) -> dict[str, Any]:
         response = self._http.request('GET', self._base_endpoint, headers=headers)
         return self._http.parse_json(response)
 
-    def describe(self, headers: Optional[dict] = None) -> dict[str, Any]:
+    def describe(self, headers: dict | None = None) -> dict[str, Any]:
         response = self._http.request('GET', f"{self._base_endpoint}/describe", headers=headers)
         return self._http.parse_json(response)
 
-    def describe_layout(self, record_id: str, headers: Optional[dict] = None) -> dict[str, Any]:
+    def describe_layout(self, record_id: str, headers: dict | None = None) -> dict[str, Any]:
         response = self._http.request('GET', f"{self._base_endpoint}/describe/layouts/{record_id}", headers=headers)
         return self._http.parse_json(response)
 
     # CRUD
-    def get(self, record_id: str, headers: Optional[dict] = None, **kwargs: Any) -> dict[str, Any]:
+    def get(self, record_id: str, headers: dict | None = None, **kwargs: Any) -> dict[str, Any]:
         response = self._http.request('GET', f"{self._base_endpoint}/{record_id}", headers=headers, **kwargs)
         return self._http.parse_json(response)
 
-    def get_by_custom_id(self, custom_id_field: str, custom_id: str, headers: Optional[dict] = None, **kwargs: Any) -> dict[str, Any]:
+    def get_by_custom_id(self, custom_id_field: str, custom_id: str, headers: dict | None = None, **kwargs: Any) -> dict[str, Any]:
         endpoint = f"{self._base_endpoint}/{custom_id_field}/{quote_plus(custom_id)}"
         response = self._http.request('GET', endpoint, headers=headers, **kwargs)
         return self._http.parse_json(response)
 
-    def create(self, data: dict[str, Any], headers: Optional[dict] = None) -> dict[str, Any]:
+    def create(self, data: dict[str, Any], headers: dict | None = None) -> dict[str, Any]:
         response = self._http.request('POST', f"{self._base_endpoint}/", json=data, headers=headers)
         return self._http.parse_json(response)
 
-    def upsert(self, record_id: str, data: dict[str, Any], raw_response: bool = False, headers: Optional[dict] = None) -> Union[int, requests.Response]:
+    def upsert(self, record_id: str, data: dict[str, Any], raw_response: bool = False, headers: dict | None = None) -> int | requests.Response:
         response = self._http.request('PATCH', f"{self._base_endpoint}/{record_id}", json=data, headers=headers)
         return self._raw_response(response, raw_response)
 
-    def update(self, record_id: str, data: dict[str, Any], raw_response: bool = False, headers: Optional[dict] = None) -> Union[int, requests.Response]:
+    def update(self, record_id: str, data: dict[str, Any], raw_response: bool = False, headers: dict | None = None) -> int | requests.Response:
         response = self._http.request('PATCH', f"{self._base_endpoint}/{record_id}", json=data, headers=headers)
         return self._raw_response(response, raw_response)
 
@@ -143,31 +150,31 @@ class SfObjType:
         return self._raw_response(response, raw_response)
 
     # Get Deleted/Updated
-    def deleted(self, start: datetime, end: datetime, headers: Optional[dict] = None) -> dict[str, Any]:
+    def deleted(self, start: datetime, end: datetime, headers: dict | None = None) -> dict[str, Any]:
         endpoint = f"{self._base_endpoint}/deleted/?start={date_to_iso8601(start)}&end={date_to_iso8601(end)}"
         response = self._http.request('GET', endpoint, headers=headers)
         return self._http.parse_json(response)
 
-    def updated(self, start: datetime, end: datetime, headers: Optional[dict] = None) -> dict[str, Any]:
+    def updated(self, start: datetime, end: datetime, headers: dict | None = None) -> dict[str, Any]:
         endpoint = f"{self._base_endpoint}/updated/?start={date_to_iso8601(start)}&end={date_to_iso8601(end)}"
         response = self._http.request('GET', endpoint, headers=headers)
         return self._http.parse_json(response)
 
     # Base64 File Operations
-    def upload_base64(self, file_path: str, base64_field: str = 'Body', headers: Optional[dict] = None, **kwargs: Any) -> requests.Response:
+    def upload_base64(self, file_path: str, base64_field: str = 'Body', headers: dict | None = None, **kwargs: Any) -> requests.Response:
         body = base64.b64encode(Path(file_path).read_bytes()).decode()
         return self._http.request('POST', f"{self._base_endpoint}/", headers=headers, json={base64_field: body}, **kwargs)
 
-    def update_base64(self, record_id: str, file_path: str, base64_field: str = 'Body', headers: Optional[dict] = None, raw_response: bool = False, **kwargs: Any) -> Union[int, requests.Response]:
+    def update_base64(self, record_id: str, file_path: str, base64_field: str = 'Body', headers: dict | None = None, raw_response: bool = False, **kwargs: Any) -> int | requests.Response:
         body = base64.b64encode(Path(file_path).read_bytes()).decode()
         response = self._http.request('PATCH', f"{self._base_endpoint}/{record_id}", json={base64_field: body}, headers=headers, **kwargs)
         return self._raw_response(response, raw_response)
 
-    def get_base64(self, record_id: str, base64_field: str = 'Body', data: Optional[Any] = None, headers: Optional[dict] = None, **kwargs: Any) -> bytes:
+    def get_base64(self, record_id: str, base64_field: str = 'Body', data: Any = None, headers: dict | None = None, **kwargs: Any) -> bytes:
         response = self._http.request('GET', f"{self._base_endpoint}/{record_id}/{base64_field}", data=data, headers=headers, **kwargs)
         return response.content
 
     # Utilities
     @staticmethod
-    def _raw_response(response: requests.Response, return_raw: bool) -> Union[int, requests.Response]:
+    def _raw_response(response: requests.Response, return_raw: bool) -> int | requests.Response:
         return response if return_raw else response.status_code
