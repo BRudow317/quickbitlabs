@@ -69,8 +69,6 @@ class OracleUser:
                 cursor.prepare(sql)
                 cursor.execute(sql)
 
-                if cursor.
-
                 if 'select' not in sql.lower():
                     self.get_con().commit()
 

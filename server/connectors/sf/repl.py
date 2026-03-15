@@ -12,7 +12,7 @@ from typing import Any
 from collections.abc import Iterable
 
 # locals
-from server.connectors.sf.SalesforceConnector import SalesforceClient
+from server.connectors.sf.SalesforceConnector import SalesforceConnector
 
 # logging
 import logging
@@ -21,7 +21,7 @@ logger = logging.getLogger(__name__)
 class Repl(cmd.Cmd):
     intro = 'Welcome to the Project Olympus Salesforce Console. Type help or ? to list commands.\n'
     
-    def __init__(self, sf_instance: SalesforceClient, stdout: Any = None) -> None:
+    def __init__(self, sf_instance: SalesforceConnector, stdout: Any = None) -> None:
         super().__init__(stdout=stdout)
         self.sf = sf_instance
         self.api_mode = 'rest'  # Default mode
@@ -266,7 +266,7 @@ class Repl(cmd.Cmd):
         return True
 
 def main() -> None:
-    sf = SalesforceClient()
+    sf = SalesforceConnector()
     Repl(sf, stdout=sys.stdout).cmdloop()
 
 if __name__ == '__main__':

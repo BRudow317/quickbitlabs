@@ -1,17 +1,20 @@
+from __future__ import annotations
 import base64
-import json
 from datetime import datetime
 from pathlib import Path
 from typing import Any
 from collections.abc import Iterator
-import requests
 
 # dependencies
 from urllib.parse import quote_plus
+import requests
 
 # locals
-from server.connectors.sf.HttpClient import HttpClient
-from utils.date_to_iso8601 import date_to_iso8601
+from server.connectors.sf.utils.date_to_iso8601 import date_to_iso8601
+
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from server.connectors.sf.HttpClient import HttpClient
 
 import logging
 logger = logging.getLogger(__name__)

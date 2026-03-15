@@ -1,13 +1,20 @@
 from __future__ import annotations
 from collections.abc import Mapping, MutableMapping
 from enum import Enum
+import os
 from typing import NamedTuple, TypedDict
 # types
 # from typing import TYPE_CHECKING
 # if TYPE_CHECKING:
     
 
-API_VERSION: str = '63.0'
+API_VERSION: str = os.getenv('SF_API_VERSION', '66.0')
+SF_EXTERNAL_CLIENT_APP_NAME: str = os.getenv('SF_EXTERNAL_CLIENT_APP_NAME', 'automation')
+SF_BASE_URL: str = os.getenv('SF_BASE_URL') or f"https://{os.getenv('SF_BASE_DOMAIN')}.salesforce.com" or "https://salesforce.com"
+SF_AUTH_URI: str = os.getenv('SF_AUTH_URI', '/services/oauth2/token')
+SF_QUERY_URI: str = os.getenv('SF_QUERY_URI', f'/services/data/v{API_VERSION}/jobs/query')
+SF_BASE_DOMAIN: str = os.getenv('SF_BASE_DOMAIN', 'your-instance')
+SF_CALLBACK_URL: str = os.getenv('SF_CALLBACK_URL', 'http://localhost:1717/OauthRedirect')
 
 # --- Common Types ---
 Headers = MutableMapping[str, str]

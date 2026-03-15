@@ -19,23 +19,22 @@ from collections import OrderedDict
 from more_itertools import chunked
 
 # locals
-from models import (
+from server.connectors.sf.models import (
     Operation, JobState, ColumnDelimiter, LineEnding, ResultsType,
     QueryRecordsResult, QueryFileResult, QueryParameters
 )
-from utils.csv_utils import (
+from server.connectors.sf.utils.csv_utils import (
     ColumnDelimiter, LineEnding, QUOTING_TYPE,
     split_csv, count_csv, convert_dict_to_csv, get_csv_fieldnames,
     MAX_INGEST_JOB_FILE_SIZE, MAX_INGEST_JOB_PARALLELISM, DEFAULT_QUERY_PAGE_SIZE # DELIMITERS, 
 )
-from utils.date_to_iso8601 import date_to_iso8601
-from utils.filter_null_bytes import filter_null_bytes
+from server.connectors.sf.utils.date_to_iso8601 import date_to_iso8601
+from server.connectors.sf.utils.filter_null_bytes import filter_null_bytes
 
 # Type Checking
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from typing import Any, Literal
-    from enum import Enum
     from server.connectors.sf.HttpClient import HttpClient
     
 
@@ -56,7 +55,7 @@ class SfBulk2Handler:
     bulk2_url: str
     def __init__(self, http_client: HttpClient):
         self._http = http_client
-        self.bulk2_url = f"{self._http.base_url}/jobs/"
+        self.bulk2_url = f"{self._http.services_url}/jobs/"
 
     def query(self, soql: str, **kwargs: Any) -> Any:
         return SfBulk2Type(object_name='_query', bulk2_url=self.bulk2_url, http_client=self._http).query(soql, **kwargs)

@@ -48,6 +48,13 @@ dependencies = [
     "uvicorn==0.41.0",
 ]
 
+[project.optional-dependencies]
+# installed only on request: pip install quickbitlabs[dev]
+dev = [
+    "pytest", 
+    "ruff"
+    ]
+
 [tool.setuptools]
 packages = ["quickbitlabs"]
 

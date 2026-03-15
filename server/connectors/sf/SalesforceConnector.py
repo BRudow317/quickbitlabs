@@ -6,10 +6,10 @@ from collections.abc import Iterable, Iterator
 from typing import Any
 
 # locals
-from HttpClient import HttpClient
-from services.rest import SfRest
-from services.bulk2 import SfBulk2Handler
-from utils.type_converter import SF_TYPE_MAP, cast_record, prepare_record
+from server.connectors.sf.HttpClient import HttpClient
+from server.connectors.sf.services.rest import SfRest
+from server.connectors.sf.services.bulk2 import SfBulk2Handler
+from server.connectors.sf.utils.type_converter import SF_TYPE_MAP, cast_record, prepare_record
 from server.models.StandardTemplate import Column, Table, Schema
 
 # logging
@@ -33,12 +33,14 @@ class SalesforceConnector:
         self,
         consumer_key: str | None = None,
         consumer_secret: str | None = None,
-        org_url: str | None = None
+        org_url: str | None = None,
+        access_token: str | None = None
     ):
         self.client = HttpClient(
             consumer_key=consumer_key,
             consumer_secret=consumer_secret,
-            base_url=org_url
+            base_url=org_url,
+            access_token=access_token
         )
         self._table_cache = {}
 
@@ -54,7 +56,7 @@ class SalesforceConnector:
             self._bulk2 = SfBulk2Handler(self.client)
         return self._bulk2
 
-    # ── Schema ────────────────────────────────────────────────────────────────
+    #  Schema 
 
     def get_column(self, object_name: str, field_name: str) -> Column:
         """Return a StandardTemplate Column for a single Salesforce field."""
@@ -71,6 +73,11 @@ class SalesforceConnector:
             columns = []
             for f in describe.get('fields', []):
                 sf_type = f['type']
+                # Bulk API 2.0 does not support compound fields (address, location).
+                # Skip the compound wrapper — the individual sub-fields (Street, City, etc.) are already included.
+                if sf_type in ('address', 'location'):
+                    logger.debug(f"Skipping compound field {f['name']} ({sf_type}) on {object_name}")
+                    continue
                 columns.append(Column(
                     source_name=f['name'],
                     datatype=SF_TYPE_MAP.get(sf_type, 'string'),
@@ -96,7 +103,7 @@ class SalesforceConnector:
     def get_limits(self) -> dict[str, Any]:
         return self.rest.limits()
 
-    # ── Read ──────────────────────────────────────────────────────────────────
+    #  Read 
 
     def query(self, soql: str, object_name: str | None = None) -> Iterator[dict[str, Any]]:
         """REST SOQL query. Best for small, real-time result sets."""
@@ -118,7 +125,7 @@ class SalesforceConnector:
             for record in csv.DictReader(io.StringIO(csv_page)):
                 yield cast_record(record, field_types) if field_types else dict(record)
 
-    # ── Write (all Bulk2) ─────────────────────────────────────────────────────
+    #  Write (all Bulk2) 
 
     def insert(self, object_name: str, records: Iterable[dict[str, Any]]) -> dict[str, Any]:
         return getattr(self.bulk2, object_name).insert(records=[prepare_record(r) for r in records])

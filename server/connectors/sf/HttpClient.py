@@ -1,5 +1,5 @@
 from __future__ import annotations
-
+import os
 import re
 from collections import OrderedDict 
 from collections.abc import Callable
@@ -11,7 +11,8 @@ from collections.abc import MutableMapping
 import requests
 
 # locals
-from auth import fetch_client_credentials
+from server.connectors.sf.auth import fetch_client_credentials
+from server.connectors.sf.models import API_VERSION, SF_BASE_URL, SF_QUERY_URI, SF_BASE_DOMAIN
 
 # logging
 import logging
@@ -206,6 +207,7 @@ class HttpClient:
     base_url: str | None # Needed for reverse compatibility with basic auth logins
     instance_url: str | None # Doesn't contain the https:// prefix
     services_url: str | None
+    query_url: str | None
     consumer_key: str | None
     consumer_secret: str | None
     access_token: str | None
@@ -222,20 +224,27 @@ class HttpClient:
         consumer_key: str | None = None, 
         consumer_secret: str | None = None,
         parse_float: Callable[[str], Any] | None = None,
-        object_pairs_hook: Callable = OrderedDict
+        object_pairs_hook: Callable = OrderedDict,
+        access_token: str | None = None
         ) -> None:
-
-        self.base_url = base_url
+        
+        self.base_url = base_url or SF_BASE_URL \
+        or f"https://{SF_BASE_DOMAIN}.salesforce.com" \
+        or "https://salesforce.com"
         self.consumer_key = consumer_key
         self.consumer_secret = consumer_secret
 
-        self.access_token, self.instance_url = fetch_client_credentials(
-            consumer_key = self.consumer_key, 
-            consumer_secret = self.consumer_secret, 
-            base_url = self.base_url
-        )
-        self.services_url = f"https://{self.instance_url}/services/data/v{self.api_version}"
-
+        if not access_token:
+            self.access_token, self.instance_url = fetch_client_credentials(
+                consumer_key = self.consumer_key, 
+                consumer_secret = self.consumer_secret, 
+                base_url = self.base_url
+            )
+        else:
+            self.access_token = access_token
+            self.instance_url = self.base_url.split("//")[1].split("/")[0]
+        self.services_url = f"{self.base_url}/services/data/v{self.api_version}"
+        self.query_url = f"{self.base_url}{SF_QUERY_URI}"
         
         self.session = requests.Session()
         self.refresh_callback = self._refresh_token_callback
@@ -265,8 +274,8 @@ class HttpClient:
         **kwargs: Any
     ) -> requests.Response:
         """Execute HTTP request with auto-retry for 401 Unauthorized."""
-        # if endpoint is a full URL, use it. Otherwise, append to base_url.
-        url = endpoint if endpoint.startswith("http") else f"{self.base_url}/{endpoint.lstrip('/')}"
+        # if endpoint is a full URL, use it. Otherwise, append to the versioned services URL.
+        url = endpoint if endpoint.startswith("https") else f"{self.services_url}/{endpoint.lstrip('/')}"
         
         response = self.session.request(method, url, **kwargs)
 

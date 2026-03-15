@@ -2,10 +2,9 @@ from __future__ import annotations
 
 import datetime
 import json
-from typing import Any
+from typing import Any, TypeVar
 
 from server.models.StandardTemplate import PythonTypes
-
 
 # Salesforce field type → PythonTypes
 SF_TYPE_MAP: dict[str, PythonTypes] = {
