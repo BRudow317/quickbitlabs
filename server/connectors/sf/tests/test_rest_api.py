@@ -2,8 +2,8 @@ import pytest
 from unittest.mock import patch, MagicMock
 
 # locals
-from connectors.sf.client import SalesforceClient
-from connectors.sf.core.http import HttpClient
+from server.connectors.sf.SalesforceConnector import SalesforceClient
+from server.connectors.sf.HttpClient import HttpClient
 from connectors.sf.auth import fetch_client_credentials
 
 @pytest.fixture

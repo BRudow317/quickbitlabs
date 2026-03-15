@@ -12,7 +12,7 @@ from typing import Any
 from collections.abc import Iterable
 
 # locals
-from client import SalesforceClient
+from server.connectors.sf.SalesforceConnector import SalesforceClient
 
 # logging
 import logging

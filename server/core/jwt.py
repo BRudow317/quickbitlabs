@@ -1,9 +1,9 @@
 from datetime import datetime, timedelta, timezone
-from typing import Any, Optional
+from typing import Any
 import jwt
 from server.configs.settings import settings
 
-def create_access_token(data: dict[str, Any], expires_delta: Optional[timedelta] = None) -> str:
+def create_access_token(data: dict[str, Any], expires_delta: timedelta | None = None) -> str:
     to_encode: dict[str, Any] = data.copy()
     if expires_delta:
         expire = datetime.now(timezone.utc) + expires_delta

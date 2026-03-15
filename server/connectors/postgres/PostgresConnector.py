@@ -6,23 +6,22 @@ from typing import Any
 import os
 from collections.abc import Iterable
 
-from sqlalchemy import create_engine, MetaData, Table, Column, text
-from sqlalchemy import String, Integer, Float, Boolean, DateTime, Date
+from sqlalchemy import create_engine, MetaData, Table as SATable, Column, text
+from sqlalchemy import String, Integer, Float, Boolean, DateTime, Date, Time, LargeBinary
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 from more_itertools import chunked
 
 # locals
-from server.core.interfaces import DestinationConnector
-from server.models.schema import UniversalTable
+from server.models.StandardTemplate import Table
 
 import logging
 logger = logging.getLogger(__name__)
 
 
-class PostgresDestination(DestinationConnector):
-    """
-    Translates the Universal Schema into PostgreSQL tables and 
+class PostgresConnector():
+    """Translates the Universal Schema into PostgreSQL tables and 
     performs bulk upserts into a Postgres/Supabase database.
     """
     connection_string: str | None = None
@@ -31,15 +30,17 @@ class PostgresDestination(DestinationConnector):
         con_str: str = self.connection_string or os.getenv("SUPABASE_CONNECTION_STRING") or ""
         self.engine = create_engine(con_str)
         self.metadata = MetaData()
-        
         # The Reverse Rosetta Stone: Universal Types -> Postgres Types
         self.type_map = {
-            'string': String,
-            'integer': Integer,
-            'float': Float,
-            'boolean': Boolean,
+            'string':   String,
+            'integer':  Integer,
+            'float':    Float,
+            'boolean':  Boolean,
             'datetime': DateTime,
-            'date': Date
+            'date':     Date,
+            'time':     Time,
+            'binary':   LargeBinary,
+            'json':     JSONB,
         }
     def test_connection(self) -> bool:
         try:
@@ -51,49 +52,45 @@ class PostgresDestination(DestinationConnector):
             logger.error(f"Failed to connect to Postgres database: {e}")
             return False
 
-    def apply_schema(self, table: UniversalTable) -> None:
+    def apply_schema(self, table: Table) -> None:
+        """Translates a UniversalTable into a SQLAlchemy Table object and ensures it exists in the Postgres database.
         """
-        Translates a UniversalTable into a SQLAlchemy Table object and 
-        ensures it exists in the Postgres database.
-        """
-        logger.info(f"Applying schema for {table.name} to Postgres...")
+        logger.info(f"Applying schema for {table.source_name} to Postgres...")
         
         columns = []
         for col in table.columns:
-            # 1. Map the universal type to a SQLAlchemy type
             sa_type = self.type_map.get(col.datatype, String)
-            
-            # 2. Handle string length limitations if provided
+            col_name = col.target_name or col.source_name
+
             if sa_type == String and col.length:
                 column_type = sa_type(col.length)
+            elif sa_type == Float and col.precision is not None:
+                column_type = sa_type(precision=col.precision)
             else:
                 column_type = sa_type()
 
-            # 3. Build the SQLAlchemy Column
             sa_column = Column(
-                name=col.name,
+                name=col_name,
                 type_=column_type,
                 primary_key=col.primary_key,
-                nullable=col.nullable
+                nullable=col.nullable,
+                unique=col.unique,
             )
             columns.append(sa_column)
 
-        # 4. Define the table. extend_existing=True ensures we don't crash 
-        # if the table is already loaded in SQLAlchemy's memory.
-        sa_table = Table(table.name, self.metadata, *columns, extend_existing=True)
+        table_name = table.target_name or table.source_name
+        sa_table = SATable(table_name, self.metadata, *columns, extend_existing=True)
 
         # 5. Execute the DDL (CREATE TABLE IF NOT EXISTS)
         # Note: This handles creation. True schema evolution (ALTER TABLE) 
         # requires a migration tool like Alembic.
         sa_table.create(self.engine, checkfirst=True)
 
-
     def write_data(self, stream_name: str, records: Iterable[dict[str, Any]], batch_size: int = 10000) -> None:
-        """
-        Catches the stream of data and performs bulk Postgres Upserts.
-        """
-        # Load the SQLAlchemy Table object we just created/reflected
-        table = Table(stream_name, self.metadata, autoload_with=self.engine)
+        """Takes the stream of data and performs bulk Postgres upserts in batches"""
+        
+        # Load the SQLAlchemy Table object
+        table = SATable(stream_name, self.metadata, autoload_with=self.engine)
         
         # Identify the primary keys for the Upsert conflict resolution
         primary_keys = [key.name for key in table.primary_key]

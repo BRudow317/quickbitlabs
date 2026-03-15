@@ -1,4 +1,4 @@
-# olympus/engine/sync.py
+# quickbitlabs/server/engine/sync.py
 
 from server.core.interfaces import SourceConnector, DestinationConnector
 

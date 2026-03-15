@@ -10,7 +10,7 @@ import requests
 from urllib.parse import quote_plus
 
 # locals
-from core.http import HttpClient
+from server.connectors.sf.HttpClient import HttpClient
 from utils.date_to_iso8601 import date_to_iso8601
 
 import logging
@@ -22,12 +22,13 @@ class SfRest:
     Handles global REST API operations (SOQL, Limits, Global Describes) 
     and acts as a factory for specific SObject operations.
     """
+    _http: HttpClient
+
     def __init__(self, http_client: HttpClient):
         self._http = http_client
 
     def __getattr__(self, name: str) -> "SfObjType":
-        """
-        Allows dot-notation access to SObjects.
+        """Allows dot-notation access to SObjects.
         Example: sf.rest.Contact.get('003...')
         """
         if name.startswith('__'):
@@ -45,7 +46,12 @@ class SfRest:
         records = result.get('records', [{'IsSandbox': False}])
         return records[0].get('IsSandbox', False)
 
-    def restful(self, path: str, params: dict[str, Any] | None = None, method: str = 'GET', **kwargs: Any) -> dict[str, Any] | None:
+    def request(self, 
+                path: str,
+                params: dict[str, Any] | None = None, 
+                method: str = 'GET', 
+                **kwargs: Any
+                ) -> dict[str, Any] | None:
         """Make a direct REST call by relative path."""
         response = self._http.request(method, path, params=params, **kwargs)
         return self._http.parse_json(response)
@@ -101,12 +107,16 @@ class SfRest:
             'done': True,
         }
 
-
 class SfObjType:
     """Interface to a specific Salesforce SObject type (e.g., Lead, Contact)."""
+    object_name: str
+    object_map: dict[str, Any] | None
+    _http: HttpClient
+    _base_endpoint: str
     
     def __init__(self, object_name: str, http_client: HttpClient):
-        self.object_name = object_name
+        self.object_name = object_name or ""
+        self.object_map = None
         self._http = http_client
         self._base_endpoint = f"sobjects/{self.object_name}"
 
@@ -161,7 +171,13 @@ class SfObjType:
         return self._http.parse_json(response)
 
     # Base64 File Operations
-    def upload_base64(self, file_path: str, base64_field: str = 'Body', headers: dict | None = None, **kwargs: Any) -> requests.Response:
+    def upload_base64(
+            self, 
+            file_path: str, 
+            base64_field: str = 'Body', 
+            headers: dict | None = None, 
+            **kwargs: Any
+            ) -> requests.Response:
         body = base64.b64encode(Path(file_path).read_bytes()).decode()
         return self._http.request('POST', f"{self._base_endpoint}/", headers=headers, json={base64_field: body}, **kwargs)
 

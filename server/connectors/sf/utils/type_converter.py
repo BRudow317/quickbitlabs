@@ -1,0 +1,103 @@
+from __future__ import annotations
+
+import datetime
+import json
+from typing import Any
+
+from server.models.StandardTemplate import PythonTypes
+
+
+# Salesforce field type → PythonTypes
+SF_TYPE_MAP: dict[str, PythonTypes] = {
+    'id':              'string',
+    'string':          'string',
+    'textarea':        'string',
+    'email':           'string',
+    'phone':           'string',
+    'url':             'string',
+    'encryptedstring': 'string',
+    'picklist':        'string',
+    'multipicklist':   'string',
+    'combobox':        'string',
+    'reference':       'string',
+    'anyType':         'string',
+    'int':             'integer',
+    'integer':         'integer',
+    'double':          'float',
+    'currency':        'float',
+    'percent':         'float',
+    'boolean':         'boolean',
+    'date':            'date',
+    'datetime':        'datetime',
+    'time':            'time',
+    'base64':          'binary',
+    'address':         'json',
+    'location':        'json',
+}
+
+
+def _to_bool(v: Any) -> bool:
+    if isinstance(v, bool):
+        return v
+    return str(v).lower() == 'true'
+
+
+def _to_datetime(v: str) -> datetime.datetime:
+    # SF format: "2024-01-15T10:30:00.000+0000"
+    return datetime.datetime.fromisoformat(v.replace('+0000', '+00:00'))
+
+
+_SF_CONVERTERS: dict[str, Any] = {
+    'int':      int,
+    'integer':  int,
+    'double':   float,
+    'currency': float,
+    'percent':  float,
+    'boolean':  _to_bool,
+    'date':     datetime.date.fromisoformat,
+    'datetime': _to_datetime,
+    'time':     datetime.time.fromisoformat,
+}
+
+
+def sf_to_python(sf_type: str, value: Any) -> Any:
+    """Convert a Salesforce field value to its native Python type."""
+    if value is None or value == '':
+        return None
+    converter = _SF_CONVERTERS.get(sf_type)
+    if converter:
+        try:
+            return converter(value)
+        except (ValueError, TypeError):
+            return value
+    return value
+
+
+def python_to_sf(value: Any) -> str:
+    """Convert a Python value to its Salesforce API string representation."""
+    if value is None:
+        return ''
+    if isinstance(value, bool):
+        return 'true' if value else 'false'
+    if isinstance(value, datetime.datetime):
+        return value.isoformat()
+    if isinstance(value, datetime.date):
+        return value.isoformat()
+    if isinstance(value, datetime.time):
+        return value.isoformat()
+    if isinstance(value, (dict, list)):
+        return json.dumps(value)
+    return str(value)
+
+
+def cast_record(record: dict[str, Any], field_types: dict[str, str]) -> dict[str, Any]:
+    """Apply sf_to_python to each field in a record using a {field_name: sf_type} map."""
+    return {
+        k: sf_to_python(field_types[k], v) if k in field_types else v
+        for k, v in record.items()
+    }
+
+
+def prepare_record(record: dict[str, Any]) -> dict[str, Any]:
+    """Convert Python values in a record to SF API strings before writing."""
+    return {k: python_to_sf(v) for k, v in record.items()}

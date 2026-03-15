@@ -6,7 +6,7 @@ from typing import Any
 from collections.abc import Iterator
 from core.interfaces import SourceConnector
 from server.models.schema import UniversalTable, UniversalColumn
-from client import SalesforceClient
+from server.connectors.sf.SalesforceConnector import SalesforceClient
 
 class SalesforceSource(SourceConnector):
     """

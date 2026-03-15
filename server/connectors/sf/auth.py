@@ -1,23 +1,25 @@
 from __future__ import annotations
 
-import logging
+
 import os
 import requests
 from json.decoder import JSONDecodeError
 
+import logging
 logger = logging.getLogger(__name__)
 
 OAUTH_URI = '/services/oauth2/token'
 
 class SalesforceAuthError(Exception):
     """Custom exception for authentication failures."""
+    logger.error("Salesforce authentication failed.")
     pass
 
 def fetch_client_credentials(
     consumer_key: str | None = None,
     consumer_secret: str | None = None,
     domain: str = 'login',
-    instance_url: str | None = None
+    base_url: str | None = None
 ) -> tuple[str, str]:
     """
     Fetch an OAuth access token using the Client Credentials flow.
@@ -25,9 +27,9 @@ def fetch_client_credentials(
     """
     key = consumer_key or os.getenv('CONSUMER_KEY')
     secret = consumer_secret or os.getenv('CONSUMER_SECRET')
-    url = instance_url or os.getenv('BASE_URL')
+    base_url = base_url or os.getenv('BASE_URL') # ex) https://empathetic-narwhal-8eqg8r-dev-ed.trailblaze.my.salesforce.com
     
-    base = url or f'https://{domain}.salesforce.com'
+    base = base_url or f'https://{domain}.salesforce.com'
     
     response = requests.post(
         f'{base}{OAUTH_URI}',
@@ -39,12 +41,13 @@ def fetch_client_credentials(
     )
     
     try:
-        data = response.json()
+        json_data = response.json()
     except JSONDecodeError as exc:
         raise SalesforceAuthError(f"HTTP {response.status_code}: {response.text}") from exc
         
     if response.status_code != 200:
-        raise SalesforceAuthError(f"{data.get('error')}: {data.get('error_description')}")
+        raise SalesforceAuthError(f"{json_data.get('error')}: {json_data.get('error_description')}")
         
-    sf_instance = data['instance_url'].removeprefix('https://')
-    return data['access_token'], sf_instance
+    sf_instance = json_data['instance_url'].removeprefix('https://')
+    return json_data['access_token'], sf_instance
+

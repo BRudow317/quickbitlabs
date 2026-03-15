@@ -1,4 +1,5 @@
-from typing import TypeVar, Iterable
+from typing import TypeVar
+from collections.abc import Iterable
 T = TypeVar('T')
 def list_from_generator(
         generator_function: Iterable[Iterable[T]]
