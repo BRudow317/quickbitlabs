@@ -30,4 +30,4 @@ package-lock.json
 # Environment files
 *secret*
 *data*
-*env*
+*.env*
