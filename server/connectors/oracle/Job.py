@@ -4,8 +4,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional, TYPE_CHECKING
 import logging
-from .OracleTable import OracleTable
-from .OracleUser import OracleUser
+from .OracleModels import OracleTable
+from .OracleClient import OracleUser
 from .Csv import Csv
 from .Batch import Batch
 logger = logging.getLogger(__name__)

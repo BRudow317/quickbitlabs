@@ -4,7 +4,6 @@ from pathlib import Path
 from dataclasses import dataclass, field
 from typing import Iterator,  Union, Type, cast #TYPE_CHECKING, Optional
 from .base import AbstractSource
-from .exceptions import AlignmentError
 import logging
 logger = logging.getLogger(__name__)
 
@@ -66,3 +65,26 @@ class Csv(AbstractSource):
             self.dialect = csv.Sniffer().sniff(sample, delimiters=',;	')
         except csv.Error:
             self.dialect = 'excel'
+
+
+class IngestionError(Exception):
+    """Base class for all pipeline errors."""
+
+class QuarantineError(IngestionError):
+    def __init__(self, message: str = '', source_path: str | None = None):
+        super().__init__(message)
+        self.source_path = source_path
+    def __str__(self):
+        base = super().__str__()
+        return f"{base} | source={self.source_path}" if self.source_path else base
+
+class AlignmentError(QuarantineError):
+    def __init__(self, message: str, source_path: str | None = None, row_number: int | None = None, expected: int | None = None, got: int | None = None):
+        super().__init__(message, source_path)
+        self.row_number = row_number; self.expected = expected; self.got = got
+    def __str__(self):
+        base = super().__str__(); parts=[]
+        if self.row_number is not None: parts.append(f'row={self.row_number}')
+        if self.expected is not None: parts.append(f'expected={self.expected}')
+        if self.got is not None: parts.append(f'got={self.got}')
+        return f"{base} | {' '.join(parts)}" if parts else base

@@ -1,7 +1,7 @@
 from __future__ import annotations
 import re
 from typing import Iterable
-from .oracle_config import _ORACLE_RESERVED
+from ..oracle_config import _ORACLE_RESERVED
 
 def to_oracle_snake(value: str, max_len: int = 128, reserved: Iterable[str] = _ORACLE_RESERVED) -> str:
     s = str(value).strip()
