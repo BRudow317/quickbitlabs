@@ -8,11 +8,9 @@ from enum import Enum
 from collections.abc import Iterator, Generator
 from typing import Literal 
     
-
 """Utilities for handling CSV files for Salesforce Bulk API 2.0.
 # https://developer.salesforce.com/docs/atlas.en-us.api_asynch.meta/api_asynch/datafiles_prepare_csv.htm
 # """
-
 
 class ColumnDelimiter(str, Enum):
     BACKQUOTE = "BACKQUOTE"  # (`)
@@ -167,7 +165,6 @@ def count_csv(
 
     return count
 
-
 def convert_dict_to_csv(
         data: list[dict[str, str]] | None = None,
         column_delimiter: ColumnDelimiter = ColumnDelimiter.COMMA,
@@ -194,7 +191,6 @@ def convert_dict_to_csv(
     for row in data:
         writer.writerow(row)
     return dict_to_csv_file.getvalue()
-
 
 def get_csv_fieldnames(
         filename: str | None = None,

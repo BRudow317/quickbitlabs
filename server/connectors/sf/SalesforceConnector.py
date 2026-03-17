@@ -56,8 +56,7 @@ class SalesforceConnector:
             self._bulk2 = SfBulk2Handler(self.client)
         return self._bulk2
 
-    #  Schema 
-
+    # Schema 
     def get_column(self, object_name: str, field_name: str) -> Column:
         """Return a StandardTemplate Column for a single Salesforce field."""
         table = self.get_table(object_name)
@@ -125,8 +124,7 @@ class SalesforceConnector:
             for record in csv.DictReader(io.StringIO(csv_page)):
                 yield cast_record(record, field_types) if field_types else dict(record)
 
-    #  Write (all Bulk2) 
-
+    # Write (all Bulk2) 
     def insert(self, object_name: str, records: Iterable[dict[str, Any]]) -> dict[str, Any]:
         return getattr(self.bulk2, object_name).insert(records=[prepare_record(r) for r in records])
 

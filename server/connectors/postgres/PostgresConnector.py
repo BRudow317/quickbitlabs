@@ -1,126 +1,106 @@
-"""
-python master.py --config ./.env -l ./logs --exec server/connectors/sf/repl.py
-"""
 from __future__ import annotations
 from typing import Any
 import os
 from collections.abc import Iterable
 
-from sqlalchemy import create_engine, MetaData, Table as SATable, Column, text
-from sqlalchemy import String, Integer, Float, Boolean, DateTime, Date, Time, LargeBinary
-from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy import create_engine, MetaData, Table as SATable, Column as SAColumn, text, String
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 from more_itertools import chunked
 
-# locals
-from server.models.StandardTemplate import Table
+from server.connectors.postgres.type_converter import PYTHON_TO_PG
+from server.connectors.postgres.services.query import PgQuery
+from server.models.StandardTemplate import Table, Column, Schema, DataStream
 
 import logging
 logger = logging.getLogger(__name__)
 
 
-class PostgresConnector():
-    """Translates the Universal Schema into PostgreSQL tables and 
-    performs bulk upserts into a Postgres/Supabase database.
-    """
+class PostgresConnector:
+    """Entry point for all Postgres operations."""
     connection_string: str | None = None
+
     def __init__(self):
-        # e.g., "postgresql://postgres:password@db.xyz.supabase.co:5432/postgres"
-        con_str: str = self.connection_string or os.getenv("SUPABASE_CONNECTION_STRING") or ""
+        con_str = self.connection_string or os.getenv("SUPABASE_CONNECTION_STRING") or ""
         self.engine = create_engine(con_str)
         self.metadata = MetaData()
-        # The Reverse Rosetta Stone: Universal Types -> Postgres Types
-        self.type_map = {
-            'string':   String,
-            'integer':  Integer,
-            'float':    Float,
-            'boolean':  Boolean,
-            'datetime': DateTime,
-            'date':     Date,
-            'time':     Time,
-            'binary':   LargeBinary,
-            'json':     JSONB,
-        }
+        self.query = PgQuery(self.engine, self.metadata)
+
     def test_connection(self) -> bool:
         try:
             with self.engine.connect() as conn:
-                cursor_result = conn.execute(text("SELECT 1"))
+                conn.execute(text("SELECT 1"))
             logger.info("Successfully connected to Postgres database.")
             return True
         except Exception as e:
             logger.error(f"Failed to connect to Postgres database: {e}")
             return False
 
-    def apply_schema(self, table: Table) -> None:
-        """Translates a UniversalTable into a SQLAlchemy Table object and ensures it exists in the Postgres database.
-        """
-        logger.info(f"Applying schema for {table.source_name} to Postgres...")
-        
+    # Schema: Universal -> Postgres 
+
+    def apply_schema(self, table: Table, pg_schema: str | None = None) -> None:
+        """Create/ensure a Postgres table from a universal Table."""
+        if pg_schema:
+            self._ensure_schema(pg_schema)
+
+        logger.info(f"Applying schema for {table.source_name}...")
+
         columns = []
         for col in table.columns:
-            sa_type = self.type_map.get(col.datatype, String)
+            sa_type_cls = PYTHON_TO_PG.get(col.datatype, String)
             col_name = col.target_name or col.source_name
 
-            if sa_type == String and col.length:
-                column_type = sa_type(col.length)
-            elif sa_type == Float and col.precision is not None:
-                column_type = sa_type(precision=col.precision)
+            if sa_type_cls is String and col.length:
+                column_type = String(col.length)
             else:
-                column_type = sa_type()
+                column_type = sa_type_cls()
 
-            sa_column = Column(
-                name=col_name,
-                type_=column_type,
+            columns.append(SAColumn(
+                col_name,
+                column_type,
                 primary_key=col.primary_key,
                 nullable=col.nullable,
                 unique=col.unique,
-            )
-            columns.append(sa_column)
+            ))
 
         table_name = table.target_name or table.source_name
-        sa_table = SATable(table_name, self.metadata, *columns, extend_existing=True)
-
-        # 5. Execute the DDL (CREATE TABLE IF NOT EXISTS)
-        # Note: This handles creation. True schema evolution (ALTER TABLE) 
-        # requires a migration tool like Alembic.
+        meta = MetaData(schema=pg_schema) if pg_schema else self.metadata
+        sa_table = SATable(table_name, meta, *columns, extend_existing=True)
         sa_table.create(self.engine, checkfirst=True)
 
-    def write_data(self, stream_name: str, records: Iterable[dict[str, Any]], batch_size: int = 10000) -> None:
-        """Takes the stream of data and performs bulk Postgres upserts in batches"""
-        
-        # Load the SQLAlchemy Table object
-        table = SATable(stream_name, self.metadata, autoload_with=self.engine)
-        
-        # Identify the primary keys for the Upsert conflict resolution
+    # Data: Write 
+
+    def write_data(self, stream_name: str, records: DataStream, pg_schema: str | None = None, batch_size: int = 10000) -> None:
+        """Bulk Postgres upserts in batches."""
+        meta = MetaData(schema=pg_schema) if pg_schema else self.metadata
+        table = SATable(stream_name, meta, autoload_with=self.engine)
+
         primary_keys = [key.name for key in table.primary_key]
         if not primary_keys:
-            raise ValueError(f"Cannot perform Upsert on {stream_name}: No Primary Key defined in schema.")
+            raise ValueError(f"Cannot upsert {stream_name}: no primary key defined.")
 
-        logger.info(f"Starting bulk upsert for {stream_name}...")
+        logger.debug(f"Starting bulk upsert for {stream_name}...")
 
         with Session(self.engine) as session:
-            # Process the infinite iterator in safe, memory-friendly chunks
             for chunk_idx, record_batch in enumerate(chunked(records, batch_size)):
-                
-                # 1. Construct the Postgres-specific INSERT statement
                 insert_stmt = pg_insert(table).values(record_batch)
-                
-                # 2. Build the ON CONFLICT DO UPDATE clause
-                # We tell Postgres: "If the ID matches, update every other column with the new data"
                 update_dict = {
-                    col.name: insert_stmt.excluded[col.name] 
-                    for col in table.columns 
+                    col.name: insert_stmt.excluded[col.name]
+                    for col in table.columns
                     if col.name not in primary_keys
                 }
-                
-                upsert_stmt = insert_stmt.on_conflict_do_update(
-                    index_elements=primary_keys,
-                    set_=update_dict
+                session.execute(
+                    insert_stmt.on_conflict_do_update(
+                        index_elements=primary_keys,
+                        set_=update_dict,
+                    )
                 )
-                
-                # 3. Execute the batch
-                session.execute(upsert_stmt)
                 session.commit()
-                
                 logger.info(f"Upserted batch {chunk_idx + 1} ({len(record_batch)} records) into {stream_name}.")
+
+    # Internal 
+
+    def _ensure_schema(self, pg_schema: str) -> None:
+        with self.engine.begin() as conn:
+            conn.execute(text(f'CREATE SCHEMA IF NOT EXISTS "{pg_schema}"'))
+        logger.info(f"Ensured schema '{pg_schema}' exists.")

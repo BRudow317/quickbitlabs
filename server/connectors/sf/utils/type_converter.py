@@ -6,7 +6,7 @@ from typing import Any, TypeVar
 
 from server.models.StandardTemplate import PythonTypes
 
-# Salesforce field type → PythonTypes
+# Salesforce type to PythonTypes
 SF_TYPE_MAP: dict[str, PythonTypes] = {
     'id':              'string',
     'string':          'string',
@@ -42,8 +42,11 @@ def _to_bool(v: Any) -> bool:
 
 
 def _to_datetime(v: str) -> datetime.datetime:
-    # SF format: "2024-01-15T10:30:00.000+0000"
-    return datetime.datetime.fromisoformat(v.replace('+0000', '+00:00'))
+    if v.endswith('Z'):
+        v = v[:-1] + '+00:00'
+    elif len(v) > 5 and v[-5] in '+-' and ':' not in v[-5:]:
+        v = v[:-2] + ':' + v[-2:]
+    return datetime.datetime.fromisoformat(v)
 
 
 _SF_CONVERTERS: dict[str, Any] = {
@@ -98,5 +101,5 @@ def cast_record(record: dict[str, Any], field_types: dict[str, str]) -> dict[str
 
 
 def prepare_record(record: dict[str, Any]) -> dict[str, Any]:
-    """Convert Python values in a record to SF API strings before writing."""
-    return {k: python_to_sf(v) for k, v in record.items()}
+    """Convert Python values to SF API strings, dropping Nones."""
+    return {k: python_to_sf(v) for k, v in record.items() if v is not None}

@@ -5,7 +5,7 @@ from typing import Any
 from collections.abc import Iterable
 
 # universal data format
-data: Iterable[dict[str, Any]]
+DataStream = Iterable[dict[str, Any]]
 
 # python types
 PythonTypes = Literal[
@@ -38,8 +38,19 @@ class Table(BaseModel):
     target_name: str | None = None
     columns: list[Column]
     description: str | None = None
+    @property
+    def primary_key_columns(self) -> list[Column]:
+        return [c for c in self.columns if c.primary_key]
+    @property
+    def column_map(self) -> dict[str, Column]:
+        """Lookup by source_name for quick access."""
+        return {c.source_name: c for c in self.columns}
 
 class Schema(BaseModel):
     source_name: str
     target_name: str | None = None
     tables: list[Table]
+    @property
+    def table_map(self) -> dict[str, Table]:
+        """Lookup by source_name for quick access."""
+        return {t.source_name: t for t in self.tables}
