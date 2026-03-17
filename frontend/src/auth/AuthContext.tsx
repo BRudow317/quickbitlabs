@@ -1,7 +1,7 @@
 import React, { createContext, useState, useContext, useEffect } from 'react';
 // Use the exact barrel exports we verified
-import { login as loginApi, getUser, type LoginData, type UserBase } from '@/api';
-import { client } from '@/api/client.gen';
+import { login as loginApi, getUser, type LoginData, type UserBase } from '@/api/openapi';
+import { client } from '@/api/openapi/client.gen';
 
 type LoginResult = { success: boolean; error?: string };
 

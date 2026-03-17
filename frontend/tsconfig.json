@@ -3,7 +3,7 @@
     "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.app.tsbuildinfo",
     "baseUrl": ".",
     "paths": {
-      "@/*": ["client/*"]
+      "@/*": ["src/*"]
     },
     "target": "ES2022",
     "useDefineForClassFields": true,
@@ -28,7 +28,7 @@
     "noFallthroughCasesInSwitch": true,
     "noUncheckedSideEffectImports": true
   },
-  "include": ["client"],
+  "include": ["src"],
   "exclude": [
     "dist",
     "bin",

@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Dialog, Button, Flex, Text, TextField, Box } from '@radix-ui/themes';
 import { PlusIcon } from '@radix-ui/react-icons';
-import { createLead, type LeadCreate } from '@/api';
+import { createLead, type LeadCreate } from '@/api/openapi';
 
 export function CreateLeadDialog() {
   const [open, setOpen] = useState(false);

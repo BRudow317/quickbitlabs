@@ -16,7 +16,7 @@ import { AuthProvider } from "@/auth/AuthContext";
 // import "@/styles/ColorTokens.css";
 // import "@/styles/styles.css";
 import "@/styles/fonts.css";
-import { client } from "./api/client.gen";
+import { client } from "@/api/openapi/client.gen";
 import { queryClient } from "@/context/QueryClientContext";
 import { QueryClientProvider } from '@tanstack/react-query';
 import { Theme } from '@radix-ui/themes';

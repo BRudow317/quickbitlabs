@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { Table, Badge, Card, Text, Flex, Spinner, Box } from '@radix-ui/themes';
-import { getLeads } from '@/api';
+import { getLeads } from '@/api/openapi';
 
 export function LeadsTable() {
   const { data, isLoading, error } = useQuery({

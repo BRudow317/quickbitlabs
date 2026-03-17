@@ -1,3 +1,6 @@
+"""
+python ../master/master.py --config Q:/quickbitlabs/.env -l Q:/quickbitlabs/logs -v --exec python Q:/quickbitlabs/server/start_server.py 
+"""
 from __future__ import annotations
 import os
 import sys

@@ -10,8 +10,8 @@ import {
   //type LoginResponses, // The union of possible success responses
   type UserBase,
   type Token
-} from '@/api';
-import { client } from '@/api/client.gen';
+} from '@/api/openapi';
+import { client } from '@/api/openapi/client.gen';
 
 // Perform Login
 export const authenticate = async (credentials: LoginData['body']): Promise<Token> => {
