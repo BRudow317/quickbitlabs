@@ -111,7 +111,43 @@ class PgObjType:
             )
             return result.rowcount
 
-    #  Internals 
+    def insert(self, records: DataStream, batch_size: int = 10000) -> None:
+        """Bulk INSERT (no conflict handling)."""
+        with Session(self._engine) as session:
+            for chunk_idx, batch in enumerate(chunked(records, batch_size)):
+                session.execute(self._sa_table.insert(), batch)
+                session.commit()
+                logger.info(f"Inserted batch {chunk_idx + 1} ({len(batch)} records) into {self._table_name}.")
+
+    def update_many(self, records: DataStream) -> int:
+        """Bulk UPDATE. Each record must contain PK fields plus columns to update."""
+        count = 0
+        with self._engine.begin() as conn:
+            for record in records:
+                pk_vals = {k: record[k] for k in self._pk_cols if k in record}
+                update_vals = {k: v for k, v in record.items() if k not in self._pk_cols}
+                if not pk_vals or not update_vals:
+                    continue
+                filters = [self._sa_table.c[k] == v for k, v in pk_vals.items()]
+                result = conn.execute(
+                    self._sa_table.update().where(and_(*filters)).values(**update_vals)
+                )
+                count += result.rowcount
+        return count
+
+    def delete_many(self, records: DataStream) -> int:
+        """Delete records by primary key. Each record must contain PK fields."""
+        count = 0
+        with self._engine.begin() as conn:
+            for record in records:
+                pk_filter = [self._sa_table.c[k] == record[k] for k in self._pk_cols if k in record]
+                if not pk_filter:
+                    continue
+                result = conn.execute(self._sa_table.delete().where(and_(*pk_filter)))
+                count += result.rowcount
+        return count
+
+    #  Internals
 
     def _pk_filter(self, record_id: Any) -> list:
         """Build WHERE clauses from a scalar PK or composite dict."""

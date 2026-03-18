@@ -43,6 +43,7 @@ dependencies = [
     "typing_extensions",
     "typing-inspection",
     # misc runtime
+    "more-itertools",
     "Mako",
     "MarkupSafe",
     "cffi",
