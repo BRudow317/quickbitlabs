@@ -1,10 +1,5 @@
 from __future__ import annotations
 
-import sys
-import os
-
-sys.path.insert(0, os.path.dirname(__file__))
-
 ORACLE_MAX_VARCHAR2_CHAR = 4000
 ORACLE_MAX_IDENTIFIER_LEN_LEGACY = 30
 ORACLE_MAX_IDENTIFIER_LEN_EXTENDED = 128

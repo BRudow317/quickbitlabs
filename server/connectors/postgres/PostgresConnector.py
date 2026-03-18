@@ -10,7 +10,7 @@ from more_itertools import chunked
 
 from server.connectors.postgres.type_converter import PYTHON_TO_PG
 from server.connectors.postgres.services.query import PgQuery
-from server.models.StandardTemplate import Table, Column, Schema, DataStream
+from server.models.ConnectorStandard import Table, Column, Schema, DataStream
 
 import logging
 logger = logging.getLogger(__name__)

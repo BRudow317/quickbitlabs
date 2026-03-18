@@ -11,6 +11,7 @@ import requests
 
 # locals
 from server.connectors.sf.utils.date_to_iso8601 import date_to_iso8601
+from server.connectors.sf.models import SKIP_SUFFIXES, SKIP_NAMES
 
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
@@ -109,6 +110,29 @@ class SfRest:
             'totalSize': len(all_records),
             'done': True,
         }
+    
+    def describe_migratable(self, **kwargs: Any) -> list[dict[str, Any]]:
+        """Return only business-data objects from the global describe."""
+        return [
+            obj for obj in self.describe(**kwargs).get('sobjects', [])
+            if self._is_migratable(obj)
+        ]
+
+    @staticmethod
+    def _is_migratable(obj: dict[str, Any]) -> bool:
+        if not obj.get('queryable') or not obj.get('retrieveable'):
+            return False
+        if not obj.get('layoutable') and not obj.get('searchable'):
+            return False
+
+        name = obj.get('name', '')
+
+        if any(name.endswith(s) for s in SKIP_SUFFIXES):
+            return False
+        if name in SKIP_NAMES:
+            return False
+
+        return True
 
 class SfObjType:
     """Interface to a specific Salesforce SObject type (e.g., Lead, Contact)."""

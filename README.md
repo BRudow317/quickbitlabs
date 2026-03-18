@@ -1,6 +1,8 @@
 # QuickBitLabs
 FastAPI + SQLAlchemy + React + TypeScript + Vite
 
+See server/readme.md and frontend/readme.md for detailed information on the backend and frontend respectively.
+
 # Frontend Documentation
 1. [@hey-api/openapi-ts](https://heyapi.dev/)
 2. [Tailwind CSS](https://tailwindcss.com/)

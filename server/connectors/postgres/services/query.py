@@ -5,7 +5,7 @@ from collections.abc import Iterator
 from sqlalchemy import create_engine, MetaData, Table as SATable, text, inspect
 from sqlalchemy.orm import Session
 
-from server.models.StandardTemplate import Table, Column, Schema, DataStream
+from server.models.ConnectorStandard import Table, Column, Schema, DataStream
 from server.connectors.postgres.type_converter import pg_to_python_type, pg_source_type
 from server.connectors.postgres.services.table_ops import PgObjType
 

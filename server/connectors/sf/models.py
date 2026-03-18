@@ -1,4 +1,5 @@
 from __future__ import annotations
+
 from collections.abc import Mapping, MutableMapping
 from enum import Enum
 import os
@@ -84,3 +85,38 @@ class QueryFileResult(TypedDict):
     file: str
 
 QueryResult = QueryRecordsResult | QueryFileResult
+
+# At the top of rest.py, outside the class
+SKIP_SUFFIXES = (
+    '__History', '__Feed', '__Share', '__Tag',
+    '__ChangeEvent', '__e', '__mdt', '__b',
+)
+
+SKIP_NAMES = {
+    # Feeds
+    'AccountFeed', 'ContactFeed', 'CaseFeed', 'LeadFeed',
+    'OpportunityFeed', 'UserFeed', 'CollaborationGroupFeed',
+    # History
+    'AccountHistory', 'ContactHistory', 'CaseHistory',
+    'LeadHistory', 'OpportunityHistory', 'OpportunityFieldHistory',
+    # Shares
+    'AccountShare', 'CaseShare', 'LeadShare', 'OpportunityShare',
+    # Apex / Dev
+    'ApexClass', 'ApexTrigger', 'ApexLog', 'ApexTestResult',
+    'AsyncApexJob', 'CronTrigger', 'CronJobDetail',
+    # Content (binary blobs — break bulk migrations)
+    'ContentVersion', 'ContentDocument', 'ContentDocumentLink',
+    # Metadata / Definitions
+    'EntityDefinition', 'FieldDefinition', 'FieldPermissions',
+    # Auth / Sessions
+    'OauthToken', 'AuthSession', 'SessionPermSetActivation',
+    'TwoFactorInfo', 'VerificationHistory', 'LoginHistory', 'LoginGeo',
+    # Platform
+    'StaticResource', 'AuraDefinition', 'AuraDefinitionBundle',
+    'FlowDefinitionView', 'FlowInterview',
+    'PlatformEventChannel', 'PlatformEventChannelMember',
+    'DataStatistics', 'BackgroundOperation', 'SetupAuditTrail',
+    # Permissions
+    'PermissionSet', 'PermissionSetAssignment',
+    'GroupMember', 'UserRole', 'UserLicense',
+}

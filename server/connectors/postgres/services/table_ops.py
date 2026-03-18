@@ -7,7 +7,7 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 from more_itertools import chunked
 
-from server.models.StandardTemplate import DataStream
+from server.models.ConnectorStandard import DataStream
 
 import logging
 logger = logging.getLogger(__name__)

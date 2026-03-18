@@ -26,6 +26,7 @@ __pycache__
 .pytest_cache
 pyrightconfig.json
 package-lock.json
+plan.md
 
 # Environment files
 *secret*

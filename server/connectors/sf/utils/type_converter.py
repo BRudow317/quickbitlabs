@@ -4,7 +4,7 @@ import datetime
 import json
 from typing import Any, TypeVar
 
-from server.models.StandardTemplate import PythonTypes
+from server.models.ConnectorStandard import PythonTypes
 
 # Salesforce type to PythonTypes
 SF_TYPE_MAP: dict[str, PythonTypes] = {

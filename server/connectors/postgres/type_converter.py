@@ -8,7 +8,7 @@ from sqlalchemy import (
 from sqlalchemy.dialects.postgresql import JSONB, JSON, UUID, ARRAY
 from sqlalchemy.types import TypeEngine
 
-from server.models.StandardTemplate import PythonTypes
+from server.models.ConnectorStandard import PythonTypes
 
 import logging
 logger = logging.getLogger(__name__)
