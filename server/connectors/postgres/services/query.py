@@ -6,7 +6,7 @@ from sqlalchemy.dialects.postgresql import ARRAY
 from sqlalchemy.orm import Session
 
 from server.models.ConnectorStandard import Table, Column, Schema, DataStream
-from server.connectors.postgres.type_converter import pg_to_python_type, pg_source_type, PYTHON_TO_PG
+from server.connectors.postgres.postgres_utils.type_converter import pg_to_python_type, pg_source_type, PYTHON_TO_PG
 from server.connectors.postgres.services.table_ops import PgObjType
 
 import logging
@@ -25,6 +25,10 @@ class PgQuery:
         if name.startswith('_'):
             return super().__getattribute__(name)
         return PgObjType(table_name=name, engine=self._engine, metadata=self._metadata)
+
+    def table(self, name: str, pg_schema: str | None = None) -> PgObjType:
+        """Schema-aware table accessor. Use this instead of __getattr__ when pg_schema matters."""
+        return PgObjType(table_name=name, engine=self._engine, metadata=self._metadata, pg_schema=pg_schema)
 
     # ── Schema Discovery ──
 

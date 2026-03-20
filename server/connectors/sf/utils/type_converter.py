@@ -6,7 +6,47 @@ from typing import Any, TypeVar
 
 from server.models.ConnectorStandard import PythonTypes
 
-# Salesforce type to PythonTypes
+# FieldDefinition.DataType (bulk describe) → PythonTypes
+# DataType comes with optional params e.g. "Text(80)", "Number(18, 0)" — strip before lookup.
+SF_FIELDDEF_TYPE_MAP: dict[str, PythonTypes] = {
+    'id':                    'string',
+    'text':                  'string',
+    'textarea':              'string',
+    'longtextarea':          'string',
+    'html':                  'string',
+    'richtextarea':          'string',
+    'phone':                 'string',
+    'url':                   'string',
+    'email':                 'string',
+    'picklist':              'string',
+    'multi-select picklist': 'string',
+    'combobox':              'string',
+    'reference':             'string',
+    'autonumber':            'string',
+    'encryptedtext':         'string',
+    'hierarchy':             'string',
+    'anytype':               'string',
+    'number':                'float',
+    'currency':              'float',
+    'percent':               'float',
+    'double':                'float',
+    'integer':               'integer',
+    'long':                  'integer',
+    'checkbox':              'boolean',
+    'boolean':               'boolean',
+    'date':                  'date',
+    'date/time':             'datetime',
+    'datetime':              'datetime',
+    'time':                  'time',
+    'base64':                'binary',
+    'file':                  'binary',
+    'json':                  'json',
+    # Compound — filtered upstream before this map is consulted
+    'address':               'json',
+    'location':              'json',
+}
+
+# Individual SObject describe response `type` field → PythonTypes
 SF_TYPE_MAP: dict[str, PythonTypes] = {
     'id':              'string',
     'string':          'string',

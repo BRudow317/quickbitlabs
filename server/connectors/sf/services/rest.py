@@ -111,6 +111,28 @@ class SfRest:
             'done': True,
         }
     
+    def describe_all_fields(self) -> dict[str, list[dict[str, Any]]]:
+        """Single SOQL call returning full field metadata for all queryable+layoutable objects.
+
+        Returns a dict keyed by object name, value is the list of FieldDefinition records
+        for that object. Replaces 183 individual /sobjects/{name}/describe calls with one
+        paginated query.
+        """
+        soql = (
+            "SELECT EntityDefinition.QualifiedApiName, QualifiedApiName, DataType, "
+            "IsNillable, IsUnique, IsIdLookup, Label, Length, Precision, Scale, "
+            "IsCreatable, IsUpdatable, DefaultValue "
+            "FROM FieldDefinition "
+            "WHERE EntityDefinition.IsQueryable = true "
+            "AND EntityDefinition.IsLayoutable = true"
+        )
+        fields_by_object: dict[str, list[dict[str, Any]]] = {}
+        for record in self.query_all_iter(soql):
+            obj_name = (record.get('EntityDefinition') or {}).get('QualifiedApiName')
+            if obj_name:
+                fields_by_object.setdefault(obj_name, []).append(record)
+        return fields_by_object
+
     def describe_migratable(self, **kwargs: Any) -> list[dict[str, Any]]:
         """Return only business-data objects from the global describe."""
         return [

@@ -14,13 +14,13 @@ logger = logging.getLogger(__name__)
 
 
 class PgObjType:
-    """Interface to a specific Postgres table. Mirrors SfObjType's CRUD pattern."""
+    """Interface to a specific Postgres table"""
 
-    def __init__(self, table_name: str, engine, metadata: MetaData):
+    def __init__(self, table_name: str, engine, metadata: MetaData, pg_schema: str | None = None):
         self._table_name = table_name
         self._engine = engine
         self._metadata = metadata
-        self._sa_table = SATable(table_name, metadata, autoload_with=engine)
+        self._sa_table = SATable(table_name, metadata, autoload_with=engine, schema=pg_schema)
         self._pk_cols = [col.name for col in self._sa_table.primary_key]
 
     # Read 

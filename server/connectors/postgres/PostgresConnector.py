@@ -190,8 +190,9 @@ class PostgresConnector:
 
     def create_records(self, table: Table | str, records: DataStream, **kwargs: Any) -> ConnectorResponse[DataStream]:
         name = table.source_name if isinstance(table, Table) else table
+        pg_schema = kwargs.get('pg_schema')
         try:
-            getattr(self.query, name).insert(records=records)
+            self.query.table(name, pg_schema=pg_schema).insert(records=records)
             return ConnectorResponse.success(data=iter([]))
         except Exception as e:
             return ConnectorResponse.error(str(e))
@@ -207,24 +208,27 @@ class PostgresConnector:
 
     def update_records(self, table: Table | str, records: DataStream, **kwargs: Any) -> ConnectorResponse[DataStream]:
         name = table.source_name if isinstance(table, Table) else table
+        pg_schema = kwargs.get('pg_schema')
         try:
-            getattr(self.query, name).update_many(records=records)
+            self.query.table(name, pg_schema=pg_schema).update_many(records=records)
             return ConnectorResponse.success(data=iter([]))
         except Exception as e:
             return ConnectorResponse.error(str(e))
 
     def upsert_records(self, table: Table | str, records: DataStream, **kwargs: Any) -> ConnectorResponse[DataStream]:
         name = table.source_name if isinstance(table, Table) else table
+        pg_schema = kwargs.get('pg_schema')
         try:
-            getattr(self.query, name).upsert(records=records)
+            self.query.table(name, pg_schema=pg_schema).upsert(records=records)
             return ConnectorResponse.success(data=iter([]))
         except Exception as e:
             return ConnectorResponse.error(str(e))
 
     def delete_records(self, table: Table | str, records: DataStream, **kwargs: Any) -> ConnectorResponse[DataStream]:
         name = table.source_name if isinstance(table, Table) else table
+        pg_schema = kwargs.get('pg_schema')
         try:
-            getattr(self.query, name).delete_many(records=records)
+            self.query.table(name, pg_schema=pg_schema).delete_many(records=records)
             return ConnectorResponse.success(data=iter([]))
         except Exception as e:
             return ConnectorResponse.error(str(e))
