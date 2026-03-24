@@ -34,3 +34,4 @@ See server/readme.md and frontend/readme.md for detailed information on the back
 13. [pydantic-settings](https://pydantic.dev/latest/settings/)
 14. [loguru](https://loguru.readthedocs.io/)
 15. [ruff](https://beta.ruff.rs/docs/)
+16. [oracledb](https://oracle.github.io/python-oracledb/)

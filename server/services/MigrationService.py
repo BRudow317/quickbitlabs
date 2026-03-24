@@ -10,23 +10,6 @@ logger = logging.getLogger(__name__)
 
 
 class MigrationService:
-    """
-    Orchestrates data migration through the Connector protocol.
-
-    Source fills source_*, target fills target_*, data flows along
-    the paths the Schema defines. No source- or target-specific logic
-    lives here — connectors are plugins.
-
-    Usage:
-        migration = MigrationService(
-            source_name='salesforce',
-            target_name='postgres',
-            target_schema='quickbitlabs',
-            source_kwargs={...},
-            target_kwargs={...},
-        )
-        schema = migration.run(streams=['Account', 'Contact', 'Opportunity'])
-    """
     source: Connector
     target: Connector
     schema: Schema
@@ -45,8 +28,7 @@ class MigrationService:
         self.source = get_connector(source_name, **kwargs.get('source_kwargs', {}))
         self.target = get_connector(target_name, **kwargs.get('target_kwargs', {}))
 
-    #  Stages 
-
+    # Stages 
     def discover(self, streams: list[str] | None = None) -> Schema:
         """Source describes its objects and populates source_* fields on the Schema."""
         result = self.source.get_schema(streams=streams)
@@ -88,7 +70,6 @@ class MigrationService:
         return self.schema
 
     def migrate_table(self, table: Table) -> None:
-        """Stream records from source and upsert into target for a single table."""
         read_result = self.source.get_records(table)
         if not read_result.ok or read_result.data is None:
             raise RuntimeError(
@@ -106,11 +87,8 @@ class MigrationService:
             )
 
     def run(self, streams: list[str] | None = None) -> Schema:
-        """Full pipeline: discover -> prepare -> migrate all tables."""
-        if not self.source.test_connection():
-            raise RuntimeError("Source connection failed")
-        if not self.target.test_connection():
-            raise RuntimeError("Target connection failed")
+        if not self.source.test_connection(): raise RuntimeError("Source connection failed")
+        if not self.target.test_connection(): raise RuntimeError("Target connection failed")
 
         self.discover(streams)
         self.prepare()

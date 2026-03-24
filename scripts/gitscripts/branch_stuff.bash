@@ -23,9 +23,9 @@ git_pull_safe() {
     
     # Pull
     if git pull "$remote" "$branch"; then
-        echo "✓ Pull successful"
+        echo "Pull successful"
     else
-        echo "✗ Pull failed - you may have conflicts to resolve"
+        echo "Pull failed - you may have conflicts to resolve"
         return 1
     fi
     

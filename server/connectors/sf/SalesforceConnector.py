@@ -7,7 +7,7 @@ from typing import Any
 from server.connectors.sf.HttpClient import HttpClient
 from server.connectors.sf.services.rest import SfRest
 from server.connectors.sf.services.bulk2 import SfBulk2Handler
-from server.connectors.sf.utils.type_converter import SF_TYPE_MAP, SF_FIELDDEF_TYPE_MAP, cast_record, prepare_record
+from server.connectors.sf.utils.type_converter import SF_TYPE_MAP, cast_record, prepare_record
 from server.models.ConnectorStandard import Column, Table, Schema, DataStream
 from server.models.ConnectorResponse import ConnectorResponse
 
@@ -71,10 +71,11 @@ class SalesforceConnector:
         """
         Describe Salesforce objects and return a populated Schema.
 
-        Full discovery (streams=None): two calls total — one FieldDefinition SOQL for all
-        field metadata, one global describe to apply the migratable filter.
+        Uses the REST describe API throughout: global describe to discover migratable
+        objects, then one individual sobject describe per object for field metadata.
 
-        Specific streams: one individual describe per named object — efficient for small sets.
+        Full discovery (streams=None): global describe → filter migratable → per-object describes.
+        Specific streams: one individual describe per named object.
         """
         try:
             if isinstance(schema, Schema):
@@ -85,54 +86,21 @@ class SalesforceConnector:
                 target = Schema(source_name=schema or 'salesforce')
 
             if streams is None:
-                all_fields = self.rest.describe_all_fields()
-                migratable = {obj['name'] for obj in self.rest.describe_migratable()}
-                tables = [
-                    self._table_from_fielddef(obj_name, fields)
-                    for obj_name, fields in all_fields.items()
-                    if obj_name in migratable
-                ]
-            else:
-                tables = []
-                for s in streams:
-                    result = self.get_table(s)
-                    if result.ok and result.data:
-                        tables.append(result.data)
-                    else:
-                        logger.warning(f"Skipping {s}: {result.message}")
+                streams = [obj['name'] for obj in self.rest.describe_migratable()]
+
+            tables = []
+            for s in streams:
+                result = self.get_table(s)
+                if result.ok and result.data:
+                    tables.append(result.data)
+                else:
+                    logger.warning(f"Skipping {s}: {result.message}")
 
             target.tables = tables
             self.schema = target
             return ConnectorResponse.success(data=target)
         except Exception as e:
             return ConnectorResponse.error(str(e))
-
-    def _table_from_fielddef(self, obj_name: str, fields: list[dict]) -> Table:
-        """Build a Table from FieldDefinition SOQL records (bulk describe path)."""
-        _COMPOUND = {'address', 'location'}
-        columns = []
-        for f in fields:
-            raw_type = f.get('DataType', '')
-            norm = raw_type.split('(')[0].strip().lower()
-            if norm in _COMPOUND:
-                logger.debug(f"Skipping compound field {f.get('QualifiedApiName')} ({raw_type}) on {obj_name}")
-                continue
-            columns.append(Column(
-                source_name=f['QualifiedApiName'],
-                datatype=SF_FIELDDEF_TYPE_MAP.get(norm, 'string'),
-                raw_type=norm,
-                primary_key=f.get('IsIdLookup', False),
-                nullable=f.get('IsNillable', True),
-                unique=f.get('IsUnique', False),
-                length=f.get('Length') or None,
-                precision=f.get('Precision') or None,
-                scale=f.get('Scale') or None,
-                source_description=f.get('Label'),
-                read_only=not f.get('IsUpdatable', True),
-                default_value=f.get('DefaultValue'),
-                enum_values=None,
-            ))
-        return Table(source_name=obj_name, columns=columns)
 
     def create_schema(self, schema: Schema | str, **kwargs: Any) -> ConnectorResponse[Schema]:
         return ConnectorResponse.not_implemented("Salesforce does not support schema creation via API")

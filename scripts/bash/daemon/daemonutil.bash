@@ -116,13 +116,13 @@ toggle_service() {
     case "$action" in
         enable)
             if sudo systemctl enable "$service" 2>/dev/null; then
-                echo "✓ $service enabled - will start on boot"
+                echo "$service enabled - will start on boot"
                 return 0
             fi
             ;;
         disable)
             if sudo systemctl disable "$service" 2>/dev/null; then
-                echo "✓ $service disabled - will not start on boot"
+                echo "$service disabled - will not start on boot"
                 return 0
             fi
             ;;
