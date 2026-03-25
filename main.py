@@ -1,17 +1,9 @@
 from __future__ import annotations
 
-import logging
-import sys
-logger = logging.getLogger(__name__)
+import uvicorn
 
-from server.services.MigrationService import MigrationService
+def main():
+    uvicorn.run("server.start_server:app", host="0.0.0.0", port=8000, reload=True)
 
-migration = MigrationService(
-    source_name="salesforce",
-    target_name="postgres",
-    target_schema_name="quickbitlabs",
-)
-
-streams = sys.argv[1:] or None  # e.g. python main.py Account Contact Opportunity
-
-schema = migration.run(streams=streams)
+if __name__ == "__main__":
+    main()

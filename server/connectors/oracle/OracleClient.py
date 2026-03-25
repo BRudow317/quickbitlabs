@@ -15,7 +15,6 @@ class OracleClient:
     _current_connection: oracledb.Connection | None = None
     def __post_init__(self):
         logger.debug(f"oracle_user: {self.oracle_user}, oracle_pass: {'*' * len(self.oracle_pass) if self.oracle_pass else None}, oracle_host: {self.oracle_host}, oracle_port: {self.oracle_port}, oracle_service: {self.oracle_service}")
-
     def get_con(self) -> oracledb.Connection:
         try:
             if self._current_connection is not None and self._current_connection.is_healthy():

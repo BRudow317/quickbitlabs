@@ -30,6 +30,7 @@ _ORACLE_RESERVED = frozenset({
 "ROWNUM","ROWS","SELECT","SESSION","SET","SHARE","SIZE","SMALLINT","START","SUCCESSFUL","SYNONYM","SYSDATE",
 "TABLE","THEN","TO","TRIGGER","UID","UNION","UNIQUE","UPDATE","USER","VALIDATE","VALUES","VARCHAR","VARCHAR2",
 "VIEW","WHENEVER","WHERE","WITH",
+# Additional Oracle reserved words not in the legacy list
 "CASE","CROSS","CUBE","FETCH","FULL","INNER","JOIN","LEFT","MERGE","NATURAL","OFFSET",
 "OUTER","RIGHT","ROLLUP","USING","WHEN"})
 
@@ -37,16 +38,17 @@ _ORACLE_RESERVED = frozenset({
 @dataclass
 class OracleTable:
     oracle_client: OracleClient
-    table_name: str
-    schema_name: str
+    table_name: str = ''
+    schema_name: str = ''
     column_map: dict[str, OracleColumn] = field(default_factory=dict)
     _fetched_db_col: list[dict[str, Any]] | None = field(default=None, init=False)
     _insert_sql_stmt: str | None = field(default=None, init=False)
     _input_sizes: dict[str, object] | None = field(default=None, init=False)
-    _active_plan: list[tuple[Any, ...]] | None = field(default=None, init=False)
+    _active_plan: list[tuple] | None = field(default=None, init=False)
 
     @property
     def qualified_name(self) -> str:
+        if self.table_name is None: raise ValueError('Error: table_name cannot be None')
         if self.schema_name in (None, ''): return self.table_name
         return f'{self.schema_name}.{self.table_name}'
     @property

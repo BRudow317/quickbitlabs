@@ -9,7 +9,7 @@ from .OracleModels import OracleTable, to_oracle_snake, normalize_cell
 from .OracleClient import OracleClient
 logger = logging.getLogger(__name__)
 
-class OracleJob:
+class Job:
     oracle_table: OracleTable
     oracle_client: OracleClient
     table: str
@@ -133,7 +133,7 @@ class Batch:
     failed: bool = False
     
     @staticmethod
-    def batch_exec(job: OracleJob, chunk: pd.DataFrame, batch_start: int = 2) -> Batch:
+    def batch_exec(job: Job, chunk: pd.DataFrame, batch_start: int = 2) -> Batch:
         batch = Batch()
         if chunk.empty: return batch
         batch.total_rows = len(chunk)

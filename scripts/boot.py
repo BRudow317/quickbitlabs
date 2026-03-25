@@ -10,8 +10,8 @@ from datetime import datetime
 
 from typing import IO, TextIO
 
-PROGRAM_NAME = os.getenv("PROGRAM_NAME", "master")
-if PROGRAM_NAME == "master":
+PROGRAM_NAME = os.getenv("PROGRAM_NAME", "boot")
+if PROGRAM_NAME == "boot":
     os.environ["PROGRAM_NAME"] = PROGRAM_NAME
 
 _VAR = re.compile(r"\$\{([A-Za-z_][A-Za-z0-9_]*)\}|\$([A-Za-z_][A-Za-z0-9_]*)")
@@ -29,7 +29,7 @@ def prepare_child(
     venv = getattr(args, "venv", "")
     is_python = False
 
-    # checking for __init__.py files to find the importable package root as a backup check for running scripts in sub directories.
+    # checking for __init__.py files to find the importable package root
     script = next((Path(t).resolve() for t in args.exec if Path(t).is_file()), None)
     cwd = str(script.parent) if script else os.getcwd()
     pkg_root = cwd

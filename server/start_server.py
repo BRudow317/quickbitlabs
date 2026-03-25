@@ -9,9 +9,7 @@ import uvicorn
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 
-# Ensure imports like "from configs..." and "from api..." work
-# no matter how this file is executed (directly, via runpy, etc.).
-SERVER_DIR = Path(__file__).resolve().parent
+SERVER_DIR = Path(__file__).resolve()
 PROJECT_ROOT = SERVER_DIR.parent
 if str(SERVER_DIR) not in sys.path:
     sys.path.insert(0, str(SERVER_DIR))
@@ -53,5 +51,4 @@ if frontend_dist.exists():
 else: 
     raise FileNotFoundError("The frontend/dist directory does not exist. Please build the frontend first.")
 if __name__ == "__main__":
-    # In development, we use reload. In production, we don't.
     uvicorn.run("server.start_server:app", host="0.0.0.0", port=8000, reload=True)

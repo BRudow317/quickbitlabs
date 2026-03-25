@@ -2,7 +2,7 @@
 import logging #, os, sys, io
 from pathlib import Path
 from cryptography.fernet import Fernet
-from OracleJob import OracleJob
+from oracle.OracleJob import Job
 
 logger = logging.getLogger(__name__)
 
@@ -26,25 +26,27 @@ class MigrationJob:
         file = Path(self.source_path)
         file.write_bytes(Fernet(self.key).encrypt(file.read_bytes()))
 
-    def test_oracle(self) -> int:
+    def execute_oracle(self) -> int:
         logger.debug("Running Oracle main function")
-        job = OracleJob(
+        job=Job(
             source_path=self.source_path,
-            table=self.object_name,
-            key=self.key
+            table=self.object,
+            key=self.key,
         )
-        result = job.run_job()
-        if result == 0: logger.debug("Migration completed successfully with no errors.")
-        else: logger.error(f"Migration completed with errors. Result code: {result}")
+        result: int = job.run_job()
+        return result
+    
+    def run(self) -> int:
+        self.encrypt_file()
+        result = self.execute_oracle()
         return result
 
 def main():
     for obj in ["Account", "Contact", "Lead", "Case", "User"]:
         file=f"Q:/lab/prod/test/data/{obj}.csv"
         
-        job = MigrationJob(source_path=file, object_name=obj)
-        job.encrypt_file()
-        result = job.test_oracle()
+        mijob = MigrationJob(source_path=file, object_name=obj)
+        result = mijob.run()
         if result != 0:
             logger.error(f"Migration for {obj} completed with errors. Stopping further migrations.")
             raise RuntimeError(f"Migration for {obj} failed with result code: {result}")
