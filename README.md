@@ -35,3 +35,8 @@ See server/readme.md and frontend/readme.md for detailed information on the back
 14. [loguru](https://loguru.readthedocs.io/)
 15. [ruff](https://beta.ruff.rs/docs/)
 16. [oracledb](https://oracle.github.io/python-oracledb/)
+17. [Apache Arrow](https://arrow.apache.org/)
+18. [Pandas](https://pandas.pydata.org/)
+19. [NumPy](https://numpy.org/)
+20. [Docker](https://www.docker.com/)
+21. [Docker Compose](https://docs.docker.com/compose/)

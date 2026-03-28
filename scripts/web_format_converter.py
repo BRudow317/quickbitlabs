@@ -1,12 +1,15 @@
 # Markdown & HTML Converters
+import re
+from typing import List, Dict, Any, Optional
+import markdown
 
 def markdown_to_html(
     md_content: str,
-    extensions: Optional[List[str]] = None,
+    extensions: List[str] | None = None,
     safe_mode: bool = False
 ) -> str:
     """
-    18. markdown_to_html - Convert Markdown to HTML
+    markdown_to_html - Convert Markdown to HTML
     
     Args:
         md_content: Markdown string
@@ -59,7 +62,7 @@ def html_to_markdown(
     strip_tags: Optional[List[str]] = None
 ) -> str:
     """
-    19. html_to_markdown - Convert HTML to Markdown
+    html_to_markdown - Convert HTML to Markdown
     
     Args:
         html_content: HTML string
@@ -184,7 +187,7 @@ def html_to_markdown(
 def markdown_to_html_doc(
     md_content: str,
     title: str = "Document",
-    css: Optional[str] = None
+    css: str | None = None
 ) -> str:
     """
     markdown_to_html_doc - Convert Markdown to complete HTML document

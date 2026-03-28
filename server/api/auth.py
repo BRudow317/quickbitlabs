@@ -12,7 +12,7 @@ from server.configs.settings import settings
 from server.core.security import verify_password
 from server.core.jwt import create_access_token
 from server.models.user import User
-from server.models.auth import Token
+from server.models.AuthModels import Token
 
 router = APIRouter()
 

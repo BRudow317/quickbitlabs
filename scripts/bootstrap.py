@@ -32,7 +32,7 @@ def create_pyscript_stack():
         "dist": []
     }
 
-    print("🏗️  Building PyScriptStack Architecture...")
+    print("Building PyScriptStack Architecture...")
 
     for path, files in structure.items():
         # Create directories
@@ -43,9 +43,9 @@ def create_pyscript_stack():
             if not os.path.exists(file_path):
                 with open(file_path, 'w') as f:
                     pass
-                print(f"  ✅ Created: {file_path}")
+                print(f"Created: {file_path}")
 
-    print("\n✨ Done! Your Hybrid Root is ready.")
+    print("\nDone! Your Hybrid Root is ready.")
     print("Next step: Populating the Makefile and root configs.")
 
 if __name__ == "__main__":
