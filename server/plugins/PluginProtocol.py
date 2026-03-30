@@ -2,9 +2,9 @@ from __future__ import annotations
 
 from typing import Any, Protocol, runtime_checkable
 
-from server.models.PluginModels import CatalogModel, EntityModel, FieldModel, Records, QueryModel
+from .PluginModels import CatalogModel, EntityModel, FieldModel, Records, QueryModel
 
-from server.models.PluginResponse import PluginResponse
+from .PluginResponse import PluginResponse
 
 @runtime_checkable
 class Plugin(Protocol):

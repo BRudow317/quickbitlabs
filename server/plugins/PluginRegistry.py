@@ -4,7 +4,7 @@ from typing import Any
 import logging
 
 # 1. Import the universal contract!
-from server.models.PluginProtocol import Plugin
+from .PluginProtocol import Plugin
 
 logger = logging.getLogger(__name__)
 

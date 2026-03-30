@@ -1,262 +1,78 @@
-# Server
-
-The backend module for QuickBitLabs. Connects external data systems through a common contract so any source can talk to any target without either needing to know anything about the other.
-
----
-
-## Directory Structure
-
-```shell
-server/
-├── api/            # REST API layer — how the frontend and external callers reach services (to be implemented)
-├── auth/           # Access control and authorization for the API
-├── configs/        # High-level configuration via pydantic-settings
-├── connectors/     # Integrations with external systems (Salesforce, Postgres, Oracle, CSV, etc.)
-│   └── registry.py # Lazy-load connector lookup by name
-├── core/           # Internal server utilities (security, etc.)
-├── engine/         # Execution layer — runs the operations services define
-├── models/         # Contracts, shapes, and schemas used throughout the program
-│   ├── ConnectorProtocol.py  # Connector protocol — what every connector must implement
-│   ├── ConnectorResponse.py  # Universal return type for all connector operations
-│   └── ConnectorStandard.py  # BaseSchema / BaseTable / BaseColumn — the universal data contract
-├── services/       # Actions available to external systems and users
-│   └── MigrationService.py   # Source → target data migration orchestration
-├── tests/          # Tests
-└── utils/          # Shared utilities (logging, helpers, encryption)
-```
-
----
+# QuickBitLabs Data Integration Engine
 
-## Core Concepts
+Welcome to the QuickBitLabs backend. This project is designed to solve the **N x M integration nightmare** by reducing it to **N + M**. 
 
-### The Data Contract: `ConnectorStandard`
+Instead of writing custom pipelines between every single database, flat file, and SaaS API, this system utilizes a **Universal Pydantic Contract**. The business logic (API/Services) never speaks directly to the databases. Instead, Data Streams are passed through a standardized `Plugin` interface, allowing us to hot-swap an Oracle database for a flat CSV file with zero changes to the core application code.
 
-Every piece of metadata in the system lives as a node in this hierarchy:
+## Core Architecture
 
-```
-BaseSchema
-  └── BaseTable(s)
-        └── BaseColumn(s)
-              └── DataStream  (Iterable[dict[str, Any]])
-```
+The platform is strictly divided into three layers:
 
-`BaseSchema`, `BaseTable`, and `BaseColumn` are Pydantic models defined in `models/ConnectorStandard.py`. They carry both `source_*` and `target_*` fields so the same object describes both ends of a data movement without duplication. Parent references (`BaseColumn.table`, `BaseTable.parent_schema`) are wired automatically on instantiation.
+1. **API & Models (`/server/api`, `/server/models`)**: The business domain. This handles FastAPI web requests, user authentication, and internal platform state (e.g., Tenant profiles, Users).
+2. **Services (`/server/services`)**: The Air Traffic Controllers. These scripts orchestrate data movement (e.g., `MigrationService.py`). They don't know *how* to talk to Oracle or Salesforce; they just juggle the universal data models between them.
+3. **Plugins (`/server/plugins`)**: The Sandboxes. These are isolated, lazy-loaded modules that translate the universal platform language into system-specific execution (SQL, REST, File I/O).
 
-**`BaseColumn`** is where the real contract lives. Every column must declare:
+## The Plugin Ecosystem (The Secret Sauce)
 
-| Field | Purpose |
-|---|---|
-| `source_name` / `target_name` | Name at each end — diverge during mapping |
-| `datatype` | Python type the engine works with (`string`, `integer`, `datetime`, etc.) |
-| `raw_type` | Raw type from the source system (`"currency"`, `"VARCHAR2"`, `"picklist"`) |
-| `primary_key` | Used for upsert matching |
-| `nullable` / `unique` | Constraint metadata |
-| `length` / `precision` / `scale` | Sizing — used for DDL and validation |
-| `read_only` | Skip on write — formula fields, auto-numbers, system timestamps |
-| `default_value` | Value to use when source yields null for a non-nullable column |
-| `enum_values` | Valid values for picklists / ENUMs — validated before send |
-| `timezone` | IANA tz name of source (`"America/New_York"`, `"UTC"`); `None` = already UTC-aware |
-| `array` | Disambiguates `json` datatype — `True` = list, `False` = dict |
+At the root of the `/server/plugins/` directory sit the four pillars of the platform's SDK. **Every plugin must abide by these files:**
 
-All datetimes in a `DataStream` must be **UTC-aware**. The `timezone` field tells the engine what the source clock is so it can normalize before passing downstream. Targets never guess.
+- **`PluginModels.py` (The Nouns):** Defines `CatalogModel`, `EntityModel`, `FieldModel`, and `QueryModel`. This is the blueprint. Plugins never share proprietary schema objects; everything is wrapped in these Pydantic models.
+  - ### CatalogModel
+    One of the smallest, but most important parts of the entire project.
 
-The dict keys in every `DataStream` record map directly to `BaseColumn.source_name`. The value for each key is guaranteed to be the Python type declared in `BaseColumn.datatype`. The BaseColumn definitions are the schema for the stream — there is no separate record model.
+    All metadata at the higher levels exists as a subset of this object.
+    Catalog -> Entities -> Fields -> Records(data, records, bytes, json, etc.)
 
----
+    Catalog is the top-level wrapper. It may be called schema, namespace, database, etc. in different systems, but the concept is the same: a container for entities/objects/tables. 
 
-### The Response Contract: `ConnectorResponse`
+    When implementing a plugin it is up to you to decide how to route the catalog, but the catalog, its entity, and the fields needed for operations should be passed along. 
 
-All connector operations return `ConnectorResponse[T]`. No connector method raises for expected failures — the response always carries the reason.
+    The intention is not to populate an entire catalog and every entity and every field every call, but to provide the relevant metadata needed to perform the requested operation. 
 
-```python
-from server.models.ConnectorResponse import ConnectorResponse
-```
+    An example might be implementing a csv plugin where the catalog is the source directory, the entity is the file, and the fields are the columns, and records, the rows.
 
-| Field | Type | Description |
-|---|---|---|
-| `ok` | `bool` | `True` if the operation succeeded |
-| `data` | `T \| None` | The result — `BaseSchema`, `BaseTable`, `BaseColumn`, `DataStream`, or `None` |
-| `code` | `int` | HTTP-style status code |
-| `message` | `str` | Always present — empty string on success, reason on failure |
+    Another example might be a REST API plugin where the catalog is the base URL, the entity is the endpoint, and the fields are the query parameters or body parameters needed to perform the request.
 
-**Status codes used:**
+    Another example might be a SQL plugin where the catalog is the database, the entity is the table, and the fields are the columns needed to perform the query or DML operation.
 
-| Code | Meaning |
-|---|---|
-| `200` | OK |
-| `403` | Forbidden — connector reached the system but lacks access |
-| `404` | Not Found — resource doesn't exist in this system |
-| `500` | Error — something went wrong internally |
-| `501` | Not Implemented — this connector doesn't support this operation |
+    Perhaps you only know the catalog to search for, the target plugin may accept an a catalog with an empty entity list and populate the entire catalog with its metadata, so the caller service can inspect and make relevant decisions about which entities and fields to operate on in subsequent calls.
 
-**Convenience constructors — use these in every connector implementation:**
+    Or perhaps you want to know the type of a specific field, so you provide a catalog with one entity and one field, and the plugin returns the catalog with the field's metadata populated.
 
-```python
-ConnectorResponse.success(data=table)
-ConnectorResponse.not_found("BaseTable 'Orders' not found in this schema")
-ConnectorResponse.forbidden("Insufficient privileges on schema 'HR'")
-ConnectorResponse.not_implemented("Salesforce does not support table creation via API")
-ConnectorResponse.error("Query timed out after 30s")
-```
+    This is how the protocols should be designed, and implemented. The catalog is the envelope that carries the metadata and context needed to perform the requested operation.
+    
+    As a pydantic BaseModel you can serialize the entire working contract to JSON with catalog.json() or dict with catalog.dict(), and rehydrate with CatalogModel.parse_raw() or CatalogModel.parse_obj() respectively.
 
-**Record operations** return `ConnectorResponse[DataStream]`. The response is a preflight result — `ok` and `code` are set before the stream is consumed. Per-record failures flow back inside the stream as error-flagged dicts alongside successful records:
+    It can also serve as a base for implementing openapi schemas, ORM models, or any other structured representation of metadata you need.
+  - ### EntityModel
+    The noun for the object being operated on. This could be a table, file, API endpoint, etc. It has a name and a list of fields.
+  - ### FieldModel
+    The noun for the attributes of the entity. This could be columns in a table, keys in a JSON object, etc. It has a name and a type.
+  - ### QueryModel
+    The noun for the query or operation being performed. This could be a SQL query, a REST API request body, etc. It has a query string and a list of parameters.
 
-```python
-result = connector.get_records('Account')
 
-if not result.ok:
-    logger.warning(f"[{result.code}] {result.message}")
-else:
-    for record in result.data:
-        if record.get('__error'):
-            logger.warning(f"Record failed: {record['__error']}")
-        else:
-            # process record
-```
+- **`PluginProtocol.py` (The Verbs):** The strict Python `Protocol` defining the standard CRUD methods (`get_records`, `insert_records`, `update_catalog`). If a plugin doesn't support a verb, it returns a 501.
 
-This means you build your per-record error handling once in the service layer, not per connector.
+- **`PluginResponse.py` (The Envelope):** Every plugin method returns this wrapper. It maps outcomes to standard HTTP status codes (200, 404, 500) and safely carries data stream generators without exhausting them.
 
----
+- **`PluginRegistry.py` (The Factory):** The lazy-loading engine. Services call `get_plugin('oracle')` to instantiate a facade. This prevents missing C-libraries (like `oracledb` or `psycopg2`) from crashing the whole server if they aren't currently being used.
 
-### The Connector Protocol: `ConnectorProtocol`
+### Existing Plugin Implementations
+* `/oracle` - Heavy enterprise SQL and DDL generation.
+* `/postgres` - Standard relational data operations.
+* `/sf` - Salesforce bulk and REST API integration.
+* `/readers` - Flat file (CSV, Excel) and JSON parsing.
 
-Every connector **must** implement `ConnectorProtocol.Connector`. This is a structural (duck-typed) interface — connectors do not inherit from it, they just implement it.
+## Getting Started
 
-```python
-from server.models.ConnectorProtocol import Connector
+```bash
+# Activate your virtual environment
+python -m venv venv
+source venv/bin/activate  # On Windows: venv\Scripts\activate
 
-isinstance(my_connector, Connector)  # True if it walks the walk
-```
+# Install the project in editable mode
+pip install -e .
 
-**Required attribute:**
-
-| Attribute | Type | Description |
-|---|---|---|
-| `schema` | `BaseSchema` | Every connector owns its schema contract. Set at init, populated as data is fetched. |
-
-**Required methods — five verbs × three nouns + one stream:**
-
-```
-create / get / update / upsert / delete
-    × schema / table / column
-    + create / get / update / upsert / delete records
-```
-
-Plus `test_connection() -> bool`.
-
-**Rules:**
-- Every method must be implemented. Use `ConnectorResponse.not_implemented(...)` for operations the system genuinely doesn't support — do not raise.
-- Methods accept and return `ConnectorStandard` objects — never raw dicts or plain strings where a model is expected.
-- `get_*` methods accept either a name (`str`) or a partial model. If a model is passed, use its `source_name` to drive the lookup and populate the object in-place before returning it.
-- `upsert_*` methods stamp `target_name` fields on the passed object and return it. This is how the contract flows through the pipeline.
-- All type conversion from source types to Python types happens inside the connector. Nothing upstream should ever see a raw Oracle `NUMBER` or Salesforce `currency` — only `float`.
-
----
-
-### Connectors: `connectors/`
-
-Each connector lives in its own subdirectory and exposes a single **facade class** whose name ends in `Connector` (e.g. `SalesforceConnector`, `PostgresConnector`, `OracleConnector`, `CsvConnector`). Everything the program needs from that system goes through the facade. Internal clients, handlers, and utilities are implementation details of that connector's subdirectory.
-
-Connectors are registered in `connectors/registry.py`:
-
-```python
-CONNECTOR_REGISTRY = {
-    'salesforce': ('server.connectors.sf.SalesforceConnector', 'SalesforceConnector'),
-    'postgres':   ('server.connectors.postgres.PostgresConnector', 'PostgresConnector'),
-    ...
-}
-```
-
-Use `get_connector(name, **kwargs)` for lazy instantiation anywhere in the program. Do not import connector classes directly outside of their own module.
-
----
-
-### Services: `services/`
-
-Services are the program's public-facing actions. They orchestrate connectors and expose functionality to the API layer. Think of services as the program's facade — just as connectors are the facade for external systems, services are the facade for everything the connectors can do.
-
-**`MigrationService`** is the reference implementation. A full source-to-target migration is three steps:
-
-```python
-svc = MigrationService(source_name='salesforce', target_name='postgres')
-
-schema = svc.discover()   # source connector populates source_* on BaseSchema/BaseTable/BaseColumn
-schema = svc.prepare()    # target connector stamps target_* and applies DDL
-schema = svc.run()        # streams records table by table
-```
-
-The `BaseSchema` object is the shared state that flows through every stage. It can be serialized, persisted, reloaded, and handed to a different connector pair. The orchestration is built once; connectors are plugins.
-
----
-
-## Implementing a New Connector
-
-1. **Create a directory** under `connectors/` (e.g. `connectors/mydb/`).
-
-2. **Create the facade** — a class named `MyDbConnector`. It must implement `ConnectorProtocol.Connector` and have a `schema: BaseSchema` attribute initialized in `__init__`. The constructor must accept an optional `schema` parameter.
-
-3. **Implement every protocol method.** Return `ConnectorResponse.not_implemented(...)` for operations the system genuinely doesn't support. Never skip a method or raise unconditionally.
-
-4. **Map all types** — every field coming out of your system must have a `datatype` set to one of the `PythonTypes` literals. Create a type map (`MY_TYPE_MAP: dict[str, PythonTypes]`) in your connector's utils.
-
-5. **Honor the BaseColumn contract** — populate `read_only`, `enum_values`, `timezone`, and `default_value` wherever your source system exposes that information. These fields exist so downstream connectors don't have to guess.
-
-6. **Register** in `connectors/registry.py`.
-
-7. **Implement `get_schema()` carefully.** It is the most important method and must handle three cases:
-   - **Passed a `BaseSchema` object** — populate it as the target of metadata discovery. Use the tables already on the schema to drive which objects you describe.
-   - **Passed a string** — the caller is asking you to populate a full schema by name. In Salesforce this is an org; in Postgres this is a database or schema. Return a fully populated `BaseSchema` with all tables and columns you can discover.
-   - **Passed `None`** — return your default schema. In Postgres this is `public`; in Oracle this is the connecting user's schema. This is how the system identifies and logs sources and targets.
-
-### Minimal skeleton
-
-```python
-from server.models.ConnectorProtocol import Connector
-from server.models.ConnectorStandard import BaseSchema, BaseTable, BaseColumn, DataStream
-from server.models.ConnectorResponse import ConnectorResponse
-from typing import Any
-
-
-class MyDbConnector:
-    schema: BaseSchema
-
-    def __init__(self, schema: BaseSchema | None = None, **kwargs: Any):
-        self.schema = schema if schema is not None else BaseSchema(source_name='mydb')
-
-    def test_connection(self) -> bool: ...
-
-    # BaseSchema
-    def create_schema(self, schema: BaseSchema | str, **kwargs: Any) -> ConnectorResponse[BaseSchema]: ...
-    def get_schema(self, schema: BaseSchema | str | None = None, **kwargs: Any) -> ConnectorResponse[BaseSchema]: ...
-    def update_schema(self, schema: BaseSchema | str, **kwargs: Any) -> ConnectorResponse[BaseSchema]: ...
-    def upsert_schema(self, schema: BaseSchema | str, **kwargs: Any) -> ConnectorResponse[BaseSchema]: ...
-    def delete_schema(self, schema: BaseSchema | str, **kwargs: Any) -> ConnectorResponse[BaseSchema]: ...
-
-    # BaseTable
-    def create_table(self, table: BaseTable | str, **kwargs: Any) -> ConnectorResponse[BaseTable]: ...
-    def get_table(self, table: BaseTable | str, **kwargs: Any) -> ConnectorResponse[BaseTable]: ...
-    def update_table(self, table: BaseTable | str, **kwargs: Any) -> ConnectorResponse[BaseTable]: ...
-    def upsert_table(self, table: BaseTable | str, **kwargs: Any) -> ConnectorResponse[BaseTable]: ...
-    def delete_table(self, table: BaseTable | str, **kwargs: Any) -> ConnectorResponse[BaseTable]: ...
-
-    # BaseColumn
-    def create_column(self, table: BaseTable | str, column: BaseColumn | str, **kwargs: Any) -> ConnectorResponse[BaseColumn]: ...
-    def get_column(self, table: BaseTable | str, column: BaseColumn | str, **kwargs: Any) -> ConnectorResponse[BaseColumn]: ...
-    def update_column(self, table: BaseTable | str, column: BaseColumn | str, **kwargs: Any) -> ConnectorResponse[BaseColumn]: ...
-    def upsert_column(self, table: BaseTable | str, column: BaseColumn | str, **kwargs: Any) -> ConnectorResponse[BaseColumn]: ...
-    def delete_column(self, table: BaseTable | str, column: BaseColumn | str, **kwargs: Any) -> ConnectorResponse[BaseColumn]: ...
-
-    # Records — ok/code set before the stream is consumed; per-record failures
-    # flow back inside the stream as dicts with an '__error' key
-    def create_records(self, table: BaseTable | str, records: DataStream, **kwargs: Any) -> ConnectorResponse[DataStream]: ...
-    def get_records(self, table: BaseTable | str, **kwargs: Any) -> ConnectorResponse[DataStream]: ...
-    def update_records(self, table: BaseTable | str, records: DataStream, **kwargs: Any) -> ConnectorResponse[DataStream]: ...
-    def upsert_records(self, table: BaseTable | str, records: DataStream, **kwargs: Any) -> ConnectorResponse[DataStream]: ...
-    def delete_records(self, table: BaseTable | str, records: DataStream, **kwargs: Any) -> ConnectorResponse[DataStream]: ...
-```
-
-Verify protocol compliance at any time:
-
-```python
-assert isinstance(MyDbConnector(), Connector)
-```
+# Start the FastAPI server
+python server/start_server.py
