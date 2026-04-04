@@ -2,9 +2,12 @@ from __future__ import annotations
 from pydantic import BaseModel, PrivateAttr, Field
 from typing import Literal, Any
 from collections.abc import Iterable
+from polars import DataFrame
+import pyarrow as pa
 
-# universal data format
+# universal data formats
 Records = Iterable[dict[str, Any]]
+PolarsDataFrame = DataFrame
 
 # python types
 PythonTypes = Literal[
@@ -18,6 +21,47 @@ PythonTypes = Literal[
     "binary",   # bytes or bytearray
     "json",     # dict or list
 ]
+
+arrow_types = {
+    # Primitives
+    "null": pa.null(),
+    "bool": pa.bool_(),
+    "int8": pa.int8(),
+    "int16": pa.int16(),
+    "int32": pa.int32(),
+    "int64": pa.int64(),
+    "uint8": pa.uint8(),
+    "uint16": pa.uint16(),
+    "uint32": pa.uint32(),
+    "uint64": pa.uint64(),
+    "float16": pa.float16(),
+    "float32": pa.float32(),
+    "float64": pa.float64(),
+    
+    # Binary & String
+    "string": pa.string(),
+    "utf8": pa.utf8(),
+    "large_string": pa.large_string(),
+    "binary": pa.binary(),
+    "large_binary": pa.large_binary(),
+    
+    # Temporal (Default units)
+    "date32": pa.date32(),
+    "date64": pa.date64(),
+    "timestamp_s": pa.timestamp('s'),
+    "timestamp_ms": pa.timestamp('ms'),
+    "timestamp_us": pa.timestamp('us'),
+    "timestamp_ns": pa.timestamp('ns'),
+    "time32_s": pa.time32('s'),
+    "time32_ms": pa.time32('ms'),
+    "time64_us": pa.time64('us'),
+    "time64_ns": pa.time64('ns'),
+    "duration_s": pa.duration('s'),
+    
+    # Common Parameterized Defaults
+    "decimal128": pa.decimal128(38, 9),
+    "decimal256": pa.decimal256(76, 18),
+}
 
 class CatalogModel(BaseModel):
     """One of the smallest, but most important parts of the entire project.
@@ -71,7 +115,8 @@ class EntityModel(BaseModel):
 
 class FieldModel(BaseModel):
     source_name: str
-    python_type: PythonTypes
+    python_type: PythonTypes | None = None
+    arrow_type: pa.DataType | None = None
     raw_type: str | None = None
     primary_key: bool = False
     unique: bool = False
@@ -87,7 +132,6 @@ class FieldModel(BaseModel):
     source_null_value: Any | None = None
     read_only: bool = False
     default_value: Any | None = None
-    # Use Field(default_factory=list) for safe mutable defaults in Pydantic
     enum_values: list[Any] = Field(default_factory=list)
     timezone: str | None = None
     target_name: str | None = None

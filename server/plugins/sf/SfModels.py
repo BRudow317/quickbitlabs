@@ -11,13 +11,15 @@ SF_EXTERNAL_CLIENT_APP_NAME: str = os.getenv('SF_EXTERNAL_CLIENT_APP_NAME', 'aut
 SF_BASE_URL: str = os.getenv('SF_BASE_URL') or f"https://{os.getenv('SF_BASE_DOMAIN')}.salesforce.com"
 SF_CALLBACK_URL: str = os.getenv('SF_CALLBACK_URL', 'http://localhost:1717/OauthRedirect')
 
+
+
 # Add to SfModels.py alongside the other TypedDicts
 
 class SfFieldMeta(TypedDict):
     name:              str
     sf_type:           str
     arrow_type:        str
-    queryable:         bool
+    filterable:         bool
     createable:        bool
     updateable:        bool
     nillable:          bool
@@ -117,7 +119,7 @@ SKIP_NAMES = {
     # Apex / Dev
     'ApexClass', 'ApexTrigger', 'ApexLog', 'ApexTestResult',
     'AsyncApexJob', 'CronTrigger', 'CronJobDetail',
-    # Content (binary blobs — break bulk migrations)
+    # Content (binary blobs - break bulk migrations)
     'ContentVersion', 'ContentDocument', 'ContentDocumentLink',
     # Metadata / Definitions
     'EntityDefinition', 'FieldDefinition', 'FieldPermissions',

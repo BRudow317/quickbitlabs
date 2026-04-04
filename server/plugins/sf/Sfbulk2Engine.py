@@ -23,7 +23,7 @@ if TYPE_CHECKING:
 import logging
 logger = logging.getLogger(__name__)
 
-# Bulk 2.0 constants — moved here from csv_utils since that module is no longer needed
+# Bulk 2.0 constants - moved here from csv_utils since that module is no longer needed
 MAX_INGEST_JOB_FILE_SIZE  = 150 * 1024 * 1024   # 150 MB per job
 MAX_INGEST_JOB_PARALLELISM = 15 # SF concurrent job limit
 DEFAULT_QUERY_PAGE_SIZE    = 50_000
@@ -32,7 +32,7 @@ DEFAULT_QUERY_PAGE_SIZE    = 50_000
 class QueryBytesResult(TypedDict):
     locator: str
     number_of_records: int
-    data: bytes  # raw CSV bytes — caller parses with PyArrow using the object schema
+    data: bytes  # raw CSV bytes - caller parses with PyArrow using the object schema
 
 
 def _arrow_to_csv_bytes(table: pa.Table, line_ending: LineEnding = LineEnding.LF) -> bytes:
@@ -43,7 +43,7 @@ def _arrow_to_csv_bytes(table: pa.Table, line_ending: LineEnding = LineEnding.LF
     buf = io.BytesIO()
     pa_csv.write_csv(table, buf, write_options=pa_csv.WriteOptions(include_header=True))
     data = buf.getvalue()
-    # PyArrow writes LF by default — convert if job declared CRLF
+    # PyArrow writes LF by default - convert if job declared CRLF
     if line_ending == LineEnding.CRLF:
         data = data.replace(b"\n", b"\r\n")
     return data
@@ -51,7 +51,7 @@ def _arrow_to_csv_bytes(table: pa.Table, line_ending: LineEnding = LineEnding.LF
 
 ######################################################################
 
-class SfBulk2Handler:
+class bulk2:
     """
     Entry point for Bulk 2.0 operations.
     Usage: sf.bulk2.Contact.insert(table)
@@ -64,7 +64,7 @@ class SfBulk2Handler:
         self._http = http_client
         self.bulk2_url = f"{self._http.services_url}/jobs/"
 
-    def __getattr__(self, name: str) -> "SfBulk2Type":
+    def __getattr__(self, name: str) -> SfBulk2Type:
         if name.startswith("__"):
             return super().__getattribute__(name)
         return SfBulk2Type(object_name=name, bulk2_url=self.bulk2_url, http_client=self._http)
@@ -140,7 +140,7 @@ class SfBulk2Type:
             }
 
         except Exception:
-            # Best-effort abort on failure — don't swallow the original exception
+            # Best-effort abort on failure - don't swallow the original exception
             try:
                 current = await self._client.get_job(job_id, is_query=False)
                 if current["state"] in (
@@ -182,7 +182,7 @@ class SfBulk2Type:
                 results.append(result)
             return results
 
-        # Batch concurrent uploads — respect the parallelism ceiling
+        # Batch concurrent uploads - respect the parallelism ceiling
         pending = [
             self._upload_chunk(
                 operation, _arrow_to_csv_bytes(chunk, line_ending), len(chunk),
@@ -278,7 +278,7 @@ class SfBulk2Type:
         wait: int = 5,
     ) -> AsyncIterator[bytes]:
         """
-        Async generator — yields raw CSV bytes per page.
+        Async generator - yields raw CSV bytes per page.
         Caller parses each page with PyArrow using the cached object schema.
         """
         res = await self._client.create_job(
@@ -331,7 +331,7 @@ class SfBulk2Type:
     async def get_all_ingest_results(self, job_id: str) -> dict[str, bytes]:
         """
         Fetch all three result sets concurrently.
-        Returns raw bytes for each — parse with PyArrow using the object schema.
+        Returns raw bytes for each - parse with PyArrow using the object schema.
         """
         successful, failed, unprocessed = await asyncio.gather(
             self.get_successful_records(job_id),
@@ -462,13 +462,13 @@ class _Bulk2Client:
     async def upload_job_data(self, job_id: str, data: bytes) -> None:
         """
         PUT CSV bytes to an open ingest job.
-        Data is always in-memory bytes from _arrow_to_csv_bytes — never a file path.
+        Data is always in-memory bytes from _arrow_to_csv_bytes - never a file path.
         """
         if not data:
             raise Exception("data is required for ingest jobs")
         if len(data) > MAX_INGEST_JOB_FILE_SIZE:
             raise Exception(
-                f"Chunk is {len(data)} bytes — exceeds the {MAX_INGEST_JOB_FILE_SIZE} byte "
+                f"Chunk is {len(data)} bytes - exceeds the {MAX_INGEST_JOB_FILE_SIZE} byte "
                 "Bulk 2.0 limit. Reduce chunk_size on the upload call."
             )
 

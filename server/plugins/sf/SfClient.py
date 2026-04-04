@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 class SfClient:
     """
     Async HTTP client for Salesforce REST and Bulk 2.0 APIs.
-    Always construct via SfClient.create() — not __init__ directly.
+    Always construct via SfClient.create() - not __init__ directly.
     """
 
     base_url: str
@@ -59,7 +59,7 @@ class SfClient:
         max_retries: int = 1,
     ) -> SfClient:
         """
-        Async factory — use this instead of calling SfClient() directly.
+        Async factory - use this instead of calling SfClient() directly.
         Handles auth before constructing the client.
 
         Dev: pass access_token directly from SF CLI token.
@@ -132,7 +132,7 @@ class SfClient:
     async def _handle_401(self, response: httpx.Response) -> None:
         """
         Refresh the token on INVALID_SESSION_ID.
-        Lock ensures only one coroutine refreshes at a time —
+        Lock ensures only one coroutine refreshes at a time -
         others wait and ride the new token instead of racing.
         """
         try:
@@ -144,7 +144,7 @@ class SfClient:
             return
 
         async with self._token_lock:
-            # re-check inside the lock — another coroutine may have already refreshed
+            # re-check inside the lock - another coroutine may have already refreshed
             if response.request.headers.get("Authorization") != f"Bearer {self.access_token}":
                 return  # token already updated by another coroutine, nothing to do
 

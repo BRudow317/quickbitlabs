@@ -1,9 +1,6 @@
 from __future__ import annotations
-
 import datetime
-import io
-import os
-import re
+import io, os
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -20,7 +17,7 @@ from server.plugins.sf.SfModels import (
     SfFieldMeta
 )
 from server.plugins.sf.SfTypeMap import SF_TYPE_TO_ARROW
-from server.plugins.sf.Sfbulk2Engine import SfBulk2Handler, DEFAULT_QUERY_PAGE_SIZE
+from server.plugins.sf.Sfbulk2Engine import bulk2, DEFAULT_QUERY_PAGE_SIZE
 from server.plugins.sf.SfRestEngine import SfRest
 
 from typing import TYPE_CHECKING
@@ -30,12 +27,11 @@ if TYPE_CHECKING:
 import logging
 logger = logging.getLogger(__name__)
 
-# AES-GCM nonce length — 12 bytes is the GCM standard
+# AES-GCM nonce length - 12 bytes is the GCM standard
 _NONCE_LEN = 12
 
-
 # ---------------------------------------------------------------------------
-# Step 1 — Schema data structures
+# Step 1 - Schema data structures
 # ---------------------------------------------------------------------------
 
 @dataclass
@@ -46,11 +42,10 @@ class SfObjectSchema:
     on that object within the session.
     """
     object_name: str
-    queryable_fields: list[SfFieldMeta]          # SELECT list — read operations only
+    queryable_fields: list[SfFieldMeta]          # SELECT list - read operations only
     writeable_fields: list[SfFieldMeta]           # safe for create / update payloads
     fk_fields: dict[str, SfFieldMeta]             # reference fields keyed by field name
     arrow_schema: pa.Schema                        # derived from queryable_fields
-
 
 @dataclass
 class SfCacheEntry:
@@ -59,17 +54,16 @@ class SfCacheEntry:
     Held by the session object. Teardown zeros the key and unlinks the file.
 
     Key is a bytearray (mutable) so teardown can zero it in place before deletion.
-    The nonce is prepended to the ciphertext in the file — no separate storage needed.
+    The nonce is prepended to the ciphertext in the file - no separate storage needed.
     """
     object_name: str
     parquet_path: Path
     record_count: int
     created_at: datetime.datetime
-    _key: bytearray = field(repr=False)           # AES-256 key — 32 bytes
-
+    _key: bytearray = field(repr=False)           # AES-256 key - 32 bytes
 
 # ---------------------------------------------------------------------------
-# Step 1 — Schema sniff
+# Step 1 - Schema sniff
 # ---------------------------------------------------------------------------
 
 async def sniff_schema(rest: SfRest, object_name: str) -> SfObjectSchema:
@@ -78,7 +72,7 @@ async def sniff_schema(rest: SfRest, object_name: str) -> SfObjectSchema:
     Compound fields (address, location, compoundFieldName children) are excluded.
     Reference fields carry FK metadata in fk_fields.
 
-    This is the foundation — call it once and pass the result through the session.
+    This is the foundation - call it once and pass the result through the session.
     """
     obj_type = getattr(rest, object_name)
     describe = await obj_type.describe()
@@ -103,7 +97,7 @@ async def sniff_schema(rest: SfRest, object_name: str) -> SfObjectSchema:
             "name":              f["name"],
             "sf_type":           sf_type,
             "arrow_type":        str(arrow_type),
-            "queryable":         f.get("filterable", False),
+            "filterable":         f.get("filterable", False), # aka queryable
             "createable":        f.get("createable", False),
             "updateable":        f.get("updateable", False),
             "nillable":          f.get("nillable", True),
@@ -111,7 +105,7 @@ async def sniff_schema(rest: SfRest, object_name: str) -> SfObjectSchema:
             "relationship_name": f.get("relationshipName"),
         }
 
-        if f.get("queryable", False):
+        if f.get("filterable", False):
             queryable.append(meta)
             arrow_fields.append(
                 pa.field(f["name"], arrow_type, nullable=f.get("nillable", True))
@@ -131,9 +125,8 @@ async def sniff_schema(rest: SfRest, object_name: str) -> SfObjectSchema:
         arrow_schema=pa.schema(arrow_fields),
     )
 
-
 # ---------------------------------------------------------------------------
-# Step 2 — SOQL builder
+# Step 2 - SOQL builder
 # ---------------------------------------------------------------------------
 
 @dataclass
@@ -163,10 +156,9 @@ def _escape_soql_value(value: Any) -> str:
         return value.isoformat()
     if isinstance(value, datetime.date):
         return value.isoformat()
-    # String — escape single quotes and backslashes
+    # String - escape single quotes and backslashes
     escaped = str(value).replace("\\", "\\\\").replace("'", "\\'")
     return f"'{escaped}'"
-
 
 def _build_where_clause(filters: list[SfFilter]) -> str:
     parts: list[str] = []
@@ -181,7 +173,6 @@ def _build_where_clause(filters: list[SfFilter]) -> str:
             parts.append(f"{f.field} {op} {_escape_soql_value(f.value)}")
     return " AND ".join(parts)
 
-
 def build_soql(
     schema: SfObjectSchema,
     filters: list[SfFilter] | None = None,
@@ -191,27 +182,28 @@ def build_soql(
 ) -> str:
     """
     Build a SOQL SELECT from the cached queryable field list.
-    Always uses queryable_fields — never writeable_fields.
+    Always uses queryable_fields - never writeable_fields.
     Filter values are escaped at build time.
 
-    # TODO: SOQL injection via free-text field values — add stricter validation before prod.
+    # TODO: SOQL injection via free-text field values - add stricter validation before prod.
     """
-    soql = ""
-    for f in schema.queryable_fields:
-        field_list = ", ".join(f["name"] )
-        soql = f"SELECT {field_list} FROM {schema.object_name}"
+    if not schema.queryable_fields:
+        raise ValueError(f"No queryable fields found for {schema.object_name} - run sniff_schema first.")
 
-        if filters:
-            soql += f" WHERE {_build_where_clause(filters)}"
-        if order_by:
-            soql += f" ORDER BY {order_by}"
-        if limit:
-            soql += f" LIMIT {limit}"
+    field_list = ", ".join(f["name"] for f in schema.queryable_fields)
+    soql = f"SELECT {field_list} FROM {schema.object_name}"
+
+    if filters:
+        soql += f" WHERE {_build_where_clause(filters)}"
+    if order_by:
+        soql += f" ORDER BY {order_by}"
+    if limit:
+        soql += f" LIMIT {limit}"
+
     return soql
 
-
 # ---------------------------------------------------------------------------
-# Step 3 — REST initial fetch (first page → Arrow table)
+# Step 3 - REST initial fetch (first page → Arrow table)
 # ---------------------------------------------------------------------------
 
 async def fetch_first_page(
@@ -248,20 +240,30 @@ async def fetch_next_page(
 
 def _records_to_arrow(records: list[dict[str, Any]], schema: pa.Schema) -> pa.Table:
     """
-    Convert a list of SF REST response records to an Arrow table.
-    Uses the explicit schema from sniff_schema — no type inference.
-    SF attribute metadata fields (e.g. 'attributes') are stripped.
+    Convert SF REST JSON records to Arrow column by column.
+    Extracts each field as a Python list once per column, not once per row.
+    Cast happens at the Arrow array level — no row-by-row Python type checking.
     """
-    cleaned = [{k: v for k, v in r.items() if k != "attributes"} for r in records]
-    return pa.Table.from_pylist(cleaned, schema=schema)
+    if not records:
+        return pa.table(
+            {f.name: pa.array([], type=f.type) for f in schema},
+            schema=schema,
+        )
 
+    # Strip SF metadata field in one pass
+    columns = {}
+    for field in schema:
+        raw_col = [r.get(field.name) for r in records]
+        columns[field.name] = pa.array(raw_col, type=field.type, safe=False)
+
+    return pa.table(columns, schema=schema)
 
 # ---------------------------------------------------------------------------
-# Step 5 — Bulk 2.0 ingest job submission
+# Step 5 - Bulk 2.0 ingest job submission
 # ---------------------------------------------------------------------------
 
 async def submit_bulk_ingest(
-    bulk2: SfBulk2Handler,
+    bulk2: bulk2,
     object_name: str,
     table: pa.Table,
     operation: Operation = Operation.upsert,
@@ -273,7 +275,7 @@ async def submit_bulk_ingest(
     Serialize Arrow table to in-memory CSV bytes and submit as Bulk 2.0 ingest job(s).
     Returns job summary dicts with numberRecordsProcessed, numberRecordsFailed, job_id.
 
-    Table must contain only writeable fields — strip read-only fields before calling.
+    Table must contain only writeable fields - strip read-only fields before calling.
     No CSV written to disk.
     """
     sf_obj = getattr(bulk2, object_name)
@@ -286,7 +288,6 @@ async def submit_bulk_ingest(
 
     return await method(table, chunk_size=chunk_size, concurrency=concurrency)
 
-
 def strip_to_writeable(table: pa.Table, schema: SfObjectSchema) -> pa.Table:
     """
     Drop any columns from an Arrow table that are not in writeable_fields.
@@ -297,13 +298,12 @@ def strip_to_writeable(table: pa.Table, schema: SfObjectSchema) -> pa.Table:
     keep = [name for name in table.column_names if name in writeable_names]
     return table.select(keep)
 
-
 # ---------------------------------------------------------------------------
-# Step 6 — Bulk job status poll (single check, not a wait loop)
+# Step 6 - Bulk job status poll (single check, not a wait loop)
 # ---------------------------------------------------------------------------
 
 async def poll_bulk_job(
-    bulk2: SfBulk2Handler,
+    bulk2: bulk2,
     job_id: str,
     is_query: bool = True,
 ) -> JobState:
@@ -321,13 +321,12 @@ async def poll_bulk_job(
     state_str: str = info.json().get("state", "")
     return JobState(state_str)
 
-
 # ---------------------------------------------------------------------------
-# Step 7 — Bulk result fetch → Arrow tables
+# Step 7 - Bulk result fetch → Arrow tables
 # ---------------------------------------------------------------------------
 
 async def fetch_bulk_query_results(
-    bulk2: SfBulk2Handler,
+    bulk2: bulk2,
     object_name: str,
     soql: str,
     schema: SfObjectSchema,
@@ -335,7 +334,7 @@ async def fetch_bulk_query_results(
 ) -> pa.Table:
     """
     Submit a Bulk 2.0 query job and collect all pages into a single Arrow table.
-    Uses the explicit schema from sniff_schema — no type inference on CSV bytes.
+    Uses the explicit schema from sniff_schema - no type inference on CSV bytes.
     Blocks until the job completes (uses the internal wait loop).
     """
     sf_obj = getattr(bulk2, object_name)
@@ -347,9 +346,8 @@ async def fetch_bulk_query_results(
 
     return pa.concat_tables(pages) if pages else pa.table({}, schema=schema.arrow_schema)
 
-
 async def fetch_ingest_results(
-    bulk2: SfBulk2Handler,
+    bulk2: bulk2,
     object_name: str,
     job_id: str,
     schema: SfObjectSchema,
@@ -359,7 +357,7 @@ async def fetch_ingest_results(
     All three are fetched concurrently and returned as Arrow tables.
 
     failed and unprocessed tables include SF's sf__Error and sf__Id columns
-    alongside the original record fields — schema inference used for those extras.
+    alongside the original record fields - schema inference used for those extras.
     """
     sf_obj = getattr(bulk2, object_name)
     result_bytes = await sf_obj.get_all_ingest_results(job_id)
@@ -378,7 +376,6 @@ async def fetch_ingest_results(
         ),
     }
 
-
 def _csv_bytes_to_arrow(data: bytes, schema: pa.Schema) -> pa.Table:
     """Parse raw CSV bytes into an Arrow table using an explicit schema."""
     if not data.strip():
@@ -392,16 +389,14 @@ def _csv_bytes_to_arrow(data: bytes, schema: pa.Schema) -> pa.Table:
         }),
     )
 
-
 def _csv_bytes_to_arrow_inferred(data: bytes) -> pa.Table:
-    """Parse raw CSV bytes with type inference — for result sets with unknown shape."""
+    """Parse raw CSV bytes with type inference - for result sets with unknown shape."""
     if not data.strip():
         return pa.table({})
     return pa_csv.read_csv(io.BytesIO(data))
 
-
 # ---------------------------------------------------------------------------
-# Step 8 — Encrypt and write to Parquet
+# Step 8 - Encrypt and write to Parquet
 # ---------------------------------------------------------------------------
 
 def write_parquet_encrypted(
@@ -445,15 +440,14 @@ def write_parquet_encrypted(
 
 
 
-# Step 9 — Decrypt and scan with Polars
-
+# Step 9 - Decrypt and scan with Polars
 
 def open_parquet_lazy(entry: SfCacheEntry) -> pl.LazyFrame:
     """
     Decrypt the cached Parquet file into a memory buffer and return
     a Polars LazyFrame. The decrypted bytes never touch disk.
 
-    The LazyFrame holds a reference to the in-memory buffer — collect()
+    The LazyFrame holds a reference to the in-memory buffer - collect()
     or streaming operations read from it. The buffer is released when
     the LazyFrame goes out of scope.
     """
@@ -463,7 +457,7 @@ def open_parquet_lazy(entry: SfCacheEntry) -> pl.LazyFrame:
     parquet_bytes = aesgcm.decrypt(nonce, ciphertext, None)
 
     buf = io.BytesIO(parquet_bytes)
-    # Read into Polars via PyArrow buffer — streaming=True defers materialization
+    # Read into Polars via PyArrow buffer - streaming=True defers materialization
     return pl.read_parquet(buf).lazy()
 
 
@@ -482,7 +476,7 @@ def open_parquet_arrow(entry: SfCacheEntry) -> pa.Table:
 
 
 
-# Step 10 — CRUD write-back via sObject Collections API
+# Step 10 - CRUD write-back via sObject Collections API
 
 async def collections_update(
     http: SfClient,
@@ -494,7 +488,7 @@ async def collections_update(
     """
     PATCH up to 200 records via the sObject Collections API.
     Each record must include an 'Id' field.
-    Payload is stripped to writeable_fields — read-only fields dropped silently.
+    Payload is stripped to writeable_fields - read-only fields dropped silently.
 
     Returns per-record result list from SF (id, success, errors).
     """
@@ -553,7 +547,7 @@ async def collections_delete(
     """
     DELETE up to 200 records by SF ID via the sObject Collections API.
     No CSV. No bulk job. Synchronous JSON response with per-record results.
-    allOrNone=False means partial success — failed deletes don't roll back successes.
+    allOrNone=False means partial success - failed deletes don't roll back successes.
     """
     if len(ids) > 200:
         raise ValueError("sObject Collections supports max 200 records per call.")
@@ -569,16 +563,16 @@ async def collections_delete(
     return response.json()
 
 
-# Step 12 — Teardown
+# Step 12 - Teardown
 
 def teardown_cache(entry: SfCacheEntry) -> None:
     """
     Zero the encryption key in place and unlink the Parquet file from disk.
     Call this when the session object that owns the entry is being destroyed.
 
-    Safe to call multiple times — missing file is not an error.
+    Safe to call multiple times - missing file is not an error.
     """
-    # Zero the key bytes in place — bytearray is mutable
+    # Zero the key bytes in place - bytearray is mutable
     for i in range(len(entry._key)):
         entry._key[i] = 0
 

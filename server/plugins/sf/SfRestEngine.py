@@ -1,11 +1,11 @@
 from __future__ import annotations
-import base64
+import base64, json
 from datetime import datetime
 from pathlib import Path
 from typing import Any, AsyncIterator
 from urllib.parse import quote_plus
 import httpx
-from server.plugins.sf.SfModels import SKIP_SUFFIXES, SKIP_NAMES
+from server.plugins.sf.SfModels import SKIP_SUFFIXES, SKIP_NAMES, SF_BASE_URL, API_VERSION
 
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 
 class SfRest:
     """
-    Global REST API operations — SOQL, limits, global describe.
+    Global REST API operations - SOQL, limits, global describe.
     Acts as a factory for SfObjType via dot-notation attribute access.
     """
     _http: SfClient
@@ -32,7 +32,7 @@ class SfRest:
         return SfObjType(object_name=name, http_client=self._http)
 
     async def describe(self, **kwargs: Any) -> dict[str, Any]:
-        """Global describe — all available SObjects."""
+        """Global describe - all available SObjects."""
         response = await self._http.request("GET", "sobjects", **kwargs)
         return response.json()
 
@@ -104,7 +104,7 @@ class SfRest:
         **kwargs: Any,
     ) -> AsyncIterator[Any]:
         """
-        Async generator — lazily yields individual records across all pages.
+        Async generator - lazily yields individual records across all pages.
         Follows nextRecordsUrl automatically. Never loads all pages into memory.
         """
         result = await self.query(query_str, include_deleted=include_deleted, **kwargs)
@@ -152,12 +152,46 @@ class SfRest:
         if name in SKIP_NAMES:
             return False
         return True
+    
+
+
+    async def apex_execute(
+            self,
+            action: str | None = None,
+            method: str = 'GET',
+            data: dict[str, Any] | None = None,
+            **kwargs: Any
+            ) -> Any:
+        """Makes an HTTP request to an APEX REST endpoint
+        Arguments:
+        * action -- The REST endpoint for the request.
+        * method -- HTTP method for the request (default GET)
+        * data -- A dict of parameters to send in a POST / PUT request
+        * kwargs -- Additional kwargs to pass to `requests.request`
+        """
+        SF_APEX_URL: str = f"{SF_BASE_URL}/services/apexrest"
+        # If data is None, we should send an empty body, not "null", which is
+        # None in json.
+        json_data = json.dumps(data) if data is not None else None
+        result = await self._http.request(
+            method = method,
+            url = SF_APEX_URL,
+            name="apex_execute",
+            data=json_data,
+            **kwargs
+            )
+        try:
+            response_content = result.json()
+        except Exception:
+            response_content = result.text
+
+        return response_content
 
 
 class SfObjType:
     """
     Interface to a specific Salesforce SObject type.
-    Constructed by SfRest.__getattr__ — not instantiated directly.
+    Constructed by SfRest.__getattr__ - not instantiated directly.
     """
     object_name: str
     _http: SfClient
@@ -272,7 +306,7 @@ class SfObjType:
         base64_field: str = "Body",
         **kwargs: Any,
     ) -> httpx.Response:
-        # Note: Path.read_bytes() is blocking — acceptable for prototype phase
+        # Note: Path.read_bytes() is blocking - acceptable for prototype phase
         body = base64.b64encode(Path(file_path).read_bytes()).decode()
         return await self._http.request(
             "POST", f"{self._base_endpoint}/", json={base64_field: body}, **kwargs

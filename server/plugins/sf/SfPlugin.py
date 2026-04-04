@@ -15,13 +15,9 @@ import logging
 logger = logging.getLogger(__name__)
 
 
-class SalesforceConnector:
+class SfPlugin:
     """
-    Single entry point for all Salesforce operations.
-
-    Implements the Connector protocol where Salesforce supports it.
-    SF is primarily a source — most metadata write operations
-    return PluginResponse.not_implemented() since you can't DDL through the data API.
+    Facade Interface for higher level Salesforce operations.
     """
     client: SfClient
     catalog: CatalogModel

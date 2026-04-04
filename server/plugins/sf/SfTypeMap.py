@@ -14,7 +14,7 @@ SF_TYPE_TO_ARROW = {
     "multipicklist":   pa.large_utf8(), # semicolon-separated, SF's crime against data
     "combobox":        pa.utf8(),
     "id":              pa.utf8(),       # SF IDs are 18-char strings
-    "reference":       pa.utf8(),       # FK — SF ID stored as string, metadata captured separately
+    "reference":       pa.utf8(),       # FK - SF ID stored as string, metadata captured separately
     "boolean":         pa.bool_(),
     "int":             pa.int32(),
     "long":            pa.int64(),
@@ -27,13 +27,13 @@ SF_TYPE_TO_ARROW = {
     "base64":          pa.large_binary(),
     "encryptedstring": pa.utf8(),       # SF-side encrypted, comes to you as string
     "anyType":         pa.utf8(),       # fallback, SF uses this for polymorphic value fields
-    "address":         None,            # compound — exclude at describe time
-    "location":        None,            # compound geolocation — exclude
+    "address":         None,            # compound - exclude at describe time
+    "location":        None,            # compound geolocation - exclude
 }
 
 
 # FieldDefinition.DataType (bulk describe) → PythonTypes
-# DataType comes with optional params e.g. "Text(80)", "Number(18, 0)" — strip before lookup.
+# DataType comes with optional params e.g. "Text(80)", "Number(18, 0)" - strip before lookup.
 def _normalize_fielddef_type(raw: str) -> str:
     """Strip parameters from FieldDefinition DataType strings.
     e.g. 'Text(80)' → 'text', 'Number(18, 0)' → 'number'
@@ -72,7 +72,7 @@ SF_FIELDDEF_TYPE_MAP: dict[str, PythonTypes] = {
     'base64':                'binary',
     'file':                  'binary',
     'json':                  'json',
-    # Compound — filtered upstream before this map is consulted
+    # Compound - filtered upstream before this map is consulted
     'address':               'json',
     'location':              'json',
 }
@@ -180,7 +180,7 @@ def prepare_record(record: dict[str, Any]) -> dict[str, Any]:
     out = {}
     for k, v in record.items():
         if v is _CLEAR:
-            out[k] = None  # explicit null — SF will clear the field
+            out[k] = None  # explicit null - SF will clear the field
         elif v is not None:
             out[k] = python_to_sf(v)
     return out

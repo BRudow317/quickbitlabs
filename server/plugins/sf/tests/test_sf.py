@@ -1,14 +1,26 @@
+"""
+Salesforce Plugin Engine and Services tests.
+
+Usage:
+    1. Configure your dev org and .env with appropriate credentials.
+    2. Ensure your external app has api access and the environment variables are loaded prior to the test run. You either need the client credentials, or a valid access token.
+    3. Run `pytest -v server/plugins/sf/tests/test_sf.py`
+        or `pytest server/plugins/sf/tests/test_sf.py -v -s --tb=short 2>&1 | Select-Object -First 80`
+"""
 from __future__ import annotations
 
 import os
 import uuid
 import pytest
 import pyarrow as pa
+import pytest_asyncio
 
+# from server.plugins.sf.Sfbulk2Engine import bulk2
+from server.plugins.sf import Sfbulk2Engine
 from server.plugins.sf.SfClient import SfClient
 from server.plugins.sf.SfRestEngine import SfRest
-from server.plugins.sf.Sfbulk2Engine import SfBulk2Handler
 from server.plugins.sf.SfModels import Operation
+from server.plugins.sf.SfExceptions import SfException
 from server.plugins.sf.SfServices import (
     SfObjectSchema,
     SfCacheEntry,
@@ -26,58 +38,37 @@ from server.plugins.sf.SfServices import (
     teardown_cache,
 )
 
-from pathlib import Path
-import tempfile
-
 pytestmark = pytest.mark.asyncio
 
-
 # ---------------------------------------------------------------------------
-# Shared state across tests — holds IDs and objects created mid-run
+# Shared state across tests - holds IDs and objects created mid-run
 # ---------------------------------------------------------------------------
 
 state: dict = {}
-
 
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
 
-@pytest.fixture(scope="module")
+@pytest_asyncio.fixture(scope="module", loop_scope="module")
 async def http():
-    """
-    Module-scoped async SfClient.
-    Uses SF_ACCESS_TOKEN from env for dev (SF CLI token).
-    Falls back to client credentials if not set.
-    """
-    client = await SfClient.create(
-        access_token=os.getenv("SF_ACCESS_TOKEN") or None,
-        consumer_key=os.getenv("SF_CONSUMER_KEY") or None,
-        consumer_secret=os.getenv("SF_CONSUMER_SECRET") or None,
-    )
+    client = await SfClient.create()
     yield client
     await client.close()
 
 
-@pytest.fixture(scope="module")
-def rest(http):
+@pytest_asyncio.fixture(scope="module", loop_scope="module")
+async def rest(http):
     return SfRest(http)
 
 
-@pytest.fixture(scope="module")
-def bulk2(http):
-    return SfBulk2Handler(http)
-
-
-@pytest.fixture(scope="module")
-def tmp_dir():
-    """Temp directory for encrypted parquet files — cleaned up after module."""
-    with tempfile.TemporaryDirectory() as d:
-        yield Path(d)
+@pytest_asyncio.fixture(scope="module", loop_scope="module")
+async def bulk2(http):
+    return Sfbulk2Engine.bulk2(http)
 
 
 # ---------------------------------------------------------------------------
-# Test 1 — Schema sniff
+# Test 1 - Schema sniff
 # ---------------------------------------------------------------------------
 
 async def test_sniff_case_schema(rest):
@@ -86,6 +77,17 @@ async def test_sniff_case_schema(rest):
     Checks that we get queryable and writeable field lists,
     that compound fields are excluded, and FK fields are captured.
     """
+    # --- DEBUG: inspect raw describe response before sniff_schema processes it ---
+    raw_describe = await getattr(rest, "Case").describe()
+    raw_fields = raw_describe.get("fields", [])
+    print(f"\n  raw describe keys: {list(raw_describe.keys())}")
+    print(f"  total raw fields: {len(raw_fields)}")
+    if raw_fields:
+        sample = raw_fields[0]
+        print(f"  sample field keys: {list(sample.keys())}")
+        print(f"  sample field: name={sample.get('name')} type={sample.get('type')} queryable={sample.get('queryable')} compoundFieldName={sample.get('compoundFieldName')}")
+    # --- END DEBUG ---
+
     schema = await sniff_schema(rest, "Case")
     state["schema"] = schema
 
@@ -95,30 +97,31 @@ async def test_sniff_case_schema(rest):
     queryable_names = [f["name"] for f in schema.queryable_fields]
     writeable_names = [f["name"] for f in schema.writeable_fields]
 
+    print(f"  queryable fields: {len(schema.queryable_fields)}")
+    print(f"  writeable fields: {len(schema.writeable_fields)}")
+    print(f"  FK fields: {list(schema.fk_fields.keys())}")
+
     # Core fields every Case has
     assert "Subject" in queryable_names
     assert "Status" in queryable_names
     assert "CaseNumber" in queryable_names
 
-    # Subject is writeable, CaseNumber is auto-generated — not writeable
+    # Subject is writeable, CaseNumber is auto-generated - not writeable
     assert "Subject" in writeable_names
     assert "CaseNumber" not in writeable_names
 
     # Compound address fields must be excluded
     assert "Address" not in queryable_names
 
-    # OwnerId is a reference field — should be in fk_fields
+    # OwnerId is a reference field - should be in fk_fields
     assert "OwnerId" in schema.fk_fields
     owner_fk = schema.fk_fields["OwnerId"]
     assert "User" in owner_fk["reference_to"]
 
-    print(f"  queryable fields: {len(schema.queryable_fields)}")
-    print(f"  writeable fields: {len(schema.writeable_fields)}")
-    print(f"  FK fields: {list(schema.fk_fields.keys())}")
 
 
 # ---------------------------------------------------------------------------
-# Test 2 — SOQL builder + REST first page fetch
+# Test 2 - SOQL builder + REST first page fetch
 # ---------------------------------------------------------------------------
 
 async def test_fetch_existing_cases(rest):
@@ -132,19 +135,19 @@ async def test_fetch_existing_cases(rest):
         schema,
         filters=[SfFilter("Status", "!=", "Closed")],
         order_by="CreatedDate DESC",
-        limit=5,
+        limit=100,
     )
 
     print(f"  SOQL: {soql}")
     assert "FROM Case" in soql
     assert "Status != 'Closed'" in soql
-    assert "LIMIT 5" in soql
+    assert "LIMIT 100" in soql
 
     table, next_url = await fetch_first_page(rest, soql, schema)
     state["first_page"] = table
 
     assert isinstance(table, pa.Table)
-    assert len(table) > 0, "Dev org has no open Cases — seed some from Trailhead sample data"
+    assert len(table) > 0, "Dev org has no open Cases - seed some from Trailhead sample data"
     assert "Subject" in table.column_names
     assert "Status" in table.column_names
 
@@ -152,7 +155,7 @@ async def test_fetch_existing_cases(rest):
 
 
 # ---------------------------------------------------------------------------
-# Test 3 — REST create (insert a new Case)
+# Test 3 - REST create (insert a new Case)
 # ---------------------------------------------------------------------------
 
 async def test_rest_create_case(rest):
@@ -183,7 +186,7 @@ async def test_rest_create_case(rest):
 
 
 # ---------------------------------------------------------------------------
-# Test 4 — REST update (single record PATCH)
+# Test 4 - REST update (single record PATCH)
 # ---------------------------------------------------------------------------
 
 async def test_rest_update_case(rest):
@@ -195,7 +198,7 @@ async def test_rest_update_case(rest):
     obj = getattr(rest, "Case")
 
     status_code = await obj.update(record_id, {
-        "Description": "Updated by sf-engine test — step 4.",
+        "Description": "Updated by sf-engine test - step 4.",
         "Priority":    "Medium",
     })
 
@@ -206,11 +209,11 @@ async def test_rest_update_case(rest):
     refreshed = await obj.get(record_id)
     assert refreshed["Priority"] == "Medium"
     assert "step 4" in refreshed["Description"]
-    print(f"  updated Case {record_id} — Priority now {refreshed['Priority']}")
+    print(f"  updated Case {record_id} - Priority now {refreshed['Priority']}")
 
 
 # ---------------------------------------------------------------------------
-# Test 5 — sObject Collections update (batch PATCH up to 200)
+# Test 5 - sObject Collections update (batch PATCH up to 200)
 # ---------------------------------------------------------------------------
 
 async def test_collections_update_case(http):
@@ -226,7 +229,7 @@ async def test_collections_update_case(http):
         object_name="Case",
         records=[{
             "Id":          record_id,
-            "Description": "Updated via Collections API — step 5.",
+            "Description": "Updated via Collections API - step 5.",
             "Priority":    "High",
         }],
         schema=schema,
@@ -239,10 +242,10 @@ async def test_collections_update_case(http):
 
 
 # ---------------------------------------------------------------------------
-# Test 6 — Bulk 2.0 query
+# Test 6 - Bulk 2.0 query + encrypted Parquet roundtrip
 # ---------------------------------------------------------------------------
 
-async def test_bulk_query_case(bulk2, tmp_dir):
+async def test_bulk_query_case(bulk2, tmp_path):
     """
     Run a Bulk 2.0 query for the test Case and write results to
     an encrypted Parquet file. Verify we can decrypt and read it back
@@ -264,25 +267,23 @@ async def test_bulk_query_case(bulk2, tmp_dir):
     print(f"  bulk query returned {len(table)} records")
 
     # Write encrypted parquet and verify roundtrip
-    entry = write_parquet_encrypted(table, tmp_dir, "Case")
+    entry = write_parquet_encrypted(table, tmp_path, "Case")
     state["cache_entry"] = entry
 
     assert entry.parquet_path.exists()
     assert entry.record_count == len(table)
 
+    import polars as pl
     lf = open_parquet_lazy(entry)
-    result = lf.filter(
-        __import__("polars").col("Subject").str.contains(tag)
-    ).collect()
+    result = lf.filter(pl.col("Subject").str.contains(tag)).collect()
 
     assert len(result) >= 1
-    print(f"  encrypted parquet roundtrip ok — {entry.parquet_path.name}")
+    print(f"  encrypted parquet roundtrip ok - {entry.parquet_path.name}")
 
 
 # ---------------------------------------------------------------------------
-# Test 7 — Bulk 2.0 ingest upsert
+# Test 7 - Bulk 2.0 ingest upsert
 # PREREQUISITE: Case must have a custom External ID field: External_Test_Id__c
-# Skip this test if the field doesn't exist in your dev org.
 # To add it: Setup → Object Manager → Case → Fields → New → Text, check External ID
 # ---------------------------------------------------------------------------
 
@@ -295,19 +296,17 @@ async def test_bulk_upsert_case(bulk2):
     Upsert the test Case via Bulk 2.0 using an external ID field.
     Requires a custom External ID field on Case configured in the dev org.
     """
-    schema = state["schema"]
     record_id = state["created_id"]
     external_id_field = os.getenv("SF_TEST_EXTERNAL_ID_FIELD")
     external_id_value = f"TEST-{state['test_tag']}"
 
-    # First stamp the external ID on the existing record via REST update
+    # Stamp the external ID on the existing record via REST update
     obj = getattr(SfRest(bulk2._http), "Case")
     await obj.update(record_id, {external_id_field: external_id_value})
 
-    # Now upsert via Bulk 2.0 with a Description change
     upsert_table = pa.table({
         external_id_field: [external_id_value],
-        "Description":     ["Updated via Bulk 2.0 upsert — step 7."],
+        "Description":     ["Updated via Bulk 2.0 upsert - step 7."],
         "Priority":        ["Low"],
     })
 
@@ -325,14 +324,13 @@ async def test_bulk_upsert_case(bulk2):
 
 
 # ---------------------------------------------------------------------------
-# Test 8 — Collections delete (cleanup)
+# Test 8 - Collections delete (cleanup)
 # ---------------------------------------------------------------------------
 
 async def test_collections_delete_case(http):
     """
     Delete the test Case via sObject Collections DELETE.
-    This is the teardown step — verifies delete returns success
-    and the record is no longer fetchable.
+    Verifies delete returns success and the record is no longer fetchable.
     """
     record_id = state["created_id"]
 
@@ -346,14 +344,14 @@ async def test_collections_delete_case(http):
     assert results[0]["success"] is True, f"Delete failed: {results[0]}"
     print(f"  deleted Case {record_id}")
 
-    # Verify it's gone — REST get should now 404, which SfClient raises as Exception
+    # Verify it's gone - REST get should 404, which SfClient raises as Exception
     obj = getattr(SfRest(http), "Case")
     with pytest.raises(Exception, match="404"):
         await obj.get(record_id)
 
 
 # ---------------------------------------------------------------------------
-# Test 9 — Cache teardown
+# Test 9 - Cache teardown
 # ---------------------------------------------------------------------------
 
 async def test_teardown_cache():
@@ -364,7 +362,7 @@ async def test_teardown_cache():
     if not raw:
         pytest.skip("No cache entry from bulk query test")
 
-    entry: SfCacheEntry = raw  # linter now knows raw is not None
+    entry: SfCacheEntry = raw
 
     path = entry.parquet_path
     assert path.exists()
@@ -373,4 +371,4 @@ async def test_teardown_cache():
 
     assert not path.exists(), "Parquet file still on disk after teardown"
     assert all(b == 0 for b in entry._key), "Encryption key not zeroed after teardown"
-    print(f"  cache teardown ok — file unlinked, key zeroed")
+    print(f"  cache teardown ok - file unlinked, key zeroed")
