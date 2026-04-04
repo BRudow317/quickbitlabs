@@ -1,13 +1,44 @@
 from __future__ import annotations
-
-import datetime
-import json
+import datetime, json, re
 from typing import Any, TypeVar
+from server.plugins.PluginModels import PythonTypes
+import pyarrow as pa
 
-from server.models.ConnectorStandard import PythonTypes
+SF_TYPE_TO_ARROW = {
+    "string":          pa.utf8(),
+    "textarea":        pa.large_utf8(),
+    "phone":           pa.utf8(),
+    "email":           pa.utf8(),
+    "url":             pa.utf8(),
+    "picklist":        pa.utf8(),       # or pa.dictionary if cardinality is low
+    "multipicklist":   pa.large_utf8(), # semicolon-separated, SF's crime against data
+    "combobox":        pa.utf8(),
+    "id":              pa.utf8(),       # SF IDs are 18-char strings
+    "reference":       pa.utf8(),       # FK — SF ID stored as string, metadata captured separately
+    "boolean":         pa.bool_(),
+    "int":             pa.int32(),
+    "long":            pa.int64(),
+    "double":          pa.float64(),
+    "currency":        pa.decimal128(18, 2),  # don't use float for money
+    "percent":         pa.float64(),
+    "date":            pa.date32(),
+    "datetime":        pa.timestamp("ms", tz="UTC"),  # SF datetimes are always UTC
+    "time":            pa.time64("us"),
+    "base64":          pa.large_binary(),
+    "encryptedstring": pa.utf8(),       # SF-side encrypted, comes to you as string
+    "anyType":         pa.utf8(),       # fallback, SF uses this for polymorphic value fields
+    "address":         None,            # compound — exclude at describe time
+    "location":        None,            # compound geolocation — exclude
+}
+
 
 # FieldDefinition.DataType (bulk describe) → PythonTypes
 # DataType comes with optional params e.g. "Text(80)", "Number(18, 0)" — strip before lookup.
+def _normalize_fielddef_type(raw: str) -> str:
+    """Strip parameters from FieldDefinition DataType strings.
+    e.g. 'Text(80)' → 'text', 'Number(18, 0)' → 'number'
+    """
+    return re.sub(r'\(.*\)', '', raw).strip().lower()
 SF_FIELDDEF_TYPE_MAP: dict[str, PythonTypes] = {
     'id':                    'string',
     'text':                  'string',
@@ -139,7 +170,17 @@ def cast_record(record: dict[str, Any], field_types: dict[str, str]) -> dict[str
         for k, v in record.items()
     }
 
+_CLEAR = object()  # sentinel for explicit null writes to SF
 
 def prepare_record(record: dict[str, Any]) -> dict[str, Any]:
-    """Convert Python values to SF API strings, dropping Nones."""
-    return {k: python_to_sf(v) for k, v in record.items() if v is not None}
+    """Convert Python values to SF API representation.
+    Use _CLEAR as a value to explicitly null a field in SF.
+    Omit a key entirely to leave the field unchanged.
+    """
+    out = {}
+    for k, v in record.items():
+        if v is _CLEAR:
+            out[k] = None  # explicit null — SF will clear the field
+        elif v is not None:
+            out[k] = python_to_sf(v)
+    return out

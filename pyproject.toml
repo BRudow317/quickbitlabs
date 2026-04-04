@@ -68,3 +68,4 @@ packages = ["quickbitlabs"]
 [tool.pytest.ini_options]
 pythonpath = ["."]
 testpaths = ["tests"]
+asyncio_mode = "auto"

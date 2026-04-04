@@ -4,23 +4,41 @@ from collections.abc import Mapping, MutableMapping
 from enum import Enum
 import os
 from typing import NamedTuple, TypedDict
-# types
-# from typing import TYPE_CHECKING
-# if TYPE_CHECKING:
+from dataclasses import dataclass
     
-
 API_VERSION: str = os.getenv('SF_API_VERSION', '66.0')
 SF_EXTERNAL_CLIENT_APP_NAME: str = os.getenv('SF_EXTERNAL_CLIENT_APP_NAME', 'automation')
-SF_BASE_URL: str = os.getenv('SF_BASE_URL') or f"https://{os.getenv('SF_BASE_DOMAIN')}.salesforce.com" or "https://salesforce.com"
-SF_AUTH_URI: str = os.getenv('SF_AUTH_URI', '/services/oauth2/token')
-SF_QUERY_URI: str = os.getenv('SF_QUERY_URI', f'/services/data/v{API_VERSION}/jobs/query')
-SF_BASE_DOMAIN: str = os.getenv('SF_BASE_DOMAIN', 'your-instance')
+SF_BASE_URL: str = os.getenv('SF_BASE_URL') or f"https://{os.getenv('SF_BASE_DOMAIN')}.salesforce.com"
 SF_CALLBACK_URL: str = os.getenv('SF_CALLBACK_URL', 'http://localhost:1717/OauthRedirect')
+
+# Add to SfModels.py alongside the other TypedDicts
+
+class SfFieldMeta(TypedDict):
+    name:              str
+    sf_type:           str
+    arrow_type:        str
+    queryable:         bool
+    createable:        bool
+    updateable:        bool
+    nillable:          bool
+    reference_to:      list[str]
+    relationship_name: str | None
 
 # --- Common Types ---
 Headers = MutableMapping[str, str]
 BulkDataAny = list[Mapping[str, any]]
 BulkDataStr = list[Mapping[str, str]]
+
+# --- http methods ---
+class HttpMethod(str,Enum):
+    delete = 'DELETE'
+    get = 'GET'
+    head = 'HEAD'
+    options = 'OPTIONS'
+    patch = 'PATCH'
+    post = 'POST'
+    put = 'PUT'
+    request = 'REQUEST'
 
 # --- REST Models ---
 class Usage(NamedTuple):
@@ -79,12 +97,7 @@ class QueryRecordsResult(TypedDict):
     number_of_records: int
     records: str
 
-class QueryFileResult(TypedDict):
-    locator: str
-    number_of_records: int
-    file: str
-
-QueryResult = QueryRecordsResult | QueryFileResult
+QueryResult = QueryRecordsResult
 
 # At the top of rest.py, outside the class
 SKIP_SUFFIXES = (
@@ -120,3 +133,4 @@ SKIP_NAMES = {
     'PermissionSet', 'PermissionSetAssignment',
     'GroupMember', 'UserRole', 'UserLicense',
 }
+

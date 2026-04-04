@@ -49,8 +49,7 @@ At the root of the `/server/plugins/` directory sit the four pillars of the plat
   - ### FieldModel
     The noun for the attributes of the entity. This could be columns in a table, keys in a JSON object, etc. It has a name and a type.
   - ### QueryModel
-    The noun for the query or operation being performed. This could be a SQL query, a REST API request body, etc. It has a query string and a list of parameters.
-
+    The universal JSON representation of a data request (AST). Instead of holding a raw SQL string, it structures the request abstractly with lists of entities, fields, and nested filter_groups (e.g., field: "status", operator: "==", value: "active"). This allows the FastAPI frontend to request data without knowing whether the target system speaks SQL, SOQL, or REST. (Note: It does include a native escape hatch for edge-case raw system queries).
 
 - **`PluginProtocol.py` (The Verbs):** The strict Python `Protocol` defining the standard CRUD methods (`get_records`, `insert_records`, `update_catalog`). If a plugin doesn't support a verb, it returns a 501.
 

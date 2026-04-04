@@ -1,5 +1,5 @@
 from typing import Any
-from server.models.PluginModels import QueryModel, FilterGroup, FilterCondition, EntityModel
+from server.plugins.PluginModels import QueryModel, FilterGroup, FilterCondition, EntityModel
 
 # =========================================================
 # 1. READ OPERATIONS (The AST Translators)

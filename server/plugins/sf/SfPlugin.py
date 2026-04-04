@@ -4,12 +4,12 @@ import csv
 import io
 from typing import Any
 
-from server.plugins.sf.HttpClient import HttpClient
-from server.plugins.sf.services.rest import SfRest
-from server.plugins.sf.services.bulk2 import SfBulk2Handler
-from server.plugins.sf.utils.type_converter import SF_TYPE_MAP, cast_record, prepare_record
-from server.models.PluginModels import EntityModel, FieldModel, CatalogModel, Records
-from server.models.PluginResponse import PluginResponse
+from server.plugins.sf.SfClient import SfClient
+from server.plugins.sf.SfRestEngine import SfRest
+from server.plugins.sf.Sfbulk2Engine import SfBulk2Handler
+from server.plugins.sf.SfTypeMap import SF_TYPE_MAP, cast_record, prepare_record
+from server.plugins.PluginModels import EntityModel, FieldModel, CatalogModel, Records
+from server.plugins.PluginResponse import PluginResponse
 
 import logging
 logger = logging.getLogger(__name__)
@@ -23,7 +23,7 @@ class SalesforceConnector:
     SF is primarily a source — most metadata write operations
     return PluginResponse.not_implemented() since you can't DDL through the data API.
     """
-    client: HttpClient
+    client: SfClient
     catalog: CatalogModel
     _rest: SfRest | None = None
     _bulk2: SfBulk2Handler | None = None
@@ -35,7 +35,7 @@ class SalesforceConnector:
         org_url: str | None = None,
         catalog: CatalogModel | None = None,
     ):
-        self.client = HttpClient(
+        self.client = SfClient.create(
             consumer_key=consumer_key,
             consumer_secret=consumer_secret,
             base_url=org_url,
@@ -54,15 +54,31 @@ class SalesforceConnector:
             self._bulk2 = SfBulk2Handler(self.client)
         return self._bulk2
 
-    # ── Connection ──
+    # Connector specifics
+    def query(self, soql: str, object_name: str | None = None) -> Records:
+        """REST SOQL query. Best for small, real-time result sets."""
+        field_types: dict[str, str] = {}
+        if object_name:
+            result = self.get_table(object_name)
+            if result.ok and result.data:
+                field_types = {c.source_name: c.raw_type for c in result.data.fields if c.raw_type}
+        for record in self.rest.query_all_iter(soql):
+            clean = {k: v for k, v in record.items() if k != 'attributes'}
+            yield cast_record(clean, field_types) if field_types else clean
 
-    def test_connection(self) -> bool:
-        try:
-            self.rest.limits()
-            return True
-        except Exception as e:
-            logger.error(f"SF connection failed: {e}")
-            return False
+    def bulk_query(self, soql: str, object_name: str | None = None) -> Records:
+        """Bulk2 SOQL query. Best for large exports."""
+        field_types: dict[str, str] = {}
+        if object_name:
+            result = self.get_table(object_name)
+            if result.ok and result.data:
+                field_types = {c.source_name: c.raw_type for c in result.data.fields if c.raw_type}
+        for csv_page in self.bulk2.query(soql):
+            for record in csv.DictReader(io.StringIO(csv_page)):
+                yield cast_record(record, field_types) if field_types else dict(record)
+
+    def get_limits(self) -> dict[str, Any]:
+        return self.rest.limits()
 
 # ============================ METADATA ============================
     
@@ -171,16 +187,16 @@ class SalesforceConnector:
         except Exception as e:
             return PluginResponse.error(str(e))
 
-    def create_table(self, entity: EntityModel | str, **kwargs: Any) -> PluginResponse[EntityModel]:
+    def create_entity(self, entity: EntityModel | str, **kwargs: Any) -> PluginResponse[EntityModel]:
         return PluginResponse.not_implemented("Salesforce does not support entity creation via data API")
 
-    def update_table(self, entity: EntityModel | str, **kwargs: Any) -> PluginResponse[EntityModel]:
+    def update_entity(self, entity: EntityModel | str, **kwargs: Any) -> PluginResponse[EntityModel]:
         return PluginResponse.not_implemented("Salesforce does not support entity modification via data API")
 
-    def upsert_table(self, entity: EntityModel | str, **kwargs: Any) -> PluginResponse[EntityModel]:
+    def upsert_entity(self, entity: EntityModel | str, **kwargs: Any) -> PluginResponse[EntityModel]:
         return PluginResponse.not_implemented("Salesforce does not support entity creation via data API")
 
-    def delete_table(self, entity: EntityModel | str, **kwargs: Any) -> PluginResponse[EntityModel]:
+    def delete_entity(self, entity: EntityModel | str, **kwargs: Any) -> PluginResponse[EntityModel]:
         return PluginResponse.not_implemented("Salesforce does not support entity deletion via data API")
 
     
@@ -282,29 +298,3 @@ class SalesforceConnector:
         except Exception as e:
             return PluginResponse.error(str(e))
 
-    
-    # Connector specifics
-    def query(self, soql: str, object_name: str | None = None) -> Records:
-        """REST SOQL query. Best for small, real-time result sets."""
-        field_types: dict[str, str] = {}
-        if object_name:
-            result = self.get_table(object_name)
-            if result.ok and result.data:
-                field_types = {c.source_name: c.raw_type for c in result.data.fields if c.raw_type}
-        for record in self.rest.query_all_iter(soql):
-            clean = {k: v for k, v in record.items() if k != 'attributes'}
-            yield cast_record(clean, field_types) if field_types else clean
-
-    def bulk_query(self, soql: str, object_name: str | None = None) -> Records:
-        """Bulk2 SOQL query. Best for large exports."""
-        field_types: dict[str, str] = {}
-        if object_name:
-            result = self.get_table(object_name)
-            if result.ok and result.data:
-                field_types = {c.source_name: c.raw_type for c in result.data.fields if c.raw_type}
-        for csv_page in self.bulk2.query(soql):
-            for record in csv.DictReader(io.StringIO(csv_page)):
-                yield cast_record(record, field_types) if field_types else dict(record)
-
-    def get_limits(self) -> dict[str, Any]:
-        return self.rest.limits()

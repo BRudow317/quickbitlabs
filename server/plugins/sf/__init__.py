@@ -1,8 +1,8 @@
-from __future__ import annotations
+# from __future__ import annotations
 
-import sys
-import os
+# import sys
+# import os
 
-sys.path.insert(0, os.path.dirname(__file__))
+# sys.path.insert(0, os.path.dirname(__file__))
 
-from . import HttpClient, auth, models, SalesforceConnector, services, utils
+# from . import SfAuth, SfClient, SfModels, SfPlugin, services, utils

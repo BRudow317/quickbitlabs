@@ -1,1 +1,3 @@
-from . import csv_utils, type_converter, date_to_iso8601, filter_null_bytes, list_from_generator, soql_utils
+from .. import SfTypeMap
+
+from . import csv_utils, date_to_iso8601, filter_null_bytes, list_from_generator, soql_utils

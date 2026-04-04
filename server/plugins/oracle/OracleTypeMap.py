@@ -1,7 +1,7 @@
 from typing import Any
 import oracledb
 
-from server.models.PluginModels import PythonTypes, FieldModel
+from server.plugins.PluginModels import PythonTypes, FieldModel
 
 # ---------------------------------------------------------
 # 1. Oracle -> Python (For generating the Contract during Discovery)

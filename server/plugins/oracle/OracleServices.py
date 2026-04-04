@@ -1,7 +1,7 @@
 from typing import Any
 import logging
 
-from server.models.PluginModels import CatalogModel, EntityModel, Records, QueryModel
+from server.plugins.PluginModels import CatalogModel, EntityModel, Records, QueryModel
 from .OracleEngine import OracleEngine
 from .OracleDialect import build_dynamic_sql, build_insert_sql, build_update_sql, build_merge_sql, build_delete_sql
 from .OracleTypeMap import map_field_to_oracledb_input_size
