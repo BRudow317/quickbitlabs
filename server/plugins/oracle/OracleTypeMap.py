@@ -1,7 +1,7 @@
 from typing import Any
 import oracledb
 
-from server.plugins.PluginModels import PythonTypes, FieldModel
+from server.plugins.PluginModels import PythonTypes, FieldModel, arrow_types
 
 # ---------------------------------------------------------
 # 1. Oracle -> Python (For generating the Contract during Discovery)
@@ -34,7 +34,7 @@ def map_oracle_to_python(raw_type: str, scale: int | None = None) -> PythonTypes
         return "datetime"
         
     if raw_upper in ("BLOB", "RAW", "LONG RAW", "BFILE"):
-        return "binary"
+        return "byte"
         
     if raw_upper == "JSON":
         return "json"
@@ -130,3 +130,25 @@ def map_field_to_oracledb_input_size(field: FieldModel) -> Any:
         return getattr(oracledb, "DB_TYPE_JSON", oracledb.DB_TYPE_CLOB)
 
     return None
+
+ORACLE_TO_ARROW = {
+    "DB_TYPE_BINARY_DOUBLE": arrow_types["float64"],
+    "DB_TYPE_BINARY_FLOAT": arrow_types["float32"],
+    "DB_TYPE_BLOB": arrow_types["large_binary"],
+    "DB_TYPE_BOOLEAN": arrow_types["bool"],
+    "DB_TYPE_CHAR": arrow_types["string"],
+    "DB_TYPE_CLOB": arrow_types["large_string"],
+    "DB_TYPE_DATE": arrow_types["timestamp_ns"],
+    "DB_TYPE_LONG": arrow_types["large_string"],
+    "DB_TYPE_LONG_RAW": arrow_types["large_binary"],
+    "DB_TYPE_NCHAR": arrow_types["string"],
+    "DB_TYPE_NCLOB": arrow_types["large_string"],
+    "DB_TYPE_NUMBER": arrow_types["decimal128"],  # Default; can be int64 or float64
+    "DB_TYPE_NVARCHAR": arrow_types["string"],
+    "DB_TYPE_RAW": arrow_types["binary"],
+    "DB_TYPE_TIMESTAMP": arrow_types["timestamp_ns"],
+    "DB_TYPE_TIMESTAMP_LTZ": arrow_types["timestamp_ns"],
+    "DB_TYPE_TIMESTAMP_TZ": arrow_types["timestamp_ns"],
+    "DB_TYPE_VARCHAR": arrow_types["string"],
+    "DB_TYPE_VECTOR": arrow_types["float64"],  # Default to DOUBLE
+}

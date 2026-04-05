@@ -11,14 +11,11 @@ from typing import Any, TYPE_CHECKING, TypedDict
 import pyarrow as pa
 import pyarrow.csv as pa_csv
 
-from server.plugins.sf.SfModels import (
-    Operation, JobState, ColumnDelimiter, LineEnding,
-    ResultsType
-)
+from server.plugins.sf.models.SfModels import Operation, JobState, ColumnDelimiter, LineEnding, ResultsType
 from server.plugins.sf.utils.filter_null_bytes import filter_null_bytes
 
 if TYPE_CHECKING:
-    from server.plugins.sf.SfClient import SfClient
+    from server.plugins.sf.engines.SfClient import SfClient
 
 import logging
 logger = logging.getLogger(__name__)
@@ -51,7 +48,7 @@ def _arrow_to_csv_bytes(table: pa.Table, line_ending: LineEnding = LineEnding.LF
 
 ######################################################################
 
-class bulk2:
+class Bulk2:
     """
     Entry point for Bulk 2.0 operations.
     Usage: sf.bulk2.Contact.insert(table)

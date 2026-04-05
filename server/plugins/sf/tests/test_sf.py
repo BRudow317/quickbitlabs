@@ -13,28 +13,28 @@ import os
 import uuid
 import pytest
 import pyarrow as pa
+import polars as pl
 import pytest_asyncio
 
 # from server.plugins.sf.Sfbulk2Engine import bulk2
-from server.plugins.sf import Sfbulk2Engine
-from server.plugins.sf.SfClient import SfClient
-from server.plugins.sf.SfRestEngine import SfRest
-from server.plugins.sf.SfModels import Operation
-from server.plugins.sf.SfExceptions import SfException
-from server.plugins.sf.SfServices import (
+from server.plugins.sf.engines import Sfbulk2Engine
+from server.plugins.sf.engines.SfClient import SfClient
+from server.plugins.sf.engines.SfRestEngine import SfRest
+from server.plugins.sf.models.SfModels import Operation
+from server.plugins.sf.models.SfExceptions import SfException
+from server.plugins.sf.services.SfServices import (
     SfObjectSchema,
     SfCacheEntry,
     SfFilter,
+    iter_parquet_batches,
     sniff_schema,
     build_soql,
     fetch_first_page,
-    fetch_bulk_query_results,
     submit_bulk_ingest,
-    strip_to_writeable,
     collections_update,
     collections_delete,
     write_parquet_encrypted,
-    open_parquet_lazy,
+    stream_bulk_to_parquet,
     teardown_cache,
 )
 
@@ -64,7 +64,7 @@ async def rest(http):
 
 @pytest_asyncio.fixture(scope="module", loop_scope="module")
 async def bulk2(http):
-    return Sfbulk2Engine.bulk2(http)
+    return Sfbulk2Engine.Bulk2(http)
 
 
 # ---------------------------------------------------------------------------
@@ -241,15 +241,10 @@ async def test_collections_update_case(http):
     print(f"  collections update result: {results[0]}")
 
 
-# ---------------------------------------------------------------------------
-# Test 6 - Bulk 2.0 query + encrypted Parquet roundtrip
-# ---------------------------------------------------------------------------
-
-async def test_bulk_query_case(bulk2, tmp_path):
+async def test_bulk_query_case(bulk2):
     """
-    Run a Bulk 2.0 query for the test Case and write results to
-    an encrypted Parquet file. Verify we can decrypt and read it back
-    with Polars.
+    Stream Bulk 2.0 query results directly to an encrypted Parquet file.
+    Verify we can decrypt and iterate batches back with Polars.
     """
     schema = state["schema"]
     tag = state["test_tag"]
@@ -260,26 +255,24 @@ async def test_bulk_query_case(bulk2, tmp_path):
     )
 
     print(f"  bulk SOQL: {soql}")
-    table = await fetch_bulk_query_results(bulk2, "Case", soql, schema)
 
-    assert isinstance(table, pa.Table)
-    assert len(table) >= 1, "Bulk query returned no results for test Case"
-    print(f"  bulk query returned {len(table)} records")
-
-    # Write encrypted parquet and verify roundtrip
-    entry = write_parquet_encrypted(table, tmp_path, "Case")
+    entry = await stream_bulk_to_parquet(
+        bulk2, "Case", soql, schema
+    )
     state["cache_entry"] = entry
 
     assert entry.parquet_path.exists()
-    assert entry.record_count == len(table)
+    assert entry.record_count >= 1
+    print(f"  streamed {entry.record_count} records to {entry.parquet_path.name}")
 
-    import polars as pl
-    lf = open_parquet_lazy(entry)
-    result = lf.filter(pl.col("Subject").str.contains(tag)).collect()
+    # Verify decrypt + batch iteration
+    matched = 0
+    for batch in iter_parquet_batches(entry):
+        hits = batch.filter(pl.col("Subject").str.contains(tag))
+        matched += len(hits)
 
-    assert len(result) >= 1
-    print(f"  encrypted parquet roundtrip ok - {entry.parquet_path.name}")
-
+    assert matched >= 1, f"Tag '{tag}' not found in any batch"
+    print(f"  encrypted parquet roundtrip ok - {matched} matching records")
 
 # ---------------------------------------------------------------------------
 # Test 7 - Bulk 2.0 ingest upsert

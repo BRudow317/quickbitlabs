@@ -4,10 +4,10 @@ import csv
 import io
 from typing import Any
 
-from server.plugins.sf.SfClient import SfClient
-from server.plugins.sf.SfRestEngine import SfRest
-from server.plugins.sf.Sfbulk2Engine import SfBulk2Handler
-from server.plugins.sf.SfTypeMap import SF_TYPE_MAP, cast_record, prepare_record
+from server.plugins.sf.engines.SfClient import SfClient
+from server.plugins.sf.engines.SfRestEngine import SfRest
+from server.plugins.sf.engines.Sfbulk2Engine import SfBulk2Handler
+from server.plugins.sf.models.SfTypeMap import SF_TYPE_MAP, cast_record, prepare_record
 from server.plugins.PluginModels import EntityModel, FieldModel, CatalogModel, Records
 from server.plugins.PluginResponse import PluginResponse
 

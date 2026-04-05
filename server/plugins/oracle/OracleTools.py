@@ -1,7 +1,7 @@
 from __future__ import annotations
 from decimal import Decimal, InvalidOperation
 import re
-from typing import Iterable
+from typing import Iterable, Any
 from datetime import date, datetime
 
 

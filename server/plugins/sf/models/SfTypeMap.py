@@ -69,8 +69,8 @@ SF_FIELDDEF_TYPE_MAP: dict[str, PythonTypes] = {
     'date/time':             'datetime',
     'datetime':              'datetime',
     'time':                  'time',
-    'base64':                'binary',
-    'file':                  'binary',
+    'base64':                'byte',
+    'file':                  'byte',
     'json':                  'json',
     # Compound - filtered upstream before this map is consulted
     'address':               'json',
@@ -100,7 +100,7 @@ SF_TYPE_MAP: dict[str, PythonTypes] = {
     'date':            'date',
     'datetime':        'datetime',
     'time':            'time',
-    'base64':          'binary',
+    'base64':          'byte',
     'address':         'json',
     'location':        'json',
 }

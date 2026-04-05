@@ -5,12 +5,12 @@ from pathlib import Path
 from typing import Any, AsyncIterator
 from urllib.parse import quote_plus
 import httpx
-from server.plugins.sf.SfExceptions import SfException
-from server.plugins.sf.SfModels import SKIP_SUFFIXES, SKIP_NAMES, SF_BASE_URL, API_VERSION
+from server.plugins.sf.models.SfExceptions import SfException
+from server.plugins.sf.models.SfModels import SKIP_SUFFIXES, SKIP_NAMES, SF_BASE_URL, API_VERSION
 
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
-    from server.plugins.sf.SfClient import SfClient
+    from server.plugins.sf.engines.SfClient import SfClient
 
 import logging
 logger = logging.getLogger(__name__)

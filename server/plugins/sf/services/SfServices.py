@@ -1,34 +1,33 @@
 from __future__ import annotations
-import datetime
-import io, os
-from dataclasses import dataclass, field
+import datetime, io, base64, tempfile
 from pathlib import Path
+from dataclasses import dataclass, field
 from typing import Any
+from collections.abc import Iterator
 
 import pyarrow as pa
 import pyarrow.csv as pa_csv
 import pyarrow.ipc as pa_ipc
+import pyarrow.parquet as pq
+import pyarrow.parquet.encryption as pe
 import polars as pl
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
-from server.plugins.sf.SfModels import (
+from server.plugins.sf.models.SfModels import (
     JobState,
     Operation,
     SfFieldMeta
 )
-from server.plugins.sf.SfTypeMap import SF_TYPE_TO_ARROW
-from server.plugins.sf.Sfbulk2Engine import bulk2, DEFAULT_QUERY_PAGE_SIZE
-from server.plugins.sf.SfRestEngine import SfRest
+from server.plugins.sf.models.SfTypeMap import SF_TYPE_TO_ARROW
+from server.plugins.sf.engines.Sfbulk2Engine import Bulk2, DEFAULT_QUERY_PAGE_SIZE
+from server.plugins.sf.engines.SfRestEngine import SfRest
 
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
-    from server.plugins.sf.SfClient import SfClient
+    from server.plugins.sf.engines.SfClient import SfClient
 
 import logging
 logger = logging.getLogger(__name__)
-
-# AES-GCM nonce length - 12 bytes is the GCM standard
-_NONCE_LEN = 12
 
 # ---------------------------------------------------------------------------
 # Step 1 - Schema data structures
@@ -263,7 +262,7 @@ def _records_to_arrow(records: list[dict[str, Any]], schema: pa.Schema) -> pa.Ta
 # ---------------------------------------------------------------------------
 
 async def submit_bulk_ingest(
-    bulk2: bulk2,
+    bulk2: Bulk2,
     object_name: str,
     table: pa.Table,
     operation: Operation = Operation.upsert,
@@ -303,7 +302,7 @@ def strip_to_writeable(table: pa.Table, schema: SfObjectSchema) -> pa.Table:
 # ---------------------------------------------------------------------------
 
 async def poll_bulk_job(
-    bulk2: bulk2,
+    bulk2: Bulk2,
     job_id: str,
     is_query: bool = True,
 ) -> JobState:
@@ -321,33 +320,8 @@ async def poll_bulk_job(
     state_str: str = info.json().get("state", "")
     return JobState(state_str)
 
-# ---------------------------------------------------------------------------
-# Step 7 - Bulk result fetch → Arrow tables
-# ---------------------------------------------------------------------------
-
-async def fetch_bulk_query_results(
-    bulk2: bulk2,
-    object_name: str,
-    soql: str,
-    schema: SfObjectSchema,
-    max_records: int = DEFAULT_QUERY_PAGE_SIZE,
-) -> pa.Table:
-    """
-    Submit a Bulk 2.0 query job and collect all pages into a single Arrow table.
-    Uses the explicit schema from sniff_schema - no type inference on CSV bytes.
-    Blocks until the job completes (uses the internal wait loop).
-    """
-    sf_obj = getattr(bulk2, object_name)
-    pages: list[pa.Table] = []
-
-    async for csv_bytes in sf_obj.query(soql, max_records=max_records):
-        page = _csv_bytes_to_arrow(csv_bytes, schema.arrow_schema)
-        pages.append(page)
-
-    return pa.concat_tables(pages) if pages else pa.table({}, schema=schema.arrow_schema)
-
 async def fetch_ingest_results(
-    bulk2: bulk2,
+    bulk2: Bulk2,
     object_name: str,
     job_id: str,
     schema: SfObjectSchema,
@@ -395,40 +369,152 @@ def _csv_bytes_to_arrow_inferred(data: bytes) -> pa.Table:
         return pa.table({})
     return pa_csv.read_csv(io.BytesIO(data))
 
+
+# PME key IDs — logical names, not the key material itself
+_FOOTER_KEY_ID = "sf_footer_key"
+_COL_KEY_ID    = "sf_col_key"
+
+
 # ---------------------------------------------------------------------------
-# Step 8 - Encrypt and write to Parquet
+# PME helpers — internal
+# ---------------------------------------------------------------------------
+
+class _SessionKmsClient(pe.KmsClient):
+    """
+    In-memory KMS client backed by the session key on SfCacheEntry.
+    PyArrow PME generates DEKs internally — this wraps/unwraps them
+    using AES-GCM with our master key. Master key is zeroed on teardown.
+    """
+
+    def __init__(self, config: pe.KmsConnectionConfig) -> None:
+        super().__init__()
+        self._master_keys: dict[str, bytes] = {
+            k: base64.b64decode(v)
+            for k, v in config.custom_kms_conf.items()
+        }
+
+    def wrap_key(self, key_bytes: bytes, master_key_identifier: str) -> str:
+        master = self._master_keys[master_key_identifier]
+        nonce = bytes(AESGCM.generate_key(bit_length=96))  # 96 bits = 12 bytes, GCM standard
+        wrapped = AESGCM(master).encrypt(nonce, key_bytes, None)
+        return base64.b64encode(nonce + wrapped).decode()
+
+    def unwrap_key(self, wrapped_key: str, master_key_identifier: str) -> bytes:
+        master = self._master_keys[master_key_identifier]
+        raw = base64.b64decode(wrapped_key)
+        nonce, ciphertext = raw[:12], raw[12:]
+        return AESGCM(master).decrypt(nonce, ciphertext, None)
+
+
+def _kms_config(key: bytes) -> pe.KmsConnectionConfig:
+    b64 = base64.b64encode(key).decode()
+    return pe.KmsConnectionConfig(
+        custom_kms_conf={_FOOTER_KEY_ID: b64, _COL_KEY_ID: b64}
+    )
+
+
+def _crypto_factory() -> pe.CryptoFactory:
+    return pe.CryptoFactory(lambda kms_conn, _: _SessionKmsClient(kms_conn))
+
+
+def _encryption_props(key: bytes, schema: pa.Schema):
+    return _crypto_factory().file_encryption_properties(
+        _kms_config(key),
+        pe.EncryptionConfiguration(
+            footer_key=_FOOTER_KEY_ID,
+            column_keys={_COL_KEY_ID: [f.name for f in schema]},
+            encryption_algorithm="AES_GCM_V1",
+            plaintext_footer=False,
+        ),
+    )
+
+
+def _decryption_props(key: bytes):
+    return _crypto_factory().file_decryption_properties(_kms_config(key))
+
+
+# ---------------------------------------------------------------------------
+# Step 6+7+8 combined — Bulk query streamed directly to encrypted Parquet
+# ---------------------------------------------------------------------------
+
+async def stream_bulk_to_parquet(
+    bulk2: Bulk2,
+    object_name: str,
+    soql: str,
+    schema: SfObjectSchema,
+    max_records: int = DEFAULT_QUERY_PAGE_SIZE,
+) -> SfCacheEntry:
+    """
+    Stream Bulk 2.0 query results directly to an encrypted Parquet file.
+    Each CSV chunk from SF is parsed to Arrow and written as one row group.
+    Only one chunk is in memory at a time — no page accumulation.
+
+    Replaces: fetch_bulk_query_results + write_parquet_encrypted
+    """
+    key = bytearray(AESGCM.generate_key(bit_length=256))
+    tmp = tempfile.NamedTemporaryFile(suffix=".parquet", delete=False)
+    file_path = Path(tmp.name)
+    tmp.close()
+
+    enc_props = _encryption_props(bytes(key), schema.arrow_schema)
+    writer = pq.ParquetWriter(
+        str(file_path),
+        schema.arrow_schema,
+        encryption_properties=enc_props,
+        compression="snappy",
+    )
+
+    record_count = 0
+    sf_obj = getattr(bulk2, object_name)
+
+    try:
+        async for csv_bytes in sf_obj.query(soql, max_records=max_records):
+            chunk = _csv_bytes_to_arrow(csv_bytes, schema.arrow_schema)
+            writer.write_table(chunk)
+            record_count += len(chunk)
+            del chunk  # release immediately — next chunk reuses the slot
+    finally:
+        writer.close()  # always close even if the async loop throws
+
+    return SfCacheEntry(
+        object_name=object_name,
+        parquet_path=file_path,
+        record_count=record_count,
+        created_at=datetime.datetime.now(),
+        _key=key,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Step 8 — Write a REST result table to encrypted Parquet
 # ---------------------------------------------------------------------------
 
 def write_parquet_encrypted(
     table: pa.Table,
-    dir_path: Path,
     object_name: str,
 ) -> SfCacheEntry:
     """
-    Serialize an Arrow table to Parquet bytes in memory,
-    encrypt with AES-256-GCM, write to a temp file in dir_path.
+    Write a single Arrow table (e.g. a REST first-page result) to encrypted Parquet.
+    Uses PME — encrypts row groups as they're written, no double-buffer in memory.
 
-    The encryption key lives on the returned SfCacheEntry.
-    The nonce is prepended to the ciphertext in the file.
-    No unencrypted bytes touch disk.
-
-    Call teardown_cache(entry) to zero the key and unlink the file.
+    For bulk results use stream_bulk_to_parquet instead.
     """
-    # Serialize to Parquet bytes in memory
-    buf = io.BytesIO()
-    import pyarrow.parquet as pq
-    pq.write_table(table, buf, compression="snappy")
-    parquet_bytes = buf.getvalue()
+    key = bytearray(AESGCM.generate_key(bit_length=256))
+    tmp = tempfile.NamedTemporaryFile(suffix=".parquet", delete=False)
+    file_path = Path(tmp.name)
+    tmp.close()
 
-    # Encrypt
-    key = bytearray(os.urandom(32))             # AES-256
-    nonce = os.urandom(_NONCE_LEN)
-    aesgcm = AESGCM(bytes(key))
-    ciphertext = aesgcm.encrypt(nonce, parquet_bytes, None)
-
-    # Write nonce + ciphertext
-    file_path = dir_path / f"sf_{object_name}_{datetime.datetime.now().strftime('%Y%m%d%H%M%S%f')}.enc"
-    file_path.write_bytes(nonce + ciphertext)
+    enc_props = _encryption_props(bytes(key), table.schema)
+    writer = pq.ParquetWriter(
+        str(file_path),
+        table.schema,
+        encryption_properties=enc_props,
+        compression="snappy",
+    )
+    try:
+        writer.write_table(table)
+    finally:
+        writer.close()
 
     return SfCacheEntry(
         object_name=object_name,
@@ -439,45 +525,51 @@ def write_parquet_encrypted(
     )
 
 
+# ---------------------------------------------------------------------------
+# Step 9 — Stream decrypted Parquet as Polars DataFrames
+# ---------------------------------------------------------------------------
 
-# Step 9 - Decrypt and scan with Polars
-
-def open_parquet_lazy(entry: SfCacheEntry) -> pl.LazyFrame:
+def iter_parquet_batches(
+    entry: SfCacheEntry,
+    batch_size: int = 100_000,
+) -> Iterator[pl.DataFrame]:
     """
-    Decrypt the cached Parquet file into a memory buffer and return
-    a Polars LazyFrame. The decrypted bytes never touch disk.
+    Stream an encrypted Parquet file as Polars DataFrames, one row group at a time.
+    Only one batch is decrypted and held in memory at any point.
 
-    The LazyFrame holds a reference to the in-memory buffer - collect()
-    or streaming operations read from it. The buffer is released when
-    the LazyFrame goes out of scope.
+    Replaces: open_parquet_lazy
+    The caller processes each batch and discards it before the next arrives.
+
+    Example:
+        for batch in iter_parquet_batches(entry):
+            result = batch.filter(pl.col("Status") == "Open")
+            # process result, then batch goes out of scope
     """
-    raw = entry.parquet_path.read_bytes()
-    nonce, ciphertext = raw[:_NONCE_LEN], raw[_NONCE_LEN:]
-    aesgcm = AESGCM(bytes(entry._key))
-    parquet_bytes = aesgcm.decrypt(nonce, ciphertext, None)
-
-    buf = io.BytesIO(parquet_bytes)
-    # Read into Polars via PyArrow buffer - streaming=True defers materialization
-    return pl.read_parquet(buf).lazy()
+    dec_props = _decryption_props(bytes(entry._key))
+    pf = pq.ParquetFile(
+        str(entry.parquet_path),
+        decryption_properties=dec_props,
+    )
+    for record_batch in pf.iter_batches(batch_size=batch_size):
+        pldf = pl.from_arrow(record_batch)
+        if isinstance(pldf, pl.DataFrame):
+            yield pldf
 
 
 def open_parquet_arrow(entry: SfCacheEntry) -> pa.Table:
     """
-    Decrypt and return as a PyArrow table.
-    Use when you need Arrow interop rather than Polars.
+    Read the full encrypted Parquet file into an Arrow table.
+    Use only when you need the full dataset and have confirmed it fits in memory.
+    For large files use iter_parquet_batches instead.
     """
-    raw = entry.parquet_path.read_bytes()
-    nonce, ciphertext = raw[:_NONCE_LEN], raw[_NONCE_LEN:]
-    aesgcm = AESGCM(bytes(entry._key))
-    parquet_bytes = aesgcm.decrypt(nonce, ciphertext, None)
-
-    import pyarrow.parquet as pq
-    return pq.read_table(io.BytesIO(parquet_bytes))
-
+    dec_props = _decryption_props(bytes(entry._key))
+    return pq.read_table(
+        str(entry.parquet_path),
+        decryption_properties=dec_props,
+    )
 
 
 # Step 10 - CRUD write-back via sObject Collections API
-
 async def collections_update(
     http: SfClient,
     object_name: str,
@@ -556,12 +648,11 @@ async def collections_delete(
         "DELETE",
         "composite/sobjects",
         params={
-            "ids":       ",".join(ids),
+            "ids": ",".join(ids),
             "allOrNone": str(all_or_none).lower(),
         },
     )
     return response.json()
-
 
 # Step 12 - Teardown
 

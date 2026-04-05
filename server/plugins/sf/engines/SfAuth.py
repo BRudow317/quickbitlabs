@@ -1,7 +1,7 @@
 from __future__ import annotations
 import os, logging
 import httpx
-from server.plugins.sf.SfExceptions import SfException
+from server.plugins.sf.models.SfExceptions import SfException
 
 logger = logging.getLogger(__name__)
 SF_AUTH_URI: str = os.getenv('SF_AUTH_URI', '/services/oauth2/token')

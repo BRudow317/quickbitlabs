@@ -1,13 +1,20 @@
 from __future__ import annotations
-from pydantic import BaseModel, PrivateAttr, Field
+from pydantic import BaseModel, Field
 from typing import Literal, Any
-from collections.abc import Iterable
-from polars import DataFrame
+from collections.abc import Iterable, Iterator
+import polars
 import pyarrow as pa
 
-# universal data formats
+
+
+
+# Universal data formats
+# Pure Python Generator of dict records, the most basic and interoperable format, but not memory efficient for large datasets
 Records = Iterable[dict[str, Any]]
-PolarsDataFrame = DataFrame
+# The universal boundary for raw data leaving an extractor When a plugin extracts data from a REST API, it should buffer those JSONs internally, convert them to a pa.RecordBatch, and yield that batch. When a plugin extracts data from a database, it should convert the raw rows to a pa.RecordBatch and yield that batch. The transform service can then consume these batches, apply any requested transformations, and pass along to the loader, which can also consume pa.RecordBatches for maximum efficiency.
+ArrowStream = pa.RecordBatchReader | Iterator[pa.RecordBatch]
+# The universal boundary for transformed data
+PolarsLazyFrame = polars.LazyFrame
 
 # python types
 PythonTypes = Literal[
@@ -18,7 +25,8 @@ PythonTypes = Literal[
     "datetime", # datetime.datetime # timezone format
     "date",     # datetime.date
     "time",     # datetime.time
-    "binary",   # bytes or bytearray
+    "byte",
+    "bytearray",
     "json",     # dict or list
 ]
 
@@ -104,6 +112,10 @@ class EntityModel(BaseModel):
     target_name: str | None = None
     fields: list[FieldModel] = Field(default_factory=list)
     source_description: str | None = None
+    file_path: str | None = None
+    encryption_key_id: str | None = None  # Reference to KMS, never the actual key
+    chunk_size: int = 50_000              # For PyArrow iter_batches() to Polars
+    compression: Literal["snappy", "zstd", "lz4"] = "zstd"
 
     @property
     def primary_key_fields(self) -> list[FieldModel]:
@@ -112,12 +124,32 @@ class EntityModel(BaseModel):
     @property
     def field_map(self) -> dict[str, FieldModel]:
         return {f.source_name: f for f in self.fields}
+    
+    def to_arrow_schema(self) -> pa.Schema:
+        """Generates a strict PyArrow schema from the Pydantic metadata."""
+        arrow_fields = []
+        for f in self.fields:
+            if not f.arrow_type:
+                raise ValueError(f"Field {f.source_name} lacks an arrow_type_id")
+            
+            arrow_fields.append(
+                pa.field(f.source_name, f.arrow_type, nullable=f.nullable)
+            )
+        return pa.schema(arrow_fields)
+
+    def to_polars_schema_dict(self) -> dict:
+        """Optional dict methods. (Polars can also just accept the PyArrow schema directly via pl.from_arrow)."""
+        return {
+            f.source_name: polars.from_arrow(f.arrow_type) 
+            for f in self.fields if f.arrow_type
+        }
 
 class FieldModel(BaseModel):
     source_name: str
     python_type: PythonTypes | None = None
-    arrow_type: pa.DataType | None = None
-    raw_type: str | None = None
+    arrow_type_id: str | None = None
+    source_raw_type: str | None = None
+    source_arrow_type: str | None = None
     primary_key: bool = False
     unique: bool = False
     is_foreign_key: bool = False
@@ -135,6 +167,26 @@ class FieldModel(BaseModel):
     enum_values: list[Any] = Field(default_factory=list)
     timezone: str | None = None
     target_name: str | None = None
+    target_raw_type: str | None = None
+    target_arrow_type: str | None = None
+    target_null_value: Any | None = None
+    @property
+    def arrow_type(self) -> pa.DataType | None:
+        """Dynamically build the C++ object, accounting for parameterized types."""
+        if not self.arrow_type_id:
+            return None
+            
+        # Handle parameterized types dynamically
+        if self.arrow_type_id.startswith("decimal"):
+            p = self.precision if self.precision is not None else 38
+            s = self.scale if self.scale is not None else 9
+            return pa.decimal128(p, s)
+            
+        if self.arrow_type_id.startswith("timestamp"):
+            unit = self.arrow_type_id.split("_")[1]
+            return pa.timestamp(unit, tz=self.timezone)
+            
+        return arrow_types.get(self.arrow_type_id)
 
 
 
@@ -168,7 +220,7 @@ class NativeQuery(BaseModel):
 class QueryModel(BaseModel):
     """The universal JSON representation of a data request."""
     entities: list[str] = Field(default_factory=list)         
-    fields: list[str] = Field(default_factory=list)            
+    fields: list[str] = Field(default_factory=list)
     
     # Replaces the flat list to support AND/OR/NOT nesting
     filter_group: FilterGroup | None = None 

@@ -7,8 +7,8 @@ from collections.abc import MutableMapping
 
 import httpx
 
-from server.plugins.sf.SfAuth import fetch_client_credentials, SalesforceAuthError
-from server.plugins.sf.SfModels import API_VERSION, SF_BASE_URL, Usage, PerAppUsage
+from server.plugins.sf.engines.SfAuth import fetch_client_credentials, SalesforceAuthError
+from server.plugins.sf.models.SfModels import API_VERSION, SF_BASE_URL, Usage, PerAppUsage
 
 import logging
 logger = logging.getLogger(__name__)
