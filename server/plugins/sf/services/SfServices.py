@@ -1,5 +1,5 @@
 from __future__ import annotations
-import datetime, io, base64, tempfile
+import datetime, io, base64, tempfile, os
 from pathlib import Path
 from dataclasses import dataclass, field
 from typing import Any
@@ -7,7 +7,6 @@ from collections.abc import Iterator
 
 import pyarrow as pa
 import pyarrow.csv as pa_csv
-import pyarrow.ipc as pa_ipc
 import pyarrow.parquet as pq
 import pyarrow.parquet.encryption as pe
 import polars as pl
@@ -19,7 +18,7 @@ from server.plugins.sf.models.SfModels import (
     SfFieldMeta
 )
 from server.plugins.sf.models.SfTypeMap import SF_TYPE_TO_ARROW
-from server.plugins.sf.engines.Sfbulk2Engine import Bulk2, DEFAULT_QUERY_PAGE_SIZE
+from server.plugins.sf.engines.SfBulk2Engine import Bulk2, DEFAULT_QUERY_PAGE_SIZE
 from server.plugins.sf.engines.SfRestEngine import SfRest
 
 from typing import TYPE_CHECKING
@@ -60,10 +59,6 @@ class SfCacheEntry:
     record_count: int
     created_at: datetime.datetime
     _key: bytearray = field(repr=False)           # AES-256 key - 32 bytes
-
-# ---------------------------------------------------------------------------
-# Step 1 - Schema sniff
-# ---------------------------------------------------------------------------
 
 async def sniff_schema(rest: SfRest, object_name: str) -> SfObjectSchema:
     """
@@ -240,8 +235,9 @@ async def fetch_next_page(
 def _records_to_arrow(records: list[dict[str, Any]], schema: pa.Schema) -> pa.Table:
     """
     Convert SF REST JSON records to Arrow column by column.
-    Extracts each field as a Python list once per column, not once per row.
-    Cast happens at the Arrow array level — no row-by-row Python type checking.
+    PyArrow infers the type from raw JSON values per column,
+    then casts to the declared schema type at the C layer.
+    No Python touches individual rows.
     """
     if not records:
         return pa.table(
@@ -249,11 +245,11 @@ def _records_to_arrow(records: list[dict[str, Any]], schema: pa.Schema) -> pa.Ta
             schema=schema,
         )
 
-    # Strip SF metadata field in one pass
     columns = {}
-    for field in schema:
-        raw_col = [r.get(field.name) for r in records]
-        columns[field.name] = pa.array(raw_col, type=field.type, safe=False)
+    for f in schema:
+        raw_col = [r.get(f.name) for r in records]
+        inferred = pa.array(raw_col)
+        columns[f.name] = inferred.cast(f.type, safe=False) if inferred.type != f.type else inferred
 
     return pa.table(columns, schema=schema)
 
@@ -395,7 +391,7 @@ class _SessionKmsClient(pe.KmsClient):
 
     def wrap_key(self, key_bytes: bytes, master_key_identifier: str) -> str:
         master = self._master_keys[master_key_identifier]
-        nonce = bytes(AESGCM.generate_key(bit_length=96))  # 96 bits = 12 bytes, GCM standard
+        nonce = os.urandom(12)
         wrapped = AESGCM(master).encrypt(nonce, key_bytes, None)
         return base64.b64encode(nonce + wrapped).decode()
 
@@ -414,7 +410,7 @@ def _kms_config(key: bytes) -> pe.KmsConnectionConfig:
 
 
 def _crypto_factory() -> pe.CryptoFactory:
-    return pe.CryptoFactory(lambda kms_conn, _: _SessionKmsClient(kms_conn))
+    return pe.CryptoFactory(lambda kms_conn: _SessionKmsClient(kms_conn))
 
 
 def _encryption_props(key: bytes, schema: pa.Schema):
@@ -444,22 +440,22 @@ async def stream_bulk_to_parquet(
     schema: SfObjectSchema,
     max_records: int = DEFAULT_QUERY_PAGE_SIZE,
 ) -> SfCacheEntry:
-    """
-    Stream Bulk 2.0 query results directly to an encrypted Parquet file.
-    Each CSV chunk from SF is parsed to Arrow and written as one row group.
-    Only one chunk is in memory at a time — no page accumulation.
-
-    Replaces: fetch_bulk_query_results + write_parquet_encrypted
-    """
     key = bytearray(AESGCM.generate_key(bit_length=256))
     tmp = tempfile.NamedTemporaryFile(suffix=".parquet", delete=False)
     file_path = Path(tmp.name)
     tmp.close()
 
-    enc_props = _encryption_props(bytes(key), schema.arrow_schema)
+    # Normalize to all-nullable — CSV reader always produces nullable arrays
+    # regardless of SF nillable flag. Writer schema must match chunk schema.
+    nullable_schema = pa.schema([
+        pa.field(f.name, f.type, nullable=True)
+        for f in schema.arrow_schema
+    ])
+
+    enc_props = _encryption_props(bytes(key), nullable_schema)
     writer = pq.ParquetWriter(
         str(file_path),
-        schema.arrow_schema,
+        nullable_schema,
         encryption_properties=enc_props,
         compression="snappy",
     )
@@ -469,12 +465,12 @@ async def stream_bulk_to_parquet(
 
     try:
         async for csv_bytes in sf_obj.query(soql, max_records=max_records):
-            chunk = _csv_bytes_to_arrow(csv_bytes, schema.arrow_schema)
+            chunk = _csv_bytes_to_arrow(csv_bytes, nullable_schema)
             writer.write_table(chunk)
             record_count += len(chunk)
-            del chunk  # release immediately — next chunk reuses the slot
+            del chunk
     finally:
-        writer.close()  # always close even if the async loop throws
+        writer.close()
 
     return SfCacheEntry(
         object_name=object_name,

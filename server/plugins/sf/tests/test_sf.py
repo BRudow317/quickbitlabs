@@ -17,7 +17,7 @@ import polars as pl
 import pytest_asyncio
 
 # from server.plugins.sf.Sfbulk2Engine import bulk2
-from server.plugins.sf.engines import Sfbulk2Engine
+from server.plugins.sf.engines import SfBulk2Engine
 from server.plugins.sf.engines.SfClient import SfClient
 from server.plugins.sf.engines.SfRestEngine import SfRest
 from server.plugins.sf.models.SfModels import Operation
@@ -64,7 +64,7 @@ async def rest(http):
 
 @pytest_asyncio.fixture(scope="module", loop_scope="module")
 async def bulk2(http):
-    return Sfbulk2Engine.Bulk2(http)
+    return SfBulk2Engine.Bulk2(http)
 
 
 # ---------------------------------------------------------------------------

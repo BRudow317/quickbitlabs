@@ -6,19 +6,23 @@ Q:/quickbitlabs/server/
 ├── auth/
 ├── configs/
 │   ├── __init__.py
+│   ├── db.py
 │   └── settings.py
 ├── core/
 │   ├── jwt.py
 │   └── security.py
 ├── engine/
 ├── models/
+│   ├── AuthModels.py
 │   ├── lead.py
 │   └── user.py
 ├── plugins/
 │   ├── lambdalith/
 │   ├── oracle/
 │   │   ├── __init__.py
+│   │   ├── arrow_array.py
 │   │   ├── Oracle.py
+│   │   ├── OracleArrowFrame.py
 │   │   ├── OracleClient.py
 │   │   ├── OracleDialect.py
 │   │   ├── OracleEngine.py
@@ -40,12 +44,28 @@ Q:/quickbitlabs/server/
 │   │   │   └── list_from_generator.py
 │   │   ├── base.py
 │   │   ├── Csv.py
+│   │   └── plan.md
 │   ├── scratch/
+│   │   └── README.md
 │   ├── sf/
+│   │   ├── docs/
+│   │   │   ├── .gitignore
+│   │   │   ├── plan_2.md
+│   │   │   └── plan.md
+│   │   ├── engines/
+│   │   │   ├── SfAuth.py
+│   │   │   ├── SfBulk2Engine.py
+│   │   │   ├── SfClient.py
+│   │   │   ├── SfRestEngine.py
+│   │   │   └── SfToolingEngine.py
+│   │   ├── models/
+│   │   │   ├── SfExceptions.py
+│   │   │   ├── SfModels.py
+│   │   │   ├── SfQueryBook.py
+│   │   │   └── SfTypeMap.py
 │   │   ├── services/
-│   │   │   ├── __init__.py
-│   │   │   ├── bulk2.py
-│   │   │   └── rest.py
+│   │   │   ├── parquet.py
+│   │   │   └── SfServices.py
 │   │   ├── tests/
 │   │   ├── utils/
 │   │   │   ├── __init__.py
@@ -53,14 +73,10 @@ Q:/quickbitlabs/server/
 │   │   │   ├── date_to_iso8601.py
 │   │   │   ├── filter_null_bytes.py
 │   │   │   ├── list_from_generator.py
-│   │   │   ├── soql_utils.py
-│   │   │   └── type_converter.py
+│   │   │   └── soql_utils.py
 │   │   ├── __init__.py
-│   │   ├── auth.py
-│   │   ├── HttpClient.py
-│   │   ├── models.py
-│   │   ├── repl.py
-│   │   └── SalesforceConnector.py
+│   │   ├── ReadMe Sf Plugin.md
+│   │   └── SfPlugin.py
 │   ├── utils/
 │   │   ├── date_to_iso8601.py
 │   │   ├── filter_null_bytes.py
@@ -82,6 +98,10 @@ Q:/quickbitlabs/server/
 │   ├── helpers.py
 │   └── logger.py
 ├── __init__.py
+├── plan.md
+├── ProjectTree.md
 ├── README.md
 ├── RULES.md
-└── start_server.py
+├── start_server.py
+├── test_migration_oracle.py
+└── test_migration.py

@@ -19,7 +19,7 @@ from server.plugins.sf.models.SfModels import (
     SfFieldMeta
 )
 from server.plugins.sf.models.SfTypeMap import SF_TYPE_TO_ARROW
-from server.plugins.sf.engines.Sfbulk2Engine import Bulk2, DEFAULT_QUERY_PAGE_SIZE
+from server.plugins.sf.engines.SfBulk2Engine import Bulk2, DEFAULT_QUERY_PAGE_SIZE
 from server.plugins.sf.engines.SfRestEngine import SfRest
 
 from typing import TYPE_CHECKING
