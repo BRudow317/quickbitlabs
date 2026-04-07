@@ -123,92 +123,7 @@ class Entity(BaseModel):
     def column_map(self) -> dict[str, Column]:
         return {f.name: f for f in self.columns}
 
-class Catalog(BaseModel):
 
-    name: str | None = None
-    qualified_name: str | None = None
-    entities: list[Entity] = Field(default_factory=list)
-    filter_groups: list[FilterGroup] = Field(default_factory=list)
-    joins: list[Join] = Field(default_factory=list)
-    sort_fields: list[Sort] = Field(default_factory=list)
-    limit: int | None = None
-    properties: dict[str, Any] = Field(default_factory=dict)
-
-    @property
-    def entity_map(self) -> dict[str, Entity]:
-        return {e.name: e for e in self.entities}
-    
-    @property
-    def _base_arrow_schema(self) -> pa.Schema:
-        nullable_entities: set[str] = set()
-        for j in self.joins:
-            if j.join_type in ("LEFT", "OUTER"):
-                nullable_entities.add(j.right_entity.name)
-            if j.join_type in ("RIGHT", "OUTER"):
-                nullable_entities.add(j.left_entity.name)
-
-        arrow_fields = []
-        for entity in self.entities:
-            for column in entity.columns:
-                arrow_type = column.arrow_type
-                if not arrow_type:
-                    continue
-
-                final_nullable = (
-                    column.is_nullable or 
-                    (entity.name in nullable_entities)
-                )
-
-                arrow_fields.append(
-                    pa.field(f"{entity.name}_{column.name}", arrow_type, nullable=final_nullable)
-                )
-        return pa.schema(arrow_fields)
-    
-    @property
-    def _arrow_schema(self) -> pa.Schema:
-        """
-        Returns the final PyArrow schema, embedding the entire Catalog 
-        context into the schema's metadata for downstream consumers.
-        """
-        base_schema = self._base_arrow_schema
-        
-        catalog_json = self.model_dump_json(exclude_none=False)
-        
-        encoded_catalog = {
-            b"catalog": catalog_json.encode('utf-8')
-        }
-        
-        existing_meta = base_schema.metadata or {}
-        merged_meta = {**existing_meta, **encoded_catalog}
-        
-        return base_schema.with_metadata(merged_meta)
-    
-    def get_arrow_reader(self, records: Records, schema: pa.Schema | None = None, chunk_size: int = 50_000) -> ArrowStream:
-        """Converts an iterator of dict records into a streaming ArrowStream,
-        chunked into RecordBatches of up to chunk_size rows at a time.
-        """
-        if schema is None: schema = self._arrow_schema
-        if schema is None or schema.is_empty: return pa.RecordBatchReader.from_batches(pa.schema([]), iter([]))
-
-        def batch_generator() -> Iterator[pa.RecordBatch]:
-            row_count = 0
-            field_map: dict[str, list[Any]] = {field_name: [] for field_name in schema.names}
-
-            for row in records:
-                for field_name in schema.names:
-                    field_map[field_name].append(row.get(field_name))
-                row_count += 1
-
-                if row_count == chunk_size:
-                    yield pa.record_batch([field_map[f] for f in schema.names], schema=schema)
-                    field_map = {field_name: [] for field_name in schema.names}
-                    row_count = 0
-
-            if row_count > 0:
-                yield pa.record_batch([field_map[f] for f in schema.names], schema=schema)
-
-        return pa.RecordBatchReader.from_batches(schema, batch_generator())
-    
 class Sort(BaseModel):
     entity: Entity
     column: Column
@@ -228,10 +143,62 @@ class Filter(BaseModel):
 
 class FilterGroup(BaseModel):
     condition: Literal["AND", "OR", "NOT"]
-    filters: list[Filter | FilterGroup]
+    filters: list[Filter | FilterGroup] = Field(default_factory=list)
 
-# ArrowIterator: TypeAlias = Iterator[pa.RecordBatch]
-# pa.RecordBatchReader.from_batches()
+class Catalog(BaseModel):
+    name: str | None = None
+    qualified_name: str | None = None
+    entities: list[Entity] = Field(default_factory=list)
+    filter_groups: list[FilterGroup] = Field(default_factory=list)
+    joins: list[Join] = Field(default_factory=list)
+    sort_fields: list[Sort] = Field(default_factory=list)
+    limit: int | None = None
+    properties: dict[str, Any] = Field(default_factory=dict)
+
+    @property
+    def entity_map(self) -> dict[str, Entity]:
+        return {e.name: e for e in self.entities}
+    
+# Catalog.model_rebuild()
+
+def arrow_stream(catalog: Catalog, records: Records, chunk_size: int = 50_000) -> ArrowStream:
+    nullable_entities: set[str] = set()
+    for j in catalog.joins:
+        if j.join_type in ("LEFT", "OUTER"):
+            nullable_entities.add(j.right_entity.name)
+        if j.join_type in ("RIGHT", "OUTER"):
+            nullable_entities.add(j.left_entity.name)
+
+    arrow_fields = []
+    for entity in catalog.entities:
+        for column in entity.columns:
+            arrow_type = column.arrow_type
+            if not arrow_type: continue
+            final_nullable = column.is_nullable or (entity.name in nullable_entities)
+            arrow_fields.append(pa.field(f"{entity.name}_{column.name}", arrow_type, nullable=final_nullable))
+
+    schema = pa.schema(arrow_fields).with_metadata({b"catalog": catalog.model_dump_json(exclude_none=False).encode()})
+
+    if schema.empty:
+        return pa.RecordBatchReader.from_batches(pa.schema([]), iter([]))
+
+    def batch_generator() -> Iterator[pa.RecordBatch]:
+        row_count = 0
+        field_map: dict[str, list[Any]] = {name: [] for name in schema.names}
+        for row in records:
+            for name in schema.names:
+                field_map[name].append(row.get(name))
+            row_count += 1
+            if row_count == chunk_size:
+                yield pa.record_batch([field_map[f] for f in schema.names], schema=schema)
+                field_map = {name: [] for name in schema.names}
+                row_count = 0
+        if row_count > 0:
+            yield pa.record_batch([field_map[f] for f in schema.names], schema=schema)
+
+    return pa.RecordBatchReader.from_batches(schema, batch_generator())
+
+
 catalog_doc_string =     """
     Catalog is the top-level wrapper. It may be called schema, namespace, database, etc. in different systems, 
     but the concept is the same: a container for entities/objects/tables sharing the same namespace.

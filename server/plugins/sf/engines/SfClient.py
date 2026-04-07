@@ -61,9 +61,6 @@ class SfClient:
         """
         Async factory - use this instead of calling SfClient() directly.
         Handles auth before constructing the client.
-
-        Dev: pass access_token directly from SF CLI token.
-        Prod: leave access_token=None and let client credentials flow run.
         """
         resolved_url = base_url or SF_BASE_URL
         if not resolved_url:

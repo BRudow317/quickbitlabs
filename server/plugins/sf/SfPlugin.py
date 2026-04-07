@@ -4,11 +4,12 @@ import csv
 import io
 from typing import Any
 
+from server.plugins.PluginProtocol import Plugin
 from server.plugins.sf.engines.SfClient import SfClient
 from server.plugins.sf.engines.SfRestEngine import SfRest
 from server.plugins.sf.engines.SfBulk2Engine import Bulk2
 from server.plugins.sf.models.SfTypeMap import SF_TYPE_MAP, cast_record, prepare_record
-from server.plugins.PluginModels import ArrowStream, EntityModel, FieldModel, CatalogModel, Records
+from server.plugins.PluginModels import ArrowStream, Entity, Column, Catalog, Records
 from server.plugins.PluginResponse import PluginResponse
 
 import logging
@@ -20,7 +21,7 @@ class SfPlugin:
     Facade Interface for higher level Salesforce operations.
     """
     client: SfClient
-    catalog: CatalogModel
+    catalog: Catalog
     _rest: SfRest | None = None
     _bulk2: Bulk2 | None = None
 
@@ -29,14 +30,15 @@ class SfPlugin:
         consumer_key: str | None = None,
         consumer_secret: str | None = None,
         org_url: str | None = None,
-        catalog: CatalogModel | None = None,
+        catalog: Catalog | None = None,
     ):
-        self.client = SfClient.create(
+        client: SfClient = SfClient.create(
             consumer_key=consumer_key,
             consumer_secret=consumer_secret,
             base_url=org_url,
         )
-        self.catalog = catalog if catalog is not None else CatalogModel(name='salesforce')
+
+        self.catalog = catalog if catalog is not None else Catalog(name='salesforce')
 
     @property
     def rest(self) -> SfRest:
@@ -79,9 +81,9 @@ class SfPlugin:
 # ============================ METADATA ============================
     
     # CATALOG
-    def get_catalog(self, catalog: CatalogModel | str | None = None, **kwargs: Any) -> PluginResponse[CatalogModel]:
+    def get_catalog(self, catalog: Catalog | str | None = None, **kwargs: Any) -> PluginResponse[Catalog]:
         """
-        Describe Salesforce objects and return a populated CatalogModel.
+        Describe Salesforce objects and return a populated Catalog.
 
         Uses the REST describe API throughout: global describe to discover migratable
         objects, then one individual sobject describe per object for field metadata.
@@ -90,12 +92,12 @@ class SfPlugin:
         Specific records: one individual describe per named object.
         """
         try:
-            if isinstance(catalog, CatalogModel):
+            if isinstance(catalog, Catalog):
                 records = [t.name for t in catalog.entities]
                 target = catalog
             else:
                 records = kwargs.get('records')
-                target = CatalogModel(name=catalog or 'salesforce')
+                target = Catalog(name=catalog or 'salesforce')
 
             if records is None:
                 records = [obj['name'] for obj in self.rest.describe_migratable()]
@@ -114,14 +116,14 @@ class SfPlugin:
         except Exception as e:
             return PluginResponse.error(str(e))
 
-    def create_catalog(self, catalog: CatalogModel, **kwargs: Any) -> PluginResponse[CatalogModel]:
+    def create_catalog(self, catalog: Catalog, **kwargs: Any) -> PluginResponse[Catalog]:
         return PluginResponse.not_implemented("Salesforce does not support catalog creation via API")
 
-    def update_catalog(self, catalog: CatalogModel, **kwargs: Any) -> PluginResponse[CatalogModel]:
+    def update_catalog(self, catalog: Catalog, **kwargs: Any) -> PluginResponse[Catalog]:
         return PluginResponse.not_implemented("Salesforce does not support catalog modification via API")
 
-    def upsert_catalog(self, catalog: CatalogModel, **kwargs: Any) -> PluginResponse[CatalogModel]:
-        """SF as target: stamp target_* fields on the passed CatalogModel."""
+    def upsert_catalog(self, catalog: Catalog, **kwargs: Any) -> PluginResponse[Catalog]:
+        """SF as target: stamp target_* fields on the passed Catalog."""
         try:
             for entity in catalog.entities:
                 pass
@@ -129,20 +131,20 @@ class SfPlugin:
         except Exception as e:
             return PluginResponse.error(str(e))
 
-    def delete_catalog(self, catalog: CatalogModel | str, **kwargs: Any) -> PluginResponse[CatalogModel]:
+    def delete_catalog(self, catalog: Catalog | str, **kwargs: Any) -> PluginResponse[Catalog]:
         return PluginResponse.not_implemented("Salesforce does not support catalog deletion via API")
 
     
     # TABLE
-    def get_table(self, catalog: CatalogModel, entity: EntityModel, **kwargs: Any) -> PluginResponse[EntityModel]:
-        """Describe a Salesforce object into a EntityModel (cached on self.catalog).
+    def get_table(self, catalog: Catalog, entity: Entity, **kwargs: Any) -> PluginResponse[Entity]:
+        """Describe a Salesforce object into a Entity (cached on self.catalog).
 
-        If a EntityModel is passed, its name drives the describe call and its
+        If a Entity is passed, its name drives the describe call and its
         fields are populated in-place before returning it.
         """
         try:
-            incoming = entity if isinstance(entity, EntityModel) else None
-            name = entity.name if isinstance(entity, EntityModel) else entity
+            incoming = entity if isinstance(entity, Entity) else None
+            name = entity.name if isinstance(entity, Entity) else entity
 
             if name not in self.catalog.entity_map:
                 describe = getattr(self.rest, name).describe()
@@ -153,7 +155,7 @@ class SfPlugin:
                         logger.debug(f"Skipping compound field {f['name']} ({sf_type}) on {name}")
                         continue
                     pv = f.get('picklistValues') or []
-                    fields.append(FieldModel(
+                    fields.append(Column(
                         name=f['name'],
                         raw_type=sf_type,
                         primary_key=(f['name'] == 'Id'),
@@ -166,7 +168,7 @@ class SfPlugin:
                         default_value=f.get('defaultValue'),
                         enum_values=[v['value'] for v in pv if v.get('active')] or None,
                     ))
-                t = EntityModel(name=name, fields=fields)
+                t = Entity(name=name, fields=fields)
                 self.catalog.entities.append(t)
                 t._catalog = self.catalog
 
@@ -178,33 +180,33 @@ class SfPlugin:
         except Exception as e:
             return PluginResponse.error(str(e))
 
-    def create_entity(self, catalog: CatalogModel, entity: EntityModel, **kwargs: Any) -> PluginResponse[EntityModel]:
+    def create_entity(self, catalog: Catalog, entity: Entity, **kwargs: Any) -> PluginResponse[Entity]:
         return PluginResponse.not_implemented("Salesforce does not support entity creation via data API")
 
-    def update_entity(self, catalog: CatalogModel, entity: EntityModel, **kwargs: Any) -> PluginResponse[EntityModel]:
+    def update_entity(self, catalog: Catalog, entity: Entity, **kwargs: Any) -> PluginResponse[Entity]:
         return PluginResponse.not_implemented("Salesforce does not support entity modification via data API")
 
-    def upsert_entity(self, catalog: CatalogModel, entity: EntityModel, **kwargs: Any) -> PluginResponse[EntityModel]:
+    def upsert_entity(self, catalog: Catalog, entity: Entity, **kwargs: Any) -> PluginResponse[Entity]:
         return PluginResponse.not_implemented("Salesforce does not support entity creation via data API")
 
-    def delete_entity(self, catalog: CatalogModel, entity: EntityModel, **kwargs: Any) -> PluginResponse[EntityModel]:
+    def delete_entity(self, catalog: Catalog, entity: Entity, **kwargs: Any) -> PluginResponse[Entity]:
         return PluginResponse.not_implemented("Salesforce does not support entity deletion via data API")
 
     
     # COLUMN
-    def get_field(self, catalog: CatalogModel, entity: EntityModel, field: FieldModel | str, **kwargs: Any) -> PluginResponse[FieldModel]:
-        name = entity.name if isinstance(entity, EntityModel) else entity
-        col_name = field.name if isinstance(field, FieldModel) else field
+    def get_field(self, catalog: Catalog, entity: Entity, field: Column | str, **kwargs: Any) -> PluginResponse[Column]:
+        name = entity.name if isinstance(entity, Entity) else entity
+        col_name = field.name if isinstance(field, Column) else field
 
         table_result = self.get_table(catalog, name)
         if not table_result.ok or not table_result.data:
-            return PluginResponse.not_found(f"EntityModel {name} not found")
+            return PluginResponse.not_found(f"Entity {name} not found")
 
         col = table_result.data.field_map.get(col_name)
         if not col:
             return PluginResponse.not_found(f"{name}.{col_name} not found")
 
-        if isinstance(field, FieldModel):
+        if isinstance(field, Column):
             
             field.raw_type = col.raw_type
             field.primary_key = col.primary_key
@@ -219,35 +221,35 @@ class SfPlugin:
             return PluginResponse.success(data=field)
         return PluginResponse.success(data=col)
 
-    def create_field(self, catalog: CatalogModel, entity: EntityModel, field: FieldModel, **kwargs: Any) -> PluginResponse[FieldModel]:
+    def create_field(self, catalog: Catalog, entity: Entity, field: Column, **kwargs: Any) -> PluginResponse[Column]:
         return PluginResponse.not_implemented("Salesforce does not support field creation via data API")
 
-    def update_field(self, catalog: CatalogModel, entity: EntityModel, field: FieldModel, **kwargs: Any) -> PluginResponse[FieldModel]:
+    def update_field(self, catalog: Catalog, entity: Entity, field: Column, **kwargs: Any) -> PluginResponse[Column]:
         return PluginResponse.not_implemented("Salesforce does not support field modification via data API")
 
-    def upsert_field(self, catalog: CatalogModel, entity: EntityModel, field: FieldModel, **kwargs: Any) -> PluginResponse[FieldModel]:
+    def upsert_field(self, catalog: Catalog, entity: Entity, field: Column, **kwargs: Any) -> PluginResponse[Column]:
         return PluginResponse.not_implemented("Salesforce does not support field creation via data API")
 
-    def delete_field(self, catalog: CatalogModel, entity: EntityModel, field: FieldModel, **kwargs: Any) -> PluginResponse[FieldModel]:
+    def delete_field(self, catalog: Catalog, entity: Entity, field: Column, **kwargs: Any) -> PluginResponse[Column]:
         return PluginResponse.not_implemented("Salesforce does not support field deletion via data API")
 
 # ============================ DATA ============================
     
     # RECORDS
-    def get_data(self, catalog: CatalogModel, entity: EntityModel | str, **kwargs: Any) -> PluginResponse[ArrowStream]:
+    def get_data(self, catalog: Catalog, entity: Entity | str, **kwargs: Any) -> PluginResponse[ArrowStream]:
         """Bulk2 full extract. The default read path."""
         try:
-            name = entity.name if isinstance(entity, EntityModel) else entity
+            name = entity.name if isinstance(entity, Entity) else entity
             table_result = self.get_table(catalog, name)
             if not table_result.ok or not table_result.data:
-                return PluginResponse.not_found(f"EntityModel {name} not found")
+                return PluginResponse.not_found(f"Entity {name} not found")
             fields = ', '.join(c.name for c in table_result.data.fields)
             return PluginResponse.success(data=self.bulk_query(f"SELECT {fields} FROM {name}", name))
         except Exception as e:
             return PluginResponse.error(str(e))
 
-    def create_data(self, catalog: CatalogModel, entity: EntityModel, data: ArrowStream, **kwargs: Any) -> PluginResponse[ArrowStream]:
-        name = entity.name if isinstance(entity, EntityModel) else entity
+    def create_data(self, catalog: Catalog, entity: Entity, data: ArrowStream, **kwargs: Any) -> PluginResponse[ArrowStream]:
+        name = entity.name if isinstance(entity, Entity) else entity
         try:
             results = getattr(self.bulk2, name).insert(
                 records=[prepare_record(r) for r in records]
@@ -256,8 +258,8 @@ class SfPlugin:
         except Exception as e:
             return PluginResponse.error(str(e))
 
-    def update_data(self, catalog: CatalogModel, entity: EntityModel | str, data: ArrowStream, **kwargs: Any) -> PluginResponse[ArrowStream]:
-        name = entity.name if isinstance(entity, EntityModel) else entity
+    def update_data(self, catalog: Catalog, entity: Entity | str, data: ArrowStream, **kwargs: Any) -> PluginResponse[ArrowStream]:
+        name = entity.name if isinstance(entity, Entity) else entity
         try:
             results = getattr(self.bulk2, name).update(
                 records=[prepare_record(r) for r in records]
@@ -266,8 +268,8 @@ class SfPlugin:
         except Exception as e:
             return PluginResponse.error(str(e))
 
-    def upsert_data(self, catalog: CatalogModel, entity: EntityModel, data: ArrowStream, **kwargs: Any) -> PluginResponse[ArrowStream]:
-        name = entity.name if isinstance(entity, EntityModel) else entity
+    def upsert_data(self, catalog: Catalog, entity: Entity, data: ArrowStream, **kwargs: Any) -> PluginResponse[ArrowStream]:
+        name = entity.name if isinstance(entity, Entity) else entity
         external_id = kwargs.get('external_id_field', 'Id')
         try:
             results = getattr(self.bulk2, name).upsert(
@@ -278,8 +280,8 @@ class SfPlugin:
         except Exception as e:
             return PluginResponse.error(str(e))
 
-    def delete_data(self, catalog: CatalogModel, entity: EntityModel, data: ArrowStream, **kwargs: Any) -> PluginResponse[ArrowStream]:
-        name = entity.name if isinstance(entity, EntityModel) else entity
+    def delete_data(self, catalog: Catalog, entity: Entity, data: ArrowStream, **kwargs: Any) -> PluginResponse[ArrowStream]:
+        name = entity.name if isinstance(entity, Entity) else entity
         try:
             results = getattr(self.bulk2, name).delete(
                 records=[prepare_record(r) for r in records]
@@ -288,3 +290,5 @@ class SfPlugin:
         except Exception as e:
             return PluginResponse.error(str(e))
 
+# Explicitly enforce duck-typing compliance at module load time
+assert isinstance(SfPlugin(), Plugin)

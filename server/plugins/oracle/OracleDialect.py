@@ -1,26 +1,27 @@
 from typing import Any
-from server.plugins.PluginModels import QueryModel, FilterGroup, FilterCondition, EntityModel
+from server.plugins.PluginModels import Catalog, FilterGroup, Filter, Entity
 
 # =========================================================
 # 1. READ OPERATIONS (The AST Translators)
 # =========================================================
 
-def build_dynamic_sql(query: QueryModel) -> tuple[str, dict[str, Any]]:
+def build_dynamic_sql(catalog: Catalog, **kwargs) -> tuple[str, dict[str, Any]]:
     """
     Translates the universal QueryModel AST into Oracle SQL.
     Returns: (sql_string, bind_dictionary)
     """
-    if query.native:
-        return query.native.statement, query.native.binds
+
+    if catalog.native:
+        return catalog.native.statement, catalog.native.binds
 
     binds: dict[str, Any] = {}
     bind_counter = 0
 
-    select_clause = ", ".join(query.fields) if query.fields else "*"
+    select_clause = ", ".join(query.columns) if query.columns else "*"
     from_clause = query.entities[0]
     
     for j in query.joins:
-        from_clause += f" {j.join_type} JOIN {j.right_entity} ON {j.left_entity}.{j.left_field} = {j.right_entity}.{j.right_field}"
+        from_clause += f" {j.join_type} JOIN {j.right_entity} ON {j.left_entity}.{j.left_column} = {j.right_entity}.{j.right_column}"
 
     where_clause = ""
     if query.filter_group:
@@ -59,15 +60,15 @@ def _parse_filter_group(group: FilterGroup, binds: dict[str, Any], bind_counter:
 
     return combined, bind_counter
 
-def _parse_condition(cond: FilterCondition, binds: dict[str, Any], bind_counter: int) -> tuple[str, int]:
-    field = cond.field
-    op = cond.operator
-    val = cond.value
+def _parse_condition(filter: Filter, binds: dict[str, Any], bind_counter: int) -> tuple[str, int]:
+    column = filter.independent
+    op = filter.operator
+    val = filter.dependent
 
     if op == "IS NULL":
-        return f"{field} IS NULL", bind_counter
+        return f"{column} IS NULL", bind_counter
     if op == "IS NOT NULL":
-        return f"{field} IS NOT NULL", bind_counter
+        return f"{column} IS NOT NULL", bind_counter
 
     sql_op = "=" if op == "==" else op
 
@@ -83,44 +84,44 @@ def _parse_condition(cond: FilterCondition, binds: dict[str, Any], bind_counter:
             bind_counter += 1
             
         in_string = ", ".join(in_binds)
-        return f"{field} IN ({in_string})", bind_counter
+        return f"{column} IN ({in_string})", bind_counter
 
     bind_name = f"bind_{bind_counter}"
     binds[bind_name] = val
     bind_counter += 1
 
-    return f"{field} {sql_op} :{bind_name}", bind_counter
+    return f"{column} {sql_op} :{bind_name}", bind_counter
 
 
 # =========================================================
 # 2. WRITE OPERATIONS (The CRUD Generators)
 # =========================================================
 
-def build_insert_sql(entity: EntityModel) -> str:
+def build_insert_sql(entity: Entity) -> str:
     """Generates a parameterized INSERT statement."""
-    table_name = entity.target_name or entity.source_name
+    table_name = entity.qualified_name or entity.name
     cols = []
     binds = []
     
-    for field in entity.fields:
-        if not field.read_only:
-            col_name = field.target_name or field.source_name
+    for column in entity.columns:
+        if not column.is_read_only:
+            col_name = column.qualified_name or column.name
             cols.append(col_name)
             binds.append(f":{col_name}")
             
     return f"INSERT INTO {table_name} ({', '.join(cols)}) VALUES ({', '.join(binds)})"
 
 
-def build_update_sql(entity: EntityModel) -> str:
+def build_update_sql(entity: Entity) -> str:
     """Generates a parameterized UPDATE statement based on Primary Keys."""
-    table_name = entity.target_name or entity.source_name
+    table_name = entity.qualified_name or entity.name
     set_clauses = []
     where_clauses = []
     
-    for field in entity.fields:
-        if not field.read_only:
-            col_name = field.target_name or field.source_name
-            if field.primary_key:
+    for column in entity.columns:
+        if not column.is_read_only:
+            col_name = column.qualified_name or column.name
+            if column.primary_key:
                 where_clauses.append(f"{col_name} = :{col_name}")
             else:
                 set_clauses.append(f"{col_name} = :{col_name}")
@@ -128,34 +129,34 @@ def build_update_sql(entity: EntityModel) -> str:
     return f"UPDATE {table_name} SET {', '.join(set_clauses)} WHERE {' AND '.join(where_clauses)}"
 
 
-def build_delete_sql(entity: EntityModel) -> str:
+def build_delete_sql(entity: Entity) -> str:
     """Generates a parameterized DELETE statement based on Primary Keys."""
-    table_name = entity.target_name or entity.source_name
+    table_name = entity.qualified_name or entity.name
     where_clauses = []
     
-    for field in entity.primary_key_fields:
-        col_name = field.target_name or field.source_name
+    for column in entity.primary_key_columns:
+        col_name = column.qualified_name or column.name
         where_clauses.append(f"{col_name} = :{col_name}")
         
     return f"DELETE FROM {table_name} WHERE {' AND '.join(where_clauses)}"
 
 
-def build_merge_sql(entity: EntityModel) -> str:
+def build_merge_sql(entity: Entity) -> str:
     """
     Generates an Oracle MERGE (Upsert) statement. 
     Uses DUAL so it can be safely executed via cursor.executemany().
     """
-    table_name = entity.target_name or entity.source_name
+    table_name = entity.qualified_name or entity.name
     
     pk_cols = []
     val_cols = []
     all_cols = []
     
-    for field in entity.fields:
-        if not field.read_only:
-            col_name = field.target_name or field.source_name
+    for column in entity.columns:
+        if not column.is_read_only:
+            col_name = column.qualified_name or column.name
             all_cols.append(col_name)
-            if field.primary_key:
+            if column.primary_key:
                 pk_cols.append(col_name)
             else:
                 val_cols.append(col_name)
