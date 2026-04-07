@@ -19,10 +19,6 @@ from polars._typing import (
     )
 from polars.interchange.protocol import SupportsInterchange
 
-# if TYPE_CHECKING:
-    # import oracledb
-
-
 class OracleDataFrame:
     """Wraps the native oracledb.OracleDataFrame to provide direct zero-copy ecosystem conversions."""
     def __init__(

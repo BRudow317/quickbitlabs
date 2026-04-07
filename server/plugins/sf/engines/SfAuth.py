@@ -10,7 +10,7 @@ class SalesforceAuthError(SfException):
     """Custom exception for authentication failures."""
     pass
 
-async def fetch_client_credentials(
+def fetch_client_credentials(
     consumer_key: str | None = None,
     consumer_secret: str | None = None,
     base_url: str | None = None,
@@ -28,20 +28,18 @@ async def fetch_client_credentials(
     if base_url is None:
         base_url = os.getenv('SF_BASE_URL', None)
 
-    # ex) https://empathetic-narwhal-8eqg8r-dev-ed.trailblaze.my.salesforce.com
-    
-    try: 
+    try:
         if not all([consumer_key, consumer_secret, base_url]):
             env_debug = {
-                k: ("*" * len(v) if v else "[EMPTY STRING]") 
-                for k, v in os.environ.items() 
+                k: ("*" * len(v) if v else "[EMPTY STRING]")
+                for k, v in os.environ.items()
                 if k.startswith("SF_")
             }
             print(f"DEBUG SF Vars: {env_debug}")
             raise SalesforceAuthError("Missing required environment variables for authentication.")
 
-        async with httpx.AsyncClient() as client:
-            response = await client.post(
+        with httpx.Client() as client:
+            response = client.post(
                 f"{base_url}{SF_AUTH_URI}",
                 data={
                     "grant_type": "client_credentials",
@@ -61,4 +59,3 @@ async def fetch_client_credentials(
         raise
     except Exception as exc:
         raise SalesforceAuthError("An unexpected error occurred while fetching client credentials.") from exc
-

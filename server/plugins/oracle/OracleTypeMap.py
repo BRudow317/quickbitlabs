@@ -1,7 +1,7 @@
 from typing import Any
 import oracledb
 
-from server.plugins.PluginModels import PythonTypes, FieldModel, arrow_types
+from server.plugins.PluginModels import PythonTypes, Column, arrow_types
 
 # ---------------------------------------------------------
 # 1. Oracle -> Python (For generating the Contract during Discovery)
@@ -47,16 +47,16 @@ def map_oracle_to_python(raw_type: str, scale: int | None = None) -> PythonTypes
 # 2. Python -> Oracle DDL (For preparing Target schemas)
 # ---------------------------------------------------------
 
-def map_python_to_oracle_ddl(field: FieldModel) -> str:
+def map_python_to_oracle_ddl(column: Column) -> str:
     """
     Translates a universal FieldModel into an Oracle-specific DDL type string.
     e.g., returns "VARCHAR2(255 CHAR)" or "NUMBER(1, 0)"
     """
-    ptype = field.python_type
+    ptype = column.python_type
     
     if ptype == "string":
         # Oracle maxes out at 4000 bytes for standard VARCHAR2.
-        length = field.length or 255
+        length = column.max_length or 255
         if length > 4000:
             return "CLOB"
         return f"VARCHAR2({length} CHAR)"
@@ -65,8 +65,8 @@ def map_python_to_oracle_ddl(field: FieldModel) -> str:
         return "NUMBER"
         
     if ptype == "float":
-        precision = field.precision
-        scale = field.scale
+        precision = column.precision
+        scale = column.scale
         if precision is not None and scale is not None:
             return f"NUMBER({precision}, {scale})"
         return "NUMBER"
@@ -76,7 +76,7 @@ def map_python_to_oracle_ddl(field: FieldModel) -> str:
         return "NUMBER(1, 0)"
         
     if ptype == "datetime":
-        return "TIMESTAMP WITH TIME ZONE" if field.timezone else "TIMESTAMP"
+        return "TIMESTAMP WITH TIME ZONE" if column.timezone else "TIMESTAMP"
         
     if ptype == "date":
         return "DATE"
@@ -100,16 +100,16 @@ def map_python_to_oracle_ddl(field: FieldModel) -> str:
 # 3. Python -> oracledb Bind Types (For the Engine's execution layer)
 # ---------------------------------------------------------
 
-def map_field_to_oracledb_input_size(field: FieldModel) -> Any:
+def map_column_to_oracledb_input_size(column: Column) -> Any:
     """
     Returns the appropriate type hint for oracledb.cursor.setinputsizes().
     This is critical for performance and preventing data truncation during inserts.
     """
-    ptype = field.python_type
+    ptype = column.python_type
     
     if ptype == "string":
         # For strings <= 4000, passing the integer length is best practice for oracledb
-        length = field.length or 4000
+        length = column.max_length or 4000
         if length > 4000:
             return oracledb.DB_TYPE_CLOB
         return length

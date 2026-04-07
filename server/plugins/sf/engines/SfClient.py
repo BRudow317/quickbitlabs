@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import asyncio
 import re
 from typing import Any
 from collections.abc import MutableMapping
@@ -16,7 +15,7 @@ logger = logging.getLogger(__name__)
 
 class SfClient:
     """
-    Async HTTP client for Salesforce REST and Bulk 2.0 APIs.
+    Sync HTTP client for Salesforce REST and Bulk 2.0 APIs.
     Always construct via SfClient.create() - not __init__ directly.
     """
 
@@ -25,14 +24,13 @@ class SfClient:
     access_token: str
     api_version: str
     api_usage: MutableMapping[str, Usage | PerAppUsage]
-    _session: httpx.AsyncClient
-    _token_lock: asyncio.Lock
+    _session: httpx.Client
     _max_retries: int
 
     def __init__(
         self,
         base_url: str,
-        access_token: str,\
+        access_token: str,
         api_version: str = API_VERSION,
         max_retries: int = 1,
     ) -> None:
@@ -42,14 +40,13 @@ class SfClient:
         self.services_url = f"{base_url}/services/data/v{api_version}"
         self.api_usage = {}
         self._max_retries = max_retries
-        self._token_lock = asyncio.Lock()
-        self._session = httpx.AsyncClient(
+        self._session = httpx.Client(
             headers=self._auth_headers(access_token),
             timeout=httpx.Timeout(30.0, connect=10.0),
         )
 
     @classmethod
-    async def create(
+    def create(
         cls,
         base_url: str | None = None,
         consumer_key: str | None = None,
@@ -58,16 +55,13 @@ class SfClient:
         api_version: str = API_VERSION,
         max_retries: int = 1,
     ) -> SfClient:
-        """
-        Async factory - use this instead of calling SfClient() directly.
-        Handles auth before constructing the client.
-        """
+        """Factory — use this instead of calling SfClient() directly."""
         resolved_url = base_url or SF_BASE_URL
         if not resolved_url:
             raise SalesforceAuthError("SF_BASE_URL is required.")
 
         if access_token is None:
-            access_token = await fetch_client_credentials(
+            access_token = fetch_client_credentials(
                 consumer_key=consumer_key,
                 consumer_secret=consumer_secret,
                 base_url=resolved_url,
@@ -92,14 +86,14 @@ class SfClient:
         self.access_token = token
         self._session.headers.update(self._auth_headers(token))
 
-    async def request(
+    def request(
         self,
         method: str,
         endpoint: str,
         **kwargs: Any,
     ) -> httpx.Response:
         """
-        Execute an async HTTP request.
+        Execute a sync HTTP request.
         Handles token refresh on 401 INVALID_SESSION_ID.
         Full URL or relative endpoint both accepted.
         """
@@ -109,11 +103,11 @@ class SfClient:
             else f"{self.services_url}/{endpoint.lstrip('/')}"
         )
 
-        response = await self._session.request(method, url, **kwargs)
+        response = self._session.request(method, url, **kwargs)
 
         if response.status_code == 401:
-            await self._handle_401(response)
-            response = await self._session.request(method, url, **kwargs)
+            self._handle_401(response)
+            response = self._session.request(method, url, **kwargs)
 
         if response.status_code >= 300:
             raise Exception(
@@ -126,36 +120,25 @@ class SfClient:
 
         return response
 
-    async def _handle_401(self, response: httpx.Response) -> None:
-        """
-        Refresh the token on INVALID_SESSION_ID.
-        Lock ensures only one coroutine refreshes at a time -
-        others wait and ride the new token instead of racing.
-        """
+    def _handle_401(self, response: httpx.Response) -> None:
+        """Refresh the token on INVALID_SESSION_ID."""
         try:
             error_code = response.json()[0].get("errorCode")
         except Exception:
-            return  # not a standard SF auth error, let the caller see the 401
+            return
 
         if error_code != "INVALID_SESSION_ID":
             return
 
-        async with self._token_lock:
-            # re-check inside the lock - another coroutine may have already refreshed
-            if response.request.headers.get("Authorization") != f"Bearer {self.access_token}":
-                return  # token already updated by another coroutine, nothing to do
+        logger.info("Session expired. Refreshing token...")
+        for attempt in range(1, self._max_retries + 1):
+            new_token = fetch_client_credentials(base_url=self.base_url)
+            if new_token and new_token != self.access_token:
+                self._update_token(new_token)
+                return
+            logger.warning(f"Token refresh attempt {attempt} returned same or empty token.")
 
-            logger.info("Session expired. Refreshing token...")
-            for attempt in range(1, self._max_retries + 1):
-                new_token = await fetch_client_credentials(
-                    base_url=self.base_url,
-                )
-                if new_token and new_token != self.access_token:
-                    self._update_token(new_token)
-                    return
-                logger.warning(f"Token refresh attempt {attempt} returned same or empty token.")
-
-            raise Exception("Max retries exceeded: could not refresh Salesforce token.")
+        raise Exception("Max retries exceeded: could not refresh Salesforce token.")
 
     def _parse_api_usage(self, sforce_limit_info: str) -> None:
         api_usage = re.match(
@@ -174,11 +157,11 @@ class SfClient:
                 used=int(g[0]), total=int(g[1]), name=g[2]
             )
 
-    async def close(self) -> None:
-        await self._session.aclose()
+    def close(self) -> None:
+        self._session.close()
 
-    async def __aenter__(self) -> SfClient:
+    def __enter__(self) -> SfClient:
         return self
 
-    async def __aexit__(self, *_: Any) -> None:
-        await self.close()
+    def __exit__(self, *_: Any) -> None:
+        self.close()

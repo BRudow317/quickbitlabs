@@ -29,23 +29,19 @@ class OracleServices:
     def get_data(
         self, 
         catalog: Catalog | None = None,
-        sql_statement: str | None = None,
         **kwargs: Any
     ) -> ArrowStream:
         binds: dict[str, Any] = kwargs.get('binds', {})
         
-        # Ensure only exactly ONE method is provided
-        provided_args = sum(x is not None for x in [catalog, sql_statement, kwargs.get('model_query')])
-        if provided_args > 1:
-            raise ValueError("Ambiguous request: Provide exactly one of catalog, sql_statement, or model_query.")
 
-        model_query = kwargs.get('model_query')
-        if model_query:
-            sql, binds = build_dynamic_sql(model_query)
+        query = kwargs.get('model_query', None)
+        binds = kwargs.get('binds', {})
+        if query:
+            sql, binds = build_dynamic_sql(query)
             return self.engine.query(sql, binds=binds)
             
         if sql_statement:
-            return self.engine.query(sql_statement, binds=binds)
+            return self.engine.query(query, binds=binds)
             
         if catalog:
             logger.warning("Querying full catalog objects. This may result in a Cartesian product.")
