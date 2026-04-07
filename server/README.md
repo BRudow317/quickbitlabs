@@ -8,15 +8,24 @@ Instead of writing custom pipelines between every single database, flat file, an
 
 The platform is strictly divided into three layers:
 
-1. **API & Models (`/server/api`, `/server/models`)**: The business domain. This handles FastAPI web requests, user authentication, and internal platform state (e.g., Tenant profiles, Users).
+1. **API & Models (`/server/api`, `/server/models`)**: The business domain. This handles FastAPI web requests, user authentication, and internal platform state.
 2. **Services (`/server/services`)**: The Air Traffic Controllers. These scripts orchestrate data movement (e.g., `MigrationService.py`). They don't know *how* to talk to Oracle or Salesforce; they just juggle the universal data models between them.
 3. **Plugins (`/server/plugins`)**: The Sandboxes. These are isolated, lazy-loaded modules that translate the universal platform language into system-specific execution (SQL, REST, File I/O).
+
+## Data Transmission
+Previously data transmission occured between plugins through the use of a shared `Records` object returned as an Iterable of dictionaries. However now there are new methods I am implementing such as the Apache Arrow streaming. 
+
+Current implementations include:
+- `Records` (Iterable[dict]): The original universal boundary for data transmission.
+- `ArrowStream` (Iterator[pa.RecordBatch]): A more efficient boundary for large data transfers, especially from databases or APIs that can natively produce Arrow RecordBatches. This allows for zero-copy data transmission and efficient in-memory processing.
+- `PolarsLazyFrame` (polars.LazyFrame): For plugins that can leverage Polars for efficient data manipulation, this allows for lazy evaluation and optimization of data transformations before execution.
+- `PolarsDataFrame` (polars.DataFrame): For plugins that need to return smaller datasets or prefer an eager evaluation model, this allows for direct transmission of Polars DataFrames.
 
 ## The Plugin Ecosystem (The Secret Sauce)
 
 At the root of the `/server/plugins/` directory sit the four pillars of the platform's SDK. **Every plugin must abide by these files:**
 
-- **`PluginModels.py` (The Nouns):** Defines `CatalogModel`, `EntityModel`, `FieldModel`, and `QueryModel`. This is the blueprint. Plugins never share proprietary schema objects; everything is wrapped in these Pydantic models.
+- **`PluginModels.py` (The Nouns):** Defines `CatalogModel`, `EntityModel`, `FieldModel`, and `QueryModel` and data transmission. This is the blueprint. Plugins never share proprietary schema objects; everything is wrapped in these Pydantic models.
   - ### CatalogModel
     One of the smallest, but most important parts of the entire project.
 
@@ -51,7 +60,7 @@ At the root of the `/server/plugins/` directory sit the four pillars of the plat
   - ### QueryModel
     The universal JSON representation of a data request (AST). Instead of holding a raw SQL string, it structures the request abstractly with lists of entities, fields, and nested filter_groups (e.g., field: "status", operator: "==", value: "active"). This allows the FastAPI frontend to request data without knowing whether the target system speaks SQL, SOQL, or REST. (Note: It does include a native escape hatch for edge-case raw system queries).
 
-- **`PluginProtocol.py` (The Verbs):** The strict Python `Protocol` defining the standard CRUD methods (`get_records`, `insert_records`, `update_catalog`). If a plugin doesn't support a verb, it returns a 501.
+- **`PluginProtocol.py` (The Verbs):** The strict Python `Protocol` defining the standard CRUD methods ex) (`get_records`, `insert_records`, `update_catalog`, `upsert_entity`, `delete_field`). If a plugin doesn't support a verb, it returns a 501.
 
 - **`PluginResponse.py` (The Envelope):** Every plugin method returns this wrapper. It maps outcomes to standard HTTP status codes (200, 404, 500) and safely carries data stream generators without exhausting them.
 

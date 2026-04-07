@@ -148,7 +148,7 @@ class OracleArrowFrame:
         )
         return OracleDataFrame(odf)
 
-    def fetch_df_batches(
+    def fetch_odf(
         self, 
         statement: str, 
         parameters: list | tuple | dict | None = None, 
@@ -166,20 +166,25 @@ class OracleArrowFrame:
         for odf in iterator:
             yield OracleDataFrame(odf)
 
-    def stream_record_batches(
+    def get_arrow_batches(
         self, 
         statement: str, 
         parameters: list | tuple | dict | None = None, 
         batch_size: int = 50_000
     ) -> Iterator[pa.RecordBatch]:
-        """End-to-end memory-safe stream yielding PyArrow RecordBatches for the orchestration layer."""
-        for odf in self.fetch_df_batches(statement, parameters, size=batch_size):
+        for odf in self.fetch_odf(statement, parameters, size=batch_size):
             yield from odf.to_batches()
 
     def insert_df(self):
         """Bulk Insert	Connection.insert_df()	Direct Path Load"""
+
         
-    def fast_insert_df(self):
+    def fast_insert_df(self, statement: str, parameters: Any,
+        *,
+        batcherrors: bool = False,
+        arraydmlrowcounts: bool = False,
+        suspend_on_success: bool = False,
+        batch_size: int = 2**32 - 1,):
         """Fast Insert	Cursor.executemany()	Bind Arrow-supported objects
         To insert data currently in OracleDataFrame format into Oracle Database requires 
         it to be converted. For example, you could convert it into a Pandas DataFrame for 
@@ -187,3 +192,11 @@ class OracleArrowFrame:
         PyArrow Table.to_pylist() method and then use standard python-oracledb 
         functionality to execute a SQL INSERT statement.
         """
+        cursor: oracledb.Cursor = self.client.get_con().cursor()
+        with cursor:
+            cursor.executemany(statement=statement, 
+                            parameters=parameters,
+                            batcherrors=batcherrors,
+                            arraydmlrowcounts=arraydmlrowcounts,
+                            suspend_on_success=suspend_on_success,
+                            batch_size=batch_size)

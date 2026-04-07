@@ -1,47 +1,11 @@
-Q:/quickbitlabs/
-├── alembic/
-│   └── versions/
-├── frontend/
-│   ├── assets/
-│   └── src/
-│       ├── api/
-│       │   └── openapi/
-│       │       ├── client/
-│       │       └── core/
-│       ├── assets/
-│       ├── auth/
-│       ├── components/
-│       ├── configs/
-│       ├── context/
-│       ├── hooks/
-│       ├── layouts/
-│       ├── models/
-│       ├── pages/
-│       ├── styles/
-│       ├── templates/
-│       └── utils/
-├── scripts/
-└── server/
-    ├── api/
-    ├── auth/
-    ├── configs/
-    ├── core/
-    ├── engine/
-    ├── models/
-    ├── plugins/
-    │   ├── lambdalith/
-    │   ├── oracle/
-    │   ├── postgres/
-    │   │   ├── postgres_utils/
-    │   │   └── services/
-    │   ├── readers/
-    │   │   └── reader_utils/
-    │   ├── scratch/
-    │   ├── sf/
-    │   │   ├── services/
-    │   │   ├── tests/
-    │   │   └── utils/
-    │   └── utils/
-    ├── services/
-    ├── tests/
-    └── utils/
+Q:/quickbitlabs/server/plugins/oracle/
+├── __init__.py
+├── arrow_array.py
+├── Oracle.py
+├── OracleArrowFrame.py
+├── OracleClient.py
+├── OracleDialect.py
+├── OracleEngine.py
+├── OracleServices.py
+├── OracleTools.py
+└── OracleTypeMap.py

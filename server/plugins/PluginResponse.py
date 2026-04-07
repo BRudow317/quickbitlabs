@@ -1,6 +1,6 @@
 from __future__ import annotations
-from typing import Any, Generic, TypeVar
-from pydantic import BaseModel, SkipValidation
+from typing import Any, Generic, TypeVar, Self
+from pydantic import BaseModel, SkipValidation, ConfigDict
 
 T = TypeVar('T')
 
@@ -106,15 +106,15 @@ _codes = {
         return cls(ok=False, data=data, code=404, message=message)
 
     @classmethod
-    def forbidden(cls, message: str) -> PluginResponse[Any]:
+    def forbidden(cls, message: str) -> Self:
         return cls(ok=False, data=None, code=403, message=message)
 
     @classmethod
-    def not_implemented(cls, message: str) -> PluginResponse[Any]:
+    def not_implemented(cls, message: str) -> Self:
         return cls(ok=False, data=None, code=501, message=message)
 
     @classmethod
-    def error(cls, message: str, code: int = 500) -> PluginResponse[Any]:
+    def error(cls, message: str, code: int = 500) -> Self:
         return cls(ok=False, data=None, code=code, message=message)
 
-    model_config = {"arbitrary_types_allowed": True}
+    model_config = ConfigDict(arbitrary_types_allowed=True)

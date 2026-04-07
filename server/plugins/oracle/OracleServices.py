@@ -1,7 +1,7 @@
 from typing import Any
 import logging
 
-from server.plugins.PluginModels import CatalogModel, EntityModel, Records, QueryModel
+from server.plugins.PluginModels import Catalog, Entity, ArrowStream
 from .OracleEngine import OracleEngine
 from .OracleDialect import build_dynamic_sql, build_insert_sql, build_update_sql, build_merge_sql, build_delete_sql
 from .OracleTypeMap import map_field_to_oracledb_input_size
@@ -13,12 +13,12 @@ class OracleServices:
     def __init__(self, engine: OracleEngine):
         self.engine = engine
 
-    def _build_input_sizes(self, entity: EntityModel) -> dict[str, Any]:
+    def _build_input_sizes(self, entity: Entity) -> dict[str, Any]:
         """Maps the Pydantic fields to oracledb native types."""
         sizes = {}
         for field in entity.fields:
             if not field.read_only:
-                bind_name = field.target_name or field.source_name
+                bind_name = field.name
                 sizes[bind_name] = map_field_to_oracledb_input_size(field)
         return sizes
 
@@ -26,13 +26,12 @@ class OracleServices:
     # READ OPERATIONS
     # ---------------------------------------------------------
 
-    def get_records(
+    def get_data(
         self, 
-        catalog: CatalogModel | None = None,
+        catalog: Catalog | None = None,
         sql_statement: str | None = None,
-        model_query: QueryModel | None = None,
         **kwargs: Any
-    ) -> Records:
+    ) -> ArrowStream:
         binds: dict[str, Any] = kwargs.get('binds', {})
         
         # Ensure only exactly ONE method is provided
@@ -53,9 +52,9 @@ class OracleServices:
             table_names = []
             
             for entity in catalog.entities:
-                table_names.append(entity.source_name)
+                table_names.append(entity.name)
                 for field in entity.fields:
-                    field_names.append(f"{entity.source_name}.{field.source_name}")
+                    field_names.append(f"{entity.name}.{field.name}")
                     
             select_fields = ", ".join(field_names) if field_names else "*"
             from_tables = ", ".join(table_names)
@@ -69,45 +68,45 @@ class OracleServices:
     # WRITE OPERATIONS (Strict Catalog Contracts)
     # ---------------------------------------------------------
 
-    def insert_records(self, catalog: CatalogModel, records: Records, **kwargs: Any) -> None:
-        """INSERT: Streams records into Oracle via the Catalog envelope."""
+    def insert_data(self, catalog: CatalogModel, data: ArrowStream, **kwargs: Any) -> None:
+        """INSERT: Streams data into Oracle via the Catalog envelope."""
         for entity in catalog.entities:
             # Notice: The dialect or engine might need the catalog's namespace in the future
             sql = build_insert_sql(entity)
             input_sizes = self._build_input_sizes(entity)
             
-            self.engine.execute_many(sql, records, input_sizes)
+            self.engine.execute_many(sql, data, input_sizes)
 
-    def update_records(self, catalog: CatalogModel, records: Records, **kwargs: Any) -> None:
-        """UPDATE: Updates existing records based on Primary Key."""
+    def update_data(self, catalog: CatalogModel, data: ArrowStream, **kwargs: Any) -> None:
+        """UPDATE: Updates existing data based on Primary Key."""
         for entity in catalog.entities:
             if not entity.primary_key_fields:
-                raise ValueError(f"Cannot update {entity.source_name}: No Primary Keys defined.")
+                raise ValueError(f"Cannot update {entity.name}: No Primary Keys defined.")
 
             sql = build_update_sql(entity)
             input_sizes = self._build_input_sizes(entity)
             
-            self.engine.execute_many(sql, records, input_sizes)
+            self.engine.execute_many(sql, data, input_sizes)
 
-    def upsert_records(self, catalog: CatalogModel, records: Records, **kwargs: Any) -> None:
+    def upsert_data(self, catalog: CatalogModel, data: ArrowStream, **kwargs: Any) -> None:
         """UPSERT: Uses Oracle MERGE statement."""
         for entity in catalog.entities:
             if not entity.primary_key_fields:
-                raise ValueError(f"Cannot upsert {entity.source_name}: No Primary Keys defined.")
+                raise ValueError(f"Cannot upsert {entity.name}: No Primary Keys defined.")
 
             sql = build_merge_sql(entity)
             input_sizes = self._build_input_sizes(entity)
-            self.engine.execute_many(sql, records, input_sizes)
+            self.engine.execute_many(sql, data, input_sizes)
 
-    def delete_records(self, catalog: CatalogModel, records: Records, **kwargs: Any) -> None:
-        """DELETE: Removes records based on Primary Key."""
+    def delete_data(self, catalog: CatalogModel, data: ArrowStream, **kwargs: Any) -> None:
+        """DELETE: Removes data based on Primary Key."""
         for entity in catalog.entities:
             if not entity.primary_key_fields:
-                raise ValueError(f"Cannot delete from {entity.source_name}: No Primary Keys defined.")
+                raise ValueError(f"Cannot delete from {entity.name}: No Primary Keys defined.")
 
             sql = build_delete_sql(entity)
             
-            pk_names = {pk.target_name or pk.source_name for pk in entity.primary_key_fields}
+            pk_names = {pk.name for pk in entity.primary_key_fields}
             input_sizes = {k: v for k, v in self._build_input_sizes(entity).items() if k in pk_names}
             
-            self.engine.execute_many(sql, records, input_sizes)
+            self.engine.execute_many(sql, data, input_sizes)

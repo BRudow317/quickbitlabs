@@ -1,34 +1,14 @@
+
 from __future__ import annotations
 from pydantic import BaseModel, Field
-from typing import Literal, Any
-from collections.abc import Iterable, Iterator
-import polars
+from typing import Literal, Any, TypeAlias
+from collections.abc import Iterator, Iterable
+from functools import cached_property
 import pyarrow as pa
 
-
-
-
-# Universal data formats
-# Pure Python Generator of dict records, the most basic and interoperable format, but not memory efficient for large datasets
-Records = Iterable[dict[str, Any]]
-# The universal boundary for raw data leaving an extractor When a plugin extracts data from a REST API, it should buffer those JSONs internally, convert them to a pa.RecordBatch, and yield that batch. When a plugin extracts data from a database, it should convert the raw rows to a pa.RecordBatch and yield that batch. The transform service can then consume these batches, apply any requested transformations, and pass along to the loader, which can also consume pa.RecordBatches for maximum efficiency.
-ArrowStream = pa.RecordBatchReader | Iterator[pa.RecordBatch]
-# The universal boundary for transformed data
-PolarsLazyFrame = polars.LazyFrame
-
-# python types
-PythonTypes = Literal[
-    "string",
-    "integer",
-    "float",
-    "boolean",
-    "datetime", # datetime.datetime # timezone format
-    "date",     # datetime.date
-    "time",     # datetime.time
-    "byte",
-    "bytearray",
-    "json",     # dict or list
-]
+# Universal data format
+ArrowStream: TypeAlias = pa.RecordBatchReader 
+Records: TypeAlias = Iterable[dict[str, Any]] # aka json
 
 arrow_types = {
     # Primitives
@@ -71,160 +51,233 @@ arrow_types = {
     "decimal256": pa.decimal256(76, 18),
 }
 
-class CatalogModel(BaseModel):
-    """One of the smallest, but most important parts of the entire project.
-    All metadata exists as a subset of this object.
-    Catalog -> Entities -> Fields -> Records(data, records, bytes, json, etc.)
+arrow_type_literal = Literal[
+    "null", "bool", "int8", "int16", "int32", "int64", "uint8", 
+    "uint16", "uint32", "uint64", "float16", "float32", "float64",
+    "string", "utf8", "large_string", "binary", "large_binary",
+    "date32", "date64", "timestamp_s", "timestamp_ms", "timestamp_us", 
+    "timestamp_ns", "time32_s", "time32_ms", "time64_us", "time64_ns", 
+    "duration_s", "decimal128", "decimal256"
+]
 
-    Catalog is the top-level wrapper. It may be called schema, namespace, database, etc. in different systems, but the concept is the same: a container for entities/objects/tables. 
+# python types
+PythonTypes = Literal[
+    "string",
+    "integer",
+    "float",
+    "boolean",
+    "datetime", # datetime.datetime # timezone format
+    "date",     # datetime.date
+    "time",     # datetime.time
+    "byte",
+    "bytearray",
+    "json",     # dict or list
+]
 
-    When implementing a plugin it is up to you to decide how to route the catalog, but the catalog, its entity, and the fields needed for operations should be passed along. 
-
-    The intention is not to populate an entire catalog and every entity and every field every call, but to provide the relevant metadata needed to perform the requested operation. 
-
-    An example might be implementing a csv plugin where the catalog is the source directory, the entity is the file, and the fields are the columns, and records, the rows.
-
-    Another example might be a REST API plugin where the catalog is the base URL, the entity is the endpoint, and the fields are the query parameters or body parameters needed to perform the request.
-
-    Another example might be a SQL plugin where the catalog is the database, the entity is the table, and the fields are the columns needed to perform the query or DML operation.
-
-    Perhaps you only know the catalog to search for, the target plugin may accept an a catalog with an empty entity list and populate the entire catalog with its metadata, so the caller service can inspect and make relevant decisions about which entities and fields to operate on in subsequent calls.
-
-    Or perhaps you want to know the type of a specific field, so you provide a catalog with one entity and one field, and the plugin returns the catalog with the field's metadata populated.
-
-    This is how the protocols should be designed, and implemented. The catalog is the envelope that carries the metadata and context needed to perform the requested operation.
-    
-    As a pydantic BaseModel you can serialize the entire working contract to JSON with catalog.json() or dict with catalog.dict(), and rehydrate with CatalogModel.parse_raw() or CatalogModel.parse_obj() respectively.
-
-    It can also serve as a base for implementing openapi schemas, ORM models, or any other structured representation of metadata you need.
-    """
-    source_name: str = ''
-    target_name: str | None = None
-    entities: list[EntityModel] = Field(default_factory=list)
-    source_description: str | None = None
-
-    @property
-    def entity_map(self) -> dict[str, EntityModel]:
-        return {e.source_name: e for e in self.entities}
-
-class EntityModel(BaseModel):
-    source_name: str
-    target_name: str | None = None
-    fields: list[FieldModel] = Field(default_factory=list)
-    source_description: str | None = None
-    file_path: str | None = None
-    encryption_key_id: str | None = None  # Reference to KMS, never the actual key
-    chunk_size: int = 50_000              # For PyArrow iter_batches() to Polars
-    compression: Literal["snappy", "zstd", "lz4"] = "zstd"
-
-    @property
-    def primary_key_fields(self) -> list[FieldModel]:
-        return [f for f in self.fields if f.primary_key]
-
-    @property
-    def field_map(self) -> dict[str, FieldModel]:
-        return {f.source_name: f for f in self.fields}
-    
-    def to_arrow_schema(self) -> pa.Schema:
-        """Generates a strict PyArrow schema from the Pydantic metadata."""
-        arrow_fields = []
-        for f in self.fields:
-            if not f.arrow_type:
-                raise ValueError(f"Field {f.source_name} lacks an arrow_type_id")
-            
-            arrow_fields.append(
-                pa.field(f.source_name, f.arrow_type, nullable=f.nullable)
-            )
-        return pa.schema(arrow_fields)
-
-    def to_polars_schema_dict(self) -> dict:
-        """Optional dict methods. (Polars can also just accept the PyArrow schema directly via pl.from_arrow)."""
-        return {
-            f.source_name: polars.from_arrow(f.arrow_type) 
-            for f in self.fields if f.arrow_type
-        }
-
-class FieldModel(BaseModel):
-    source_name: str
-    python_type: PythonTypes | None = None
-    arrow_type_id: str | None = None
-    source_raw_type: str | None = None
-    source_arrow_type: str | None = None
+class Column(BaseModel):
+    name: str
+    qualified_name: str | None = None
+    raw_type: str | None = None
+    arrow_type_id: arrow_type_literal | None = None
     primary_key: bool = False
-    unique: bool = False
-    is_foreign_key: bool = False
-    foreign_key_table: str | None = None
-    foreign_key_column: str | None = None
+    is_unique: bool = False
+    is_nullable: bool = True
+    is_read_only: bool = False
     is_compound_key: bool = False
-    length: int | None = None
+    is_foreign_key: bool = False
+    foreign_key_entity: str | None = None
+    foreign_key_column: str | None = None
+    max_length: int | None = None
     precision: int | None = None
     scale: int | None = None
-    source_description: str | None = None
-    nullable: bool = True
-    source_null_value: Any | None = None
-    read_only: bool = False
-    default_value: Any | None = None
+    serialized_null_value: str | None = None
+    default_value: Any = None
     enum_values: list[Any] = Field(default_factory=list)
     timezone: str | None = None
-    target_name: str | None = None
-    target_raw_type: str | None = None
-    target_arrow_type: str | None = None
-    target_null_value: Any | None = None
+    properties: dict[str, Any] = Field(default_factory=dict)
     @property
     def arrow_type(self) -> pa.DataType | None:
         """Dynamically build the C++ object, accounting for parameterized types."""
-        if not self.arrow_type_id:
-            return None
-            
-        # Handle parameterized types dynamically
-        if self.arrow_type_id.startswith("decimal"):
+        if not self.arrow_type_id: return None
+        arrow_type = self.arrow_type_id
+
+        if arrow_type.startswith("decimal"):
             p = self.precision if self.precision is not None else 38
             s = self.scale if self.scale is not None else 9
             return pa.decimal128(p, s)
             
-        if self.arrow_type_id.startswith("timestamp"):
-            unit = self.arrow_type_id.split("_")[1]
+        if arrow_type.startswith("timestamp"):
+            unit = arrow_type.split("_")[1]
             return pa.timestamp(unit, tz=self.timezone)
-            
-        return arrow_types.get(self.arrow_type_id)
+        return arrow_types.get(arrow_type)
 
+class Entity(BaseModel):
+    name: str
+    qualified_name: str | None = None
+    columns: list[Column] = Field(default_factory=list)
+    properties: dict[str, Any] = Field(default_factory=dict)
+    @property
+    def primary_key_columns(self) -> list[Column]:
+        return [f for f in self.columns if f.primary_key]
+    @property
+    def column_map(self) -> dict[str, Column]:
+        return {f.name: f for f in self.columns}
 
+class Catalog(BaseModel):
 
-class FilterModel(BaseModel):
-    field: str           # e.g., "purchase_date"
-    operator: Literal["==", "!=", ">", "<", ">=", "<=", "IN", "LIKE"]
-    value: Any           # e.g., "2021-01-01"
+    name: str | None = None
+    qualified_name: str | None = None
+    entities: list[Entity] = Field(default_factory=list)
+    filter_groups: list[FilterGroup] = Field(default_factory=list)
+    joins: list[Join] = Field(default_factory=list)
+    sort_fields: list[Sort] = Field(default_factory=list)
+    limit: int | None = None
+    properties: dict[str, Any] = Field(default_factory=dict)
 
-class JoinModel(BaseModel):
-    left_entity: str
-    left_field: str
-    right_entity: str
-    right_field: str
+    @property
+    def entity_map(self) -> dict[str, Entity]:
+        return {e.name: e for e in self.entities}
+    
+    @property
+    def _base_arrow_schema(self) -> pa.Schema:
+        nullable_entities: set[str] = set()
+        for j in self.joins:
+            if j.join_type in ("LEFT", "OUTER"):
+                nullable_entities.add(j.right_entity.name)
+            if j.join_type in ("RIGHT", "OUTER"):
+                nullable_entities.add(j.left_entity.name)
+
+        arrow_fields = []
+        for entity in self.entities:
+            for column in entity.columns:
+                arrow_type = column.arrow_type
+                if not arrow_type:
+                    continue
+
+                final_nullable = (
+                    column.is_nullable or 
+                    (entity.name in nullable_entities)
+                )
+
+                arrow_fields.append(
+                    pa.field(f"{entity.name}_{column.name}", arrow_type, nullable=final_nullable)
+                )
+        return pa.schema(arrow_fields)
+    
+    @property
+    def _arrow_schema(self) -> pa.Schema:
+        """
+        Returns the final PyArrow schema, embedding the entire Catalog 
+        context into the schema's metadata for downstream consumers.
+        """
+        base_schema = self._base_arrow_schema
+        
+        catalog_json = self.model_dump_json(exclude_none=False)
+        
+        encoded_catalog = {
+            b"catalog": catalog_json.encode('utf-8')
+        }
+        
+        existing_meta = base_schema.metadata or {}
+        merged_meta = {**existing_meta, **encoded_catalog}
+        
+        return base_schema.with_metadata(merged_meta)
+    
+    def get_arrow_reader(self, records: Records, schema: pa.Schema | None = None, chunk_size: int = 50_000) -> ArrowStream:
+        """Converts an iterator of dict records into a streaming ArrowStream,
+        chunked into RecordBatches of up to chunk_size rows at a time.
+        """
+        if schema is None: schema = self._arrow_schema
+        if schema is None or schema.is_empty: return pa.RecordBatchReader.from_batches(pa.schema([]), iter([]))
+
+        def batch_generator() -> Iterator[pa.RecordBatch]:
+            row_count = 0
+            field_map: dict[str, list[Any]] = {field_name: [] for field_name in schema.names}
+
+            for row in records:
+                for field_name in schema.names:
+                    field_map[field_name].append(row.get(field_name))
+                row_count += 1
+
+                if row_count == chunk_size:
+                    yield pa.record_batch([field_map[f] for f in schema.names], schema=schema)
+                    field_map = {field_name: [] for field_name in schema.names}
+                    row_count = 0
+
+            if row_count > 0:
+                yield pa.record_batch([field_map[f] for f in schema.names], schema=schema)
+
+        return pa.RecordBatchReader.from_batches(schema, batch_generator())
+    
+class Sort(BaseModel):
+    entity: Entity
+    column: Column
+    direction: Literal["ASC", "DESC"] = "ASC"
+
+class Join(BaseModel):
+    left_entity: Entity
+    left_column: Column      
+    right_entity: Entity
+    right_column: Column
     join_type: Literal["INNER", "LEFT", "RIGHT", "OUTER"] = "INNER"
 
-class FilterCondition(BaseModel):
-    field: str
+class Filter(BaseModel):
+    independent: Column | Entity | Any
     operator: Literal["==", "!=", ">", "<", ">=", "<=", "IN", "LIKE", "IS NULL", "IS NOT NULL"]
-    value: Any
+    dependent: Any | None
 
 class FilterGroup(BaseModel):
     condition: Literal["AND", "OR", "NOT"]
-    # A group can contain basic conditions, or nested groups!
-    filters: list[FilterCondition | FilterGroup]
+    filters: list[Filter | FilterGroup]
 
-class NativeQuery(BaseModel):
-    """The escape hatch for system-specific raw queries."""
-    statement: str
-    binds: dict[str, Any] = Field(default_factory=dict)
+# ArrowIterator: TypeAlias = Iterator[pa.RecordBatch]
+# pa.RecordBatchReader.from_batches()
+catalog_doc_string =     """
+    Catalog is the top-level wrapper. It may be called schema, namespace, database, etc. in different systems, 
+    but the concept is the same: a container for entities/objects/tables sharing the same namespace.
 
-class QueryModel(BaseModel):
-    """The universal JSON representation of a data request."""
-    entities: list[str] = Field(default_factory=list)         
-    fields: list[str] = Field(default_factory=list)
+    Catalog acts as the envelope that carries the metadata and context needed to perform the requested operation. 
+    It may be populated with all entities and columns, or just the relevant ones needed for a specific operation. 
+
+    Higher level services can utilize catalogs in different ways, some examples:
+    - Provide an empty catalog with just a name to retrieve the entire schema metadata.
+    - Provide a catalog with one entity and one column to retrieve the metadata for that specific column
+    - Provide a catalog with multiple entities and columns to perform operations on those specific objects.
+    - Provide a catalog with relevant entities and columns as the envelope to carry the metadata needed to 
+        perform the requested operation.
+
+    As a pydantic BaseModel you can serialize the entire working contract to JSON with 
+        catalog.model_dump()
+        or dict with catalog.model_dump_json(),
+        and rehydrate with Catalog.model_validate()
+        or Catalog.model_validate_json() respectively
+    """
+
+file_doc_string = """
+    When implementing a plugin it is up to you to decide how to route the catalog, but the catalog or an entity, and the columns needed for operations should be passed along. 
+
+    The intention is not to populate an entire catalog and every entity and every column every call, but to provide the relevant metadata needed to perform the requested operation. 
+
+    The standard objects are not an exhaustive list of what a plugin facade can provide, just the minimum columns higher level services can rely building upon.
+
+    An example might be implementing a csv plugin where the catalog is the source directory, the entity is the file, and the columns are the columns, and records, the rows.
+
+    Another example might be a REST API plugin where the catalog is the base URL, the entity is the endpoint, and the columns are the query parameters or body parameters needed to perform the request.
+
+    Another example might be a SQL plugin where the catalog is the database, the entity is the table, and the columns are the columns needed to perform the query or DML operation.
+
+    Perhaps you only know the catalog to search for, the target plugin may accept an a catalog with an empty entity list and populate the entire catalog with its metadata, so the caller service can inspect and make relevant decisions about which entities and columns to operate on in subsequent calls.
+
+    Or perhaps you want to know the type of a specific column, so you provide a catalog with one entity and one column, and the plugin returns the catalog with the column's metadata populated or just an entity with its columns. 
+
+    This is how the protocols should be designed, and implemented. The catalog or the entity is the envelope that carries the metadata and context needed to perform the requested operation.
     
-    # Replaces the flat list to support AND/OR/NOT nesting
-    filter_group: FilterGroup | None = None 
-    joins: list[JoinModel] = Field(default_factory=list)
-    limit: int | None = None
-    
-    native: NativeQuery | None = None
+    As a pydantic BaseModel you can serialize the entire working contract to JSON with 
+        catalog.model_dump()
+        or dict with catalog.model_dump_json(),
+        and rehydrate with CatalogModel.model_validate()
+        or CatalogModel.model_validate_json() respectively
+
+    It can also serve as a base for implementing openapi schemas, ORM models, or any other structured representation of metadata you need.
+
+"""
