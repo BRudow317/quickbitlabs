@@ -1,6 +1,6 @@
 
 from __future__ import annotations
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 from typing import Literal, Any, TypeAlias
 from collections.abc import Iterator, Iterable
 from functools import cached_property
@@ -8,7 +8,7 @@ import pyarrow as pa
 
 # Universal data format
 ArrowStream: TypeAlias = pa.RecordBatchReader 
-Records: TypeAlias = Iterable[dict[str, Any]] # aka json
+Records: TypeAlias = Iterable[dict[str, Any]] # aka json/dict
 
 arrow_types = {
     # Primitives
@@ -136,23 +136,25 @@ class Join(BaseModel):
     right_column: Column
     join_type: Literal["INNER", "LEFT", "RIGHT", "OUTER"] = "INNER"
 
-class Filter(BaseModel):
-    independent: Column | Entity | Any
+class Operator(BaseModel):
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+    independent: Column
     operator: Literal["==", "!=", ">", "<", ">=", "<=", "IN", "LIKE", "IS NULL", "IS NOT NULL"]
-    dependent: Any | None
+    dependent: str | pa.Field | Column | None
 
-class FilterGroup(BaseModel):
+class OperatorGroup(BaseModel):
     condition: Literal["AND", "OR", "NOT"]
-    filters: list[Filter | FilterGroup] = Field(default_factory=list)
+    operators: list[Operator | OperatorGroup] = Field(default_factory=list)
 
 class Catalog(BaseModel):
     name: str | None = None
     qualified_name: str | None = None
     entities: list[Entity] = Field(default_factory=list)
-    filter_groups: list[FilterGroup] = Field(default_factory=list)
+    operator_groups: list[OperatorGroup] = Field(default_factory=list)
     joins: list[Join] = Field(default_factory=list)
     sort_fields: list[Sort] = Field(default_factory=list)
     limit: int | None = None
+    stream_locators: dict[str, str] = Field(default_factory=dict)
     properties: dict[str, Any] = Field(default_factory=dict)
 
     @property

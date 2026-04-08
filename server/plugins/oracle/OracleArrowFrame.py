@@ -112,21 +112,61 @@ class OracleDataFrame:
                         rechunk: bool = True,
                     ) -> pl.DataFrame: 
         """Build a Polars DataFrame from any dataframe supporting the PyCapsule Interface."""
-        polar_data_frame: pl.DataFrame = pl.from_dataframe(df=df, 
-                          allow_copy=allow_copy, 
-                          rechunk=rechunk)
+        polar_data_frame: pl.DataFrame = pl.from_dataframe(
+                        df=df, 
+                        allow_copy=allow_copy, 
+                        rechunk=rechunk)
         return polar_data_frame
 
     def to_batches(self) -> Iterator[pa.RecordBatch]:
         """Yield PyArrow RecordBatches directly from the underlying data."""
         return self.to_pyarrow().to_batches()
 
-
 class OracleArrowFrame:
-    """Facade for executing queries and streaming native Arrow data from Oracle."""
-    
     def __init__(self, client: OracleClient):
         self.client: OracleClient = client
+
+    def oldget_arrow_stream(self, statement: str, parameters: list | tuple | dict | None = None, batch_size: int = 50_000) -> pa.RecordBatchReader:
+        iterator = self.fetch_odf(statement, parameters, size=batch_size)
+        try:
+            first_odf = next(iterator)
+            first_table = first_odf.to_pyarrow()
+            schema = first_table.schema
+        except StopIteration:
+            return pa.RecordBatchReader.from_batches(pa.schema([]), iter([]))
+            
+        def batch_generator() -> Iterator[pa.RecordBatch]:
+            yield from first_table.to_batches()
+            for odf in iterator: yield from odf.to_batches()
+                
+        return pa.RecordBatchReader.from_batches(schema, batch_generator())
+    
+    def get_arrow_stream(
+        self, 
+        statement: str, 
+        parameters: list | tuple | dict | None = None, 
+        batch_size: int = 50_000
+    ) -> pa.RecordBatchReader:
+        """Returns a PyArrow RecordBatchReader to satisfy the ArrowStream protocol."""
+        iterator = self.fetch_odf(statement, parameters, size=batch_size)
+        try:
+            first_odf = next(iterator)
+            first_table = first_odf.to_pyarrow()
+            schema = first_table.schema
+        except StopIteration: return pa.RecordBatchReader.from_batches(pa.schema([]), iter([]))
+            
+        def batch_generator() -> Iterator[pa.RecordBatch]:
+            yield from first_table.to_batches()
+            for odf in iterator: yield from odf.to_batches() 
+        return pa.RecordBatchReader.from_batches(schema, batch_generator())
+        
+    def fast_insert_stream(self, statement: str, stream: pa.RecordBatchReader, *, batcherrors: bool = False, arraydmlrowcounts: bool = False, suspend_on_success: bool = False):
+        cursor: oracledb.Cursor = self.client.get_con().cursor()
+        with cursor:
+            for batch in stream:
+                records = batch.to_pylist()
+                if records:
+                    cursor.executemany(statement=statement, parameters=records, batcherrors=batcherrors, arraydmlrowcounts=arraydmlrowcounts, suspend_on_success=suspend_on_success)
 
     def fetch_df_all(
         self, 
@@ -175,12 +215,15 @@ class OracleArrowFrame:
         """Bulk Insert	Connection.insert_df()	Direct Path Load"""
 
         
-    def fast_insert_df(self, statement: str, parameters: Any,
-        *,
-        batcherrors: bool = False,
-        arraydmlrowcounts: bool = False,
-        suspend_on_success: bool = False,
-        batch_size: int = 2**32 - 1,):
+    def oldfast_insert_df(self,
+                        arrow_stream: pa.RecordBatchReader, 
+                        statement: str | None = None, 
+                        parameters: Any = None,
+                        *,
+                        batcherrors: bool = False,
+                        arraydmlrowcounts: bool = False,
+                        suspend_on_success: bool = False,
+                        batch_size: int = 2**32 - 1,):
         """Fast Insert	Cursor.executemany()	Bind Arrow-supported objects
         To insert data currently in OracleDataFrame format into Oracle Database requires 
         it to be converted. For example, you could convert it into a Pandas DataFrame for 
@@ -188,11 +231,38 @@ class OracleArrowFrame:
         PyArrow Table.to_pylist() method and then use standard python-oracledb 
         functionality to execute a SQL INSERT statement.
         """
-        cursor: oracledb.Cursor = self.client.get_con().cursor()
-        with cursor:
+        if arrow_stream:
+            cursor: oracledb.Cursor = self.client.get_con().cursor()
+            with cursor:
+                for batch in arrow_stream:
+                    records = batch.to_pylist()
+                    if records:
+                        cursor.executemany(
+                        statement=statement, 
+                        parameters=records,
+                        batcherrors=batcherrors,
+                        arraydmlrowcounts=arraydmlrowcounts,
+                        suspend_on_success=suspend_on_success
+                    )
             cursor.executemany(statement=statement, 
                             parameters=parameters,
                             batcherrors=batcherrors,
                             arraydmlrowcounts=arraydmlrowcounts,
                             suspend_on_success=suspend_on_success,
                             batch_size=batch_size)
+
+    def fast_update_stream(self, statements: list[str], stream: pa.RecordBatchReader):
+        """Executes multiple DML statements efficiently over a single forward-only stream."""
+        cursor: oracledb.Cursor = self.client.get_con().cursor()
+        with cursor:
+            for batch in stream:
+                records = batch.to_pylist()
+                if not records: continue
+                
+                # Run every SQL statement against this specific chunk of data
+                for sql in statements:
+                    cursor.executemany(
+                        statement=sql, 
+                        parameters=records,
+                        batcherrors=False
+                    )

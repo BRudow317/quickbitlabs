@@ -16,7 +16,6 @@ class OracleEngine:
     client: OracleClient
     default_schema: OracleSchema | str
     schemas: list[OracleSchema]
-    _cache: dict[str, Any]
     """
     The Master Oracle Orchestrator.
     Handles the oracledb actions, executes raw SQL/DDL,
@@ -32,7 +31,6 @@ class OracleEngine:
         self.client = client
         self.default_schema = self.client.oracle_user.upper() if schema is None else (schema[0] if isinstance(schema, list) else schema.upper())
         self.schemas = []
-        self._cache = {}
 
 
     # =========================================================
@@ -47,12 +45,10 @@ class OracleEngine:
             try:
                 cursor.arraysize = fetch_size
                 cursor.execute(sql, binds)
-                
                 if cursor.description:
                     # Map Oracle columns to dictionary keys
                     columns = [col[0] for col in cursor.description]
                     cursor.rowfactory = lambda *args: dict(zip(columns, args))
-                    
                     while True:
                         rows = cursor.fetchmany(fetch_size)
                         if not rows:
@@ -99,13 +95,10 @@ class OracleEngine:
         """Pushes a chunk to Oracle. Attaches row-level errors without crashing the batch."""
         try:
             cursor.executemany(sql, batch, batcherrors=True)
-            
             for error in cursor.getbatcherrors():
                 failed_index = error.offset
-                batch[failed_index]["__error"] = error.message
-                
-            return batch
-            
+                batch[failed_index]["__error"] = error.message  
+            return batch    
         except oracledb.Error as e:
             logger.error(f"Oracle batch execution crashed: {e}")
             for record in batch:
@@ -142,10 +135,8 @@ class OracleSchema:
         self.client = client
         self.schema_name = schema_name
         if not self.schema_name or self.schema_name.strip() == '':
-            self.schema_name = str(client.oracle_user).upper()
-            
+            self.schema_name = str(client.oracle_user).upper()         
         self.description = description
-        
         self.tables = []
         if isinstance(tables, list):
             self.tables = tables
