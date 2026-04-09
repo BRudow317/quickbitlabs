@@ -34,9 +34,9 @@ class Oracle(Plugin):
         except Exception as e:
             return PluginResponse.error(str(e))
 
-    def update_data(self, catalog: Catalog, data: ArrowStream ,  **kwargs: Any) -> PluginResponse[ArrowStream]:
+    def update_data(self, catalog: Catalog, data: ArrowStream ,  **kwargs: Any) -> PluginResponse[None]:
         try:
-            return PluginResponse.success(self.service.update_data(catalog, data, **kwargs))
+            return self.service.update_data(catalog, data, **kwargs)
         except Exception as e:
             return PluginResponse.error(str(e))
 

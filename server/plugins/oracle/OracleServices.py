@@ -35,68 +35,51 @@ class OracleService:
     def get_data(
         self, 
         catalog: Catalog,
-        client: OracleClient,
         **kwargs: Any
     ) -> ArrowStream:
         binds: dict[str, Any] = kwargs.get('binds', {})
         
         query = kwargs.get('query', None)
         binds = kwargs.get('binds', {})
-        if query: return self.engine.query(query, binds=binds)
+        if query: return self.arrow_frame.arrow_stream(query, parameters=binds)
         if catalog:
             sql, binds = build_select(catalog)
         
-            return self.engine.query(sql, binds)
+            return self.arrow_frame.arrow_stream(sql, parameters=binds)
 
     # ---------------------------------------------------------
     # WRITE OPERATIONS (Strict Catalog Contracts)
     # ---------------------------------------------------------
 
-    def insert_data(self, catalog: Catalog, data: ArrowStream, client: OracleClient, **kwargs: Any) -> None:
+    def insert_data(self, catalog: Catalog, data: ArrowStream, **kwargs: Any) -> None:
         """INSERT: Streams data into Oracle via the Catalog envelope."""
         for entity in catalog.entities:
-            # Notice: The dialect or engine might need the catalog's namespace in the future
             sql = build_insert_dml(catalog, entity)
             input_sizes = self._build_input_sizes(catalog)
-            
-            self.engine.execute_many(sql, data, input_sizes)
+            self.arrow_frame.execute_many(sql, data, input_sizes)
 
-    # OracleServices.py
 
-    def update_data(self, catalog: Catalog, stream: ArrowStream, client: OracleClient, **kwargs) -> PluginResponse[ArrowStream]:
+    def update_data(self, catalog: Catalog, stream: ArrowStream, **kwargs) -> PluginResponse[None]:
         if not catalog.entities:
-            return PluginResponse.error("Catalog must contain at least one entity for update.")
-            
+            return PluginResponse.error("Catalog must contain at least one entity for update.") 
         try:
             # Generate a list of SQL strings for every entity in the catalog
-            sql_statements = [build_update_dml(catalog, entity) for entity in catalog.entities]
-            
-            # Pass the list of statements and the single stream to the execution frame
-            self.arrow_frame.fast_update_stream(sql_statements, stream)
-            # input_sizes = self._build_input_sizes(catalog)
-            
+            sql_statements = (build_update_dml(catalog, entity) for entity in catalog.entities)
+            self.arrow_frame.execute_many(sql=sql_statements, data=stream)
             return PluginResponse.success(None, "Update successful")
         except Exception as e:
             return PluginResponse.error(str(e))
-            
 
-    def upsert_data(self, catalog: Catalog, data: ArrowStream, client: OracleClient, **kwargs: Any) -> None:
+    def upsert_data(self, catalog: Catalog, data: ArrowStream,  **kwargs: Any) -> None:
         """UPSERT: Uses Oracle MERGE statement."""
         for entity in catalog.entities:
-            if not entity.primary_key_columns:
-                raise ValueError(f"Cannot upsert {entity.name}: No Primary Keys defined.")
-
             sql = build_merge_dml(catalog, entity)
             input_sizes = self._build_input_sizes(catalog)
-            self.engine.execute_many(sql, data, input_sizes)
+            self.arrow_frame.execute_many(sql, data, input_sizes)
 
-    def delete_data(self, catalog: Catalog, data: ArrowStream, client: OracleClient, **kwargs: Any) -> None:
+    def delete_data(self, catalog: Catalog, data: ArrowStream,  **kwargs: Any) -> None:
         """DELETE: Removes data based on Primary Key."""
         for entity in catalog.entities:
-            if not entity.primary_key_columns:
-                raise ValueError(f"Cannot delete from {entity.name}: No Primary Keys defined.")
-            sql = build_delete_dml(catalog, entity)
-            pk_names = {pk.name for pk in entity.primary_key_columns}
-            input_sizes = {k: v for k, v in self._build_input_sizes(catalog).items() if k in pk_names}
-            
-            self.engine.execute_many(sql=sql, data=data, input_sizes=input_sizes)
+            sql, binds = build_delete_dml(catalog, entity)
+            input_sizes = self._build_input_sizes(catalog)
+            self.arrow_frame.execute_many(sql=sql, data=data, input_sizes=input_sizes)

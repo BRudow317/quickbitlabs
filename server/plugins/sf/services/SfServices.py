@@ -60,7 +60,7 @@ class SfCacheEntry:
     created_at: datetime.datetime
     _key: bytearray = field(repr=False)           # AES-256 key - 32 bytes
 
-async def sniff_schema(rest: SfRest, object_name: str) -> SfObjectSchema:
+def sniff_schema(rest: SfRest, object_name: str) -> SfObjectSchema:
     """
     Call describeSObject and build the field lists and Arrow schema.
     Compound fields (address, location, compoundFieldName children) are excluded.
@@ -69,7 +69,7 @@ async def sniff_schema(rest: SfRest, object_name: str) -> SfObjectSchema:
     This is the foundation - call it once and pass the result through the session.
     """
     obj_type = getattr(rest, object_name)
-    describe = await obj_type.describe()
+    describe = obj_type.describe()
     fields_raw: list[dict[str, Any]] = describe.get("fields", [])
 
     queryable: list[SfFieldMeta] = []
@@ -200,7 +200,7 @@ def build_soql(
 # Step 3 - REST initial fetch (first page → Arrow table)
 # ---------------------------------------------------------------------------
 
-async def fetch_first_page(
+def fetch_first_page(
     rest: SfRest,
     soql: str,
     schema: SfObjectSchema,
@@ -212,7 +212,7 @@ async def fetch_first_page(
     The caller decides whether to follow pagination synchronously
     or kick off a bulk job for the remainder.
     """
-    result = await rest.query(soql)
+    result = rest.query(soql)
     records: list[dict[str, Any]] = result.get("records", [])
     next_url: str | None = None if result.get("done") else result.get("nextRecordsUrl")
 
@@ -220,13 +220,13 @@ async def fetch_first_page(
     return table, next_url
 
 
-async def fetch_next_page(
+def fetch_next_page(
     rest: SfRest,
     next_records_url: str,
     schema: SfObjectSchema,
 ) -> tuple[pa.Table, str | None]:
     """Follow one nextRecordsUrl hop. Returns the page and the next URL if any."""
-    result = await rest.query_more(next_records_url, identifier_is_url=True)
+    result = rest.query_more(next_records_url, identifier_is_url=True)
     records: list[dict[str, Any]] = result.get("records", [])
     next_url: str | None = None if result.get("done") else result.get("nextRecordsUrl")
     return _records_to_arrow(records, schema.arrow_schema), next_url
@@ -257,14 +257,13 @@ def _records_to_arrow(records: list[dict[str, Any]], schema: pa.Schema) -> pa.Ta
 # Step 5 - Bulk 2.0 ingest job submission
 # ---------------------------------------------------------------------------
 
-async def submit_bulk_ingest(
+def submit_bulk_ingest(
     bulk2: Bulk2,
     object_name: str,
     table: pa.Table,
     operation: Operation = Operation.upsert,
     external_id_field: str | None = None,
     chunk_size: int | None = None,
-    concurrency: int = 1,
 ) -> list[dict[str, int]]:
     """
     Serialize Arrow table to in-memory CSV bytes and submit as Bulk 2.0 ingest job(s).
@@ -279,9 +278,9 @@ async def submit_bulk_ingest(
     if operation == Operation.upsert:
         if not external_id_field:
             raise ValueError("external_id_field is required for upsert operations")
-        return await method(table, external_id_field=external_id_field, chunk_size=chunk_size, concurrency=concurrency)
+        return method(table, external_id_field=external_id_field, chunk_size=chunk_size)
 
-    return await method(table, chunk_size=chunk_size, concurrency=concurrency)
+    return method(table, chunk_size=chunk_size)
 
 def strip_to_writeable(table: pa.Table, schema: SfObjectSchema) -> pa.Table:
     """
@@ -297,7 +296,7 @@ def strip_to_writeable(table: pa.Table, schema: SfObjectSchema) -> pa.Table:
 # Step 6 - Bulk job status poll (single check, not a wait loop)
 # ---------------------------------------------------------------------------
 
-async def poll_bulk_job(
+def poll_bulk_job(
     bulk2: Bulk2,
     job_id: str,
     is_query: bool = True,
@@ -309,14 +308,14 @@ async def poll_bulk_job(
     The caller owns the polling loop and the frequency.
     For a blocking wait, use _Bulk2Client.wait_for_job() directly.
     """
-    info = await bulk2._http.request(
+    info = bulk2._http.request(
         "GET",
         f"{bulk2.bulk2_url}{'query' if is_query else 'ingest'}/{job_id}",
     )
     state_str: str = info.json().get("state", "")
     return JobState(state_str)
 
-async def fetch_ingest_results(
+def fetch_ingest_results(
     bulk2: Bulk2,
     object_name: str,
     job_id: str,
@@ -324,13 +323,13 @@ async def fetch_ingest_results(
 ) -> dict[str, pa.Table]:
     """
     Fetch successful, failed, and unprocessed result sets for a completed ingest job.
-    All three are fetched concurrently and returned as Arrow tables.
+    Returns Arrow tables keyed by result type.
 
     failed and unprocessed tables include SF's sf__Error and sf__Id columns
     alongside the original record fields - schema inference used for those extras.
     """
     sf_obj = getattr(bulk2, object_name)
-    result_bytes = await sf_obj.get_all_ingest_results(job_id)
+    result_bytes = sf_obj.get_all_ingest_results(job_id)
 
     return {
         "successfulRecords": _csv_bytes_to_arrow(
@@ -433,7 +432,7 @@ def _decryption_props(key: bytes):
 # Step 6+7+8 combined — Bulk query streamed directly to encrypted Parquet
 # ---------------------------------------------------------------------------
 
-async def stream_bulk_to_parquet(
+def stream_bulk_to_parquet(
     bulk2: Bulk2,
     object_name: str,
     soql: str,
@@ -464,7 +463,7 @@ async def stream_bulk_to_parquet(
     sf_obj = getattr(bulk2, object_name)
 
     try:
-        async for csv_bytes in sf_obj.query(soql, max_records=max_records):
+        for csv_bytes in sf_obj.query(soql, max_records=max_records):
             chunk = _csv_bytes_to_arrow(csv_bytes, nullable_schema)
             writer.write_table(chunk)
             record_count += len(chunk)
@@ -566,7 +565,7 @@ def open_parquet_arrow(entry: SfCacheEntry) -> pa.Table:
 
 
 # Step 10 - CRUD write-back via sObject Collections API
-async def collections_update(
+def collections_update(
     http: SfClient,
     object_name: str,
     records: list[dict[str, Any]],
@@ -589,7 +588,7 @@ async def collections_update(
         for r in records
     ]
 
-    response = await http.request(
+    response = http.request(
         "PATCH",
         "composite/sobjects",
         json={"allOrNone": all_or_none, "records": cleaned},
@@ -597,7 +596,7 @@ async def collections_update(
     return response.json()
 
 
-async def collections_create(
+def collections_create(
     http: SfClient,
     object_name: str,
     records: list[dict[str, Any]],
@@ -619,7 +618,7 @@ async def collections_create(
         for r in records
     ]
 
-    response = await http.request(
+    response = http.request(
         "POST",
         "composite/sobjects",
         json={"allOrNone": all_or_none, "records": cleaned},
@@ -627,7 +626,7 @@ async def collections_create(
     return response.json()
 
 
-async def collections_delete(
+def collections_delete(
     http: SfClient,
     ids: list[str],
     all_or_none: bool = False,
@@ -640,7 +639,7 @@ async def collections_delete(
     if len(ids) > 200:
         raise ValueError("sObject Collections supports max 200 records per call.")
 
-    response = await http.request(
+    response = http.request(
         "DELETE",
         "composite/sobjects",
         params={

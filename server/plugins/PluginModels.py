@@ -139,7 +139,7 @@ class Join(BaseModel):
 class Operator(BaseModel):
     model_config = ConfigDict(arbitrary_types_allowed=True)
     independent: Column
-    operator: Literal["==", "!=", ">", "<", ">=", "<=", "IN", "LIKE", "IS NULL", "IS NOT NULL"]
+    operator: Literal["=", "==", "!=", ">", "<", ">=", "<=", "IN", "LIKE", "IS NULL", "IS NOT NULL"]
     dependent: str | pa.Field | Column | None
 
 class OperatorGroup(BaseModel):

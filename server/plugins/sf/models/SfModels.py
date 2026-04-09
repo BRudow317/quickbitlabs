@@ -4,14 +4,11 @@ from collections.abc import Mapping, MutableMapping
 from enum import Enum
 import os
 from typing import NamedTuple, TypedDict
-from dataclasses import dataclass
     
 API_VERSION: str = os.getenv('SF_API_VERSION', '66.0')
 SF_EXTERNAL_CLIENT_APP_NAME: str = os.getenv('SF_EXTERNAL_CLIENT_APP_NAME', 'automation')
 SF_BASE_URL: str = os.getenv('SF_BASE_URL') or f"https://{os.getenv('SF_BASE_DOMAIN')}.salesforce.com"
 SF_CALLBACK_URL: str = os.getenv('SF_CALLBACK_URL', 'http://localhost:1717/OauthRedirect')
-
-
 
 # Add to SfModels.py alongside the other TypedDicts
 

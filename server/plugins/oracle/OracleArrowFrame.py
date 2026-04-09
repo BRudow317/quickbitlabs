@@ -20,7 +20,7 @@ from polars._typing import (
 from polars.interchange.protocol import SupportsInterchange
 
 class OracleDataFrame:
-    """Wraps the native oracledb.OracleDataFrame to provide direct zero-copy ecosystem conversions."""
+    """Wraps the native oracledb.DataFrame to provide direct zero-copy ecosystem conversions."""
     def __init__(
             self,
             odf: oracledb.DataFrame
@@ -28,7 +28,7 @@ class OracleDataFrame:
         self._odf: oracledb.DataFrame = odf
     
     def __call__(self) -> oracledb.DataFrame:
-        """Returns the underlying oracledb.OracleDataFrame for direct access to its methods."""
+        """Returns the underlying oracledb.DataFrame for direct access to its methods."""
         return self._odf
     
     def _initialize(self, impl: DataFrameImpl):
@@ -95,6 +95,10 @@ class OracleDataFrame:
     def to_pyarrow(self) -> pa.Table:
         """Zero-copy conversion to a PyArrow Table via the PyCapsule interface."""
         return pa.Table.from_arrays(self.column_arrays(), names=self.column_names())
+    
+    def to_batches(self) -> Iterator[pa.RecordBatch]:
+        """Yield PyArrow RecordBatches directly from the underlying data."""
+        return self.to_pyarrow().to_batches()
 
     def to_polars(self) -> pl.DataFrame | pl.LazyFrame:
         """Zero-copy conversion to a Polars DataFrame."""
@@ -118,55 +122,71 @@ class OracleDataFrame:
                         rechunk=rechunk)
         return polar_data_frame
 
-    def to_batches(self) -> Iterator[pa.RecordBatch]:
-        """Yield PyArrow RecordBatches directly from the underlying data."""
-        return self.to_pyarrow().to_batches()
+
+
+
 
 class OracleArrowFrame:
+    client: OracleClient
     def __init__(self, client: OracleClient):
         self.client: OracleClient = client
-
-    def oldget_arrow_stream(self, statement: str, parameters: list | tuple | dict | None = None, batch_size: int = 50_000) -> pa.RecordBatchReader:
-        iterator = self.fetch_odf(statement, parameters, size=batch_size)
+       
+    def arrow_stream(
+        self,
+        statement: str,
+        parameters: list | tuple | dict | None = None,
+        size: int = 50_000,
+        fetch_decimals: bool = True,
+    ) -> pa.RecordBatchReader:
+        """Returns a PyArrow RecordBatchReader"""
+        raw_iter: Iterator[oracledb.DataFrame] = self.client.get_con().fetch_df_batches(
+            statement=statement,
+            parameters=parameters,
+            size=size,
+            fetch_decimals=fetch_decimals,
+        )
         try:
-            first_odf = next(iterator)
-            first_table = first_odf.to_pyarrow()
-            schema = first_table.schema
+            first_table = OracleDataFrame(next(raw_iter)).to_pyarrow()
         except StopIteration:
             return pa.RecordBatchReader.from_batches(pa.schema([]), iter([]))
-            
+
+        schema = first_table.schema
+
         def batch_generator() -> Iterator[pa.RecordBatch]:
             yield from first_table.to_batches()
-            for odf in iterator: yield from odf.to_batches()
-                
-        return pa.RecordBatchReader.from_batches(schema, batch_generator())
-    
-    def get_arrow_stream(
-        self, 
-        statement: str, 
-        parameters: list | tuple | dict | None = None, 
-        batch_size: int = 50_000
-    ) -> pa.RecordBatchReader:
-        """Returns a PyArrow RecordBatchReader to satisfy the ArrowStream protocol."""
-        iterator = self.fetch_odf(statement, parameters, size=batch_size)
-        try:
-            first_odf = next(iterator)
-            first_table = first_odf.to_pyarrow()
-            schema = first_table.schema
-        except StopIteration: return pa.RecordBatchReader.from_batches(pa.schema([]), iter([]))
-            
-        def batch_generator() -> Iterator[pa.RecordBatch]:
-            yield from first_table.to_batches()
-            for odf in iterator: yield from odf.to_batches() 
+            for record_batch in raw_iter:
+                yield from OracleDataFrame(record_batch).to_pyarrow().to_batches()
+
         return pa.RecordBatchReader.from_batches(schema, batch_generator())
         
-    def fast_insert_stream(self, statement: str, stream: pa.RecordBatchReader, *, batcherrors: bool = False, arraydmlrowcounts: bool = False, suspend_on_success: bool = False):
-        cursor: oracledb.Cursor = self.client.get_con().cursor()
-        with cursor:
-            for batch in stream:
+    def execute_many(
+        self,
+        sql: str | Iterable[tuple[str, dict]],
+        data: pa.RecordBatchReader,
+        input_sizes: dict[str, Any] | None = None,
+        *,
+        batcherrors: bool = False,
+    ) -> None:
+        """Generic bulk DML over an Arrow stream.
+
+        sql can be a single statement string, or an iterable of (statement, static_binds)
+        tuples to execute multiple statements per batch (e.g. multi-entity UPDATE).
+        """
+        statements: list[tuple[str, dict]] = [(sql, {})] if isinstance(sql, str) else list(sql)
+        with self.client.get_con().cursor() as cursor:
+            if input_sizes:
+                cursor.setinputsizes(**input_sizes)
+            for batch in data:
                 records = batch.to_pylist()
-                if records:
-                    cursor.executemany(statement=statement, parameters=records, batcherrors=batcherrors, arraydmlrowcounts=arraydmlrowcounts, suspend_on_success=suspend_on_success)
+                if not records:
+                    continue
+                for stmt, binds in statements:
+                    parameters = [{**r, **binds} for r in records] if binds else records
+                    cursor.executemany(
+                        statement=stmt,
+                        parameters=parameters,
+                        batcherrors=batcherrors,
+                    )
 
     def fetch_df_all(
         self, 
@@ -184,85 +204,19 @@ class OracleArrowFrame:
         )
         return OracleDataFrame(odf)
 
-    def fetch_odf(
+    def fetch_df_batches(
         self, 
         statement: str, 
         parameters: list | tuple | dict | None = None, 
         size: int = 50_000, 
         fetch_decimals: bool = True
-    ) -> Iterator[OracleDataFrame]:
+    ) -> Iterator[oracledb.DataFrame]:
         """Yield batches of zero-copy OracleDataFrame facades for memory-safe streaming.
         Connection.fetch_df_batches(statement, parameters=None, size=None)"""
-        iterator = self.client.get_con().fetch_df_batches(
+        iterator: Iterator[oracledb.DataFrame] = self.client.get_con().fetch_df_batches(
             statement=statement,
             parameters=parameters,
             size=size,
             fetch_decimals=fetch_decimals
         )
-        for odf in iterator:
-            yield OracleDataFrame(odf)
-
-    def get_arrow_batches(
-        self, 
-        statement: str, 
-        parameters: list | tuple | dict | None = None, 
-        batch_size: int = 50_000
-    ) -> Iterator[pa.RecordBatch]:
-        for odf in self.fetch_odf(statement, parameters, size=batch_size):
-            yield from odf.to_batches()
-
-    def insert_df(self):
-        """Bulk Insert	Connection.insert_df()	Direct Path Load"""
-
-        
-    def oldfast_insert_df(self,
-                        arrow_stream: pa.RecordBatchReader, 
-                        statement: str | None = None, 
-                        parameters: Any = None,
-                        *,
-                        batcherrors: bool = False,
-                        arraydmlrowcounts: bool = False,
-                        suspend_on_success: bool = False,
-                        batch_size: int = 2**32 - 1,):
-        """Fast Insert	Cursor.executemany()	Bind Arrow-supported objects
-        To insert data currently in OracleDataFrame format into Oracle Database requires 
-        it to be converted. For example, you could convert it into a Pandas DataFrame for 
-        insert with the Pandas method to_sql(). Or convert into a Python list via the 
-        PyArrow Table.to_pylist() method and then use standard python-oracledb 
-        functionality to execute a SQL INSERT statement.
-        """
-        if arrow_stream:
-            cursor: oracledb.Cursor = self.client.get_con().cursor()
-            with cursor:
-                for batch in arrow_stream:
-                    records = batch.to_pylist()
-                    if records:
-                        cursor.executemany(
-                        statement=statement, 
-                        parameters=records,
-                        batcherrors=batcherrors,
-                        arraydmlrowcounts=arraydmlrowcounts,
-                        suspend_on_success=suspend_on_success
-                    )
-            cursor.executemany(statement=statement, 
-                            parameters=parameters,
-                            batcherrors=batcherrors,
-                            arraydmlrowcounts=arraydmlrowcounts,
-                            suspend_on_success=suspend_on_success,
-                            batch_size=batch_size)
-
-    def fast_update_stream(self, statements: list[str], stream: pa.RecordBatchReader):
-        """Executes multiple DML statements efficiently over a single forward-only stream."""
-        cursor: oracledb.Cursor = self.client.get_con().cursor()
-        with cursor:
-            for batch in stream:
-                records = batch.to_pylist()
-                if not records: continue
-                
-                # Run every SQL statement against this specific chunk of data
-                for sql in statements:
-                    cursor.executemany(
-                        statement=sql, 
-                        parameters=records,
-                        batcherrors=False
-                    )
+        return iterator
