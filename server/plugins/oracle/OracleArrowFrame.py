@@ -74,23 +74,20 @@ class OracleDataFrame:
             raise KeyError(f"Column {name} not found in DataFrame")
 
     def column_arrays(self) -> list[ArrowArray]:
-        """Return the underlying Arrow PyCapsule arrays.
-        original: return self._arrays
-        """
-        return self.column_arrays()
+        """Return the underlying Arrow PyCapsule arrays."""
+        return self._odf.column_arrays()
 
     def column_names(self) -> list[str]:
-        """Return the column names of the data frame.
-        original: return [a.name for a in self._arrays]"""
-        return self.column_names()
+        """Return the column names of the data frame."""
+        return self._odf.column_names()
 
     def num_rows(self) -> int:
         """Return the number of rows in the data frame."""
-        return self.num_rows()
+        return self._odf.num_rows()
 
     def num_columns(self) -> int:
         """Return the number of columns in the data frame."""
-        return self.num_columns()
+        return self._odf.num_columns()
 
     def to_pyarrow(self) -> pa.Table:
         """Zero-copy conversion to a PyArrow Table via the PyCapsule interface."""
@@ -187,6 +184,7 @@ class OracleArrowFrame:
                         parameters=parameters,
                         batcherrors=batcherrors,
                     )
+        self.client.get_con().commit()
 
     def fetch_df_all(
         self, 

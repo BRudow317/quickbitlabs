@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, cast
 import logging
 import oracledb
 from collections.abc import Iterator, Iterable
@@ -26,9 +26,9 @@ class OracleEngine:
     """
     def __init__(self, 
                 schema: str | list[str] | None = None,
-                client: OracleClient = OracleClient()
+            client: OracleClient | None = None
                 ):
-        self.client = client
+        self.client = client or OracleClient()
         self.default_schema = self.client.oracle_user.upper() if schema is None else (schema[0] if isinstance(schema, list) else schema.upper())
         self.schemas = []
 
@@ -40,30 +40,17 @@ class OracleEngine:
     def query(self, sql: str, binds: dict[str, Any] | None = None, fetch_size: int = 10000) -> Iterator[dict[str, Any]]:
         """Executes a SELECT query and yields dictionaries efficiently."""
         binds = binds or {}
-        
+
         with self.client.get_con().cursor() as cursor:
             try:
                 cursor.arraysize = fetch_size
                 cursor.execute(sql, binds)
                 if cursor.description:
-                    # Map Oracle columns to dictionary keys
-                    columns = [col[0] for col in cursor.description]
-                    cursor.rowfactory = lambda *args: dict(zip(columns, args))
-                    while True:
-                        rows = cursor.fetchmany(fetch_size)
-                        if not rows:
-                            break
-                        yield from rows
-                    # Map Oracle columns to dictionary keys
-                    columns = [col[0] for col in cursor.description]
-                    cursor.rowfactory = lambda *args: dict(zip(columns, args))
-                
-                while True:
-                    rows = cursor.fetchmany(fetch_size)
-                    if not rows:
-                        break
-                    yield from rows
-                    
+                    columns: list[str] = [str(col[0]) for col in cursor.description]
+                    for row in cursor:
+                       #yield #cast(dict[str, Any], 
+                        yield dict(zip(columns, row))
+                                #   )
             except oracledb.Error as e:
                 logger.error(f"Oracle read execution failed: {sql} | Error: {e}")
                 raise
@@ -78,8 +65,10 @@ class OracleEngine:
         """Streams records into Oracle. Yields them back, tagged with errors if they fail."""
         with self.client.get_con().cursor() as cursor:
             if input_sizes:
-                cursor.setinputsizes(**input_sizes)
-                
+                typed = {k: v for k, v in input_sizes.items() if v is not None}
+                if typed:
+                    cursor.setinputsizes(**typed)
+
             batch = []
             for record in records:
                 batch.append(record)
@@ -90,20 +79,25 @@ class OracleEngine:
                     
             if batch:
                 yield from self._flush_batch(cursor, sql, batch)
+        self.client.get_con().commit()
 
     def _flush_batch(self, cursor: Any, sql: str, batch: list[dict[str, Any]]) -> list[dict[str, Any]]:
         """Pushes a chunk to Oracle. Attaches row-level errors without crashing the batch."""
         try:
             cursor.executemany(sql, batch, batcherrors=True)
-            for error in cursor.getbatcherrors():
+            batch_errors = cursor.getbatcherrors()
+            for error in batch_errors:
                 failed_index = error.offset
-                batch[failed_index]["__error"] = error.message  
-            return batch    
+                batch[failed_index]["__error"] = error.message
+            if batch_errors:
+                messages = "; ".join(
+                    f"offset={err.offset}: {err.message}" for err in batch_errors
+                )
+                raise RuntimeError(f"Oracle batch row errors for SQL [{sql}]: {messages}")
+            return batch
         except oracledb.Error as e:
             logger.error(f"Oracle batch execution crashed: {e}")
-            for record in batch:
-                record["__error"] = str(e)
-            return batch
+            raise
 
     # =========================================================
     # 3. THE BUILDER: DDL Execution
@@ -127,19 +121,30 @@ class OracleSchema:
     
     def __init__(
             self,
-            client: OracleClient = OracleClient(),
+            client: OracleClient | None = None,
             schema_name: str = '',
-            tables: list[OracleTable] = [],
+            tables: list[OracleTable] | None = None,
             description: str | None = None
     ):
-        self.client = client
+        self.client = client or OracleClient()
         self.schema_name = schema_name
         if not self.schema_name or self.schema_name.strip() == '':
-            self.schema_name = str(client.oracle_user).upper()         
+            self.schema_name = str(self.client.oracle_user).upper()
         self.description = description
         self.tables = []
         if isinstance(tables, list):
             self.tables = tables
+
+    def list_table_names(self) -> list[str]:
+        sql = (
+            "SELECT TABLE_NAME "
+            "FROM ALL_TABLES "
+            "WHERE OWNER = :owner "
+            "ORDER BY TABLE_NAME"
+        )
+        with self.client.get_con().cursor() as cursor:
+            cursor.execute(sql, {"owner": self.schema_name.upper()})
+            return [str(row[0]) for row in cursor.fetchall()]
     
 
 class OracleTable:
@@ -181,7 +186,7 @@ class OracleTable:
     @property
     def _fetch_tab_columns(self) -> list[dict[str, Any]]| None:
         if self._fetched_db_col is not None: return self._fetched_db_col
-        sql = f"""SELECT COLUMN_NAME, DATA_TYPE, CHAR_LENGTH, CHAR_USED, COLUMN_ID, NULLABLE
+        sql = f"""SELECT COLUMN_NAME, DATA_TYPE, CHAR_LENGTH, CHAR_USED, DATA_PRECISION, DATA_SCALE, COLUMN_ID, NULLABLE
                     FROM ALL_TAB_COLUMNS WHERE OWNER = :owner 
                     AND TABLE_NAME = :table_name 
                     ORDER BY COLUMN_ID
@@ -198,6 +203,28 @@ class OracleTable:
         else :
             self._fetched_db_col = None
             return None
+
+    def fetch_primary_keys(self) -> set[str]:
+        sql = (
+            "SELECT acc.COLUMN_NAME "
+            "FROM ALL_CONSTRAINTS ac "
+            "JOIN ALL_CONS_COLUMNS acc "
+            "  ON ac.OWNER = acc.OWNER "
+            " AND ac.CONSTRAINT_NAME = acc.CONSTRAINT_NAME "
+            " AND ac.TABLE_NAME = acc.TABLE_NAME "
+            "WHERE ac.OWNER = :owner "
+            "  AND ac.TABLE_NAME = :table_name "
+            "  AND ac.CONSTRAINT_TYPE = 'P'"
+        )
+        with self.schema.client.get_con().cursor() as cursor:
+            cursor.execute(
+                sql,
+                {
+                    "owner": self.schema.schema_name.upper(),
+                    "table_name": self.table_name.upper(),
+                },
+            )
+            return {str(row[0]) for row in cursor.fetchall()}
         
     def _wipe_fetch_cache(self) -> None:
         self._fetched_db_col = None

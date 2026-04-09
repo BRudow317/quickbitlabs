@@ -324,3 +324,138 @@ class TestOracleServiceDeleteData:
 
         kwargs = mock_frame.execute_many.call_args.kwargs
         assert kwargs.get("data") is stream
+
+
+# ---------------------------------------------------------------------------
+# OracleService.get_catalog
+# ---------------------------------------------------------------------------
+
+class TestOracleServiceGetCatalog:
+
+    def test_empty_catalog_hydrates_tables_and_columns(self):
+        service, _, _ = make_service()
+        catalog = Catalog()
+
+        with patch.object(service, "_list_schema_tables", return_value=["EMP", "DEPT"]), patch.object(
+            service,
+            "_fetch_table_primary_keys",
+            side_effect=[{"ID"}, {"ID"}],
+        ), patch.object(
+            service,
+            "_fetch_table_columns",
+            side_effect=[
+                [
+                    {
+                        "COLUMN_NAME": "ID",
+                        "DATA_TYPE": "NUMBER",
+                        "CHAR_LENGTH": None,
+                        "DATA_PRECISION": 38,
+                        "DATA_SCALE": 0,
+                        "NULLABLE": "N",
+                        "COLUMN_ID": 1,
+                    },
+                    {
+                        "COLUMN_NAME": "NAME",
+                        "DATA_TYPE": "VARCHAR2",
+                        "CHAR_LENGTH": 255,
+                        "DATA_PRECISION": None,
+                        "DATA_SCALE": None,
+                        "NULLABLE": "Y",
+                        "COLUMN_ID": 2,
+                    },
+                ],
+                [
+                    {
+                        "COLUMN_NAME": "ID",
+                        "DATA_TYPE": "NUMBER",
+                        "CHAR_LENGTH": None,
+                        "DATA_PRECISION": 38,
+                        "DATA_SCALE": 0,
+                        "NULLABLE": "N",
+                        "COLUMN_ID": 1,
+                    }
+                ],
+            ],
+        ):
+            out = service.get_catalog(catalog)
+
+        assert out.name == "TESTUSER"
+        assert out.qualified_name == "TESTUSER"
+        assert len(out.entities) == 2
+        assert out.entities[0].name == "EMP"
+        assert out.entities[0].qualified_name == "TESTUSER.EMP"
+        assert [c.name for c in out.entities[0].columns] == ["ID", "NAME"]
+        assert out.entities[0].columns[0].primary_key is True
+
+    def test_entities_without_columns_hydrate_full_columns(self):
+        service, _, _ = make_service()
+        catalog = Catalog(
+            entities=[
+                Entity(name="EMP", qualified_name="EMP", columns=[]),
+            ]
+        )
+
+        with patch.object(service, "_fetch_table_primary_keys", return_value={"ID"}), patch.object(
+            service,
+            "_fetch_table_columns",
+            return_value=[
+                {
+                    "COLUMN_NAME": "ID",
+                    "DATA_TYPE": "NUMBER",
+                    "CHAR_LENGTH": None,
+                    "DATA_PRECISION": 38,
+                    "DATA_SCALE": 0,
+                    "NULLABLE": "N",
+                    "COLUMN_ID": 1,
+                },
+                {
+                    "COLUMN_NAME": "NAME",
+                    "DATA_TYPE": "VARCHAR2",
+                    "CHAR_LENGTH": 255,
+                    "DATA_PRECISION": None,
+                    "DATA_SCALE": None,
+                    "NULLABLE": "Y",
+                    "COLUMN_ID": 2,
+                },
+            ],
+        ) as fetch_cols:
+            out = service.get_catalog(catalog)
+
+        assert out.entities[0].qualified_name == "TESTUSER.EMP"
+        assert [c.name for c in out.entities[0].columns] == ["ID", "NAME"]
+        fetch_cols.assert_called_once_with("TESTUSER", "EMP", None)
+
+    def test_entities_with_columns_hydrate_only_requested_columns(self):
+        service, _, _ = make_service()
+        catalog = Catalog(
+            entities=[
+                Entity(
+                    name="EMP",
+                    qualified_name="EMP",
+                    columns=[
+                        Column(name="NAME", qualified_name="EMP.NAME"),
+                    ],
+                )
+            ]
+        )
+
+        with patch.object(service, "_fetch_table_primary_keys", return_value=set()), patch.object(
+            service,
+            "_fetch_table_columns",
+            return_value=[
+                {
+                    "COLUMN_NAME": "NAME",
+                    "DATA_TYPE": "VARCHAR2",
+                    "CHAR_LENGTH": 255,
+                    "DATA_PRECISION": None,
+                    "DATA_SCALE": None,
+                    "NULLABLE": "Y",
+                    "COLUMN_ID": 2,
+                }
+            ],
+        ) as fetch_cols:
+            out = service.get_catalog(catalog)
+
+        assert len(out.entities[0].columns) == 1
+        assert out.entities[0].columns[0].name == "NAME"
+        fetch_cols.assert_called_once_with("TESTUSER", "EMP", {"NAME"})

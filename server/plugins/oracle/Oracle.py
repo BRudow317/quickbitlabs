@@ -5,8 +5,8 @@ from server.plugins.PluginModels import Catalog, Entity, Column, ArrowStream
 from server.plugins.PluginResponse import PluginResponse
 
 # STRICT BOUNDARY: The Facade ONLY imports Services. No Engines, No Clients.
-from OracleServices import OracleService
-from OracleClient import OracleClient
+from .OracleServices import OracleService
+from .OracleClient import OracleClient
 
 
 class Oracle(Plugin):
@@ -19,12 +19,14 @@ class Oracle(Plugin):
     def __init__(self, **kwargs: Any):
         self.client = OracleClient(**kwargs)
         self.service = OracleService(self.client)
+        self.properties = {}
 
     # -- Records (Row / Data Level) --
 
     def create_data(self, catalog: Catalog, data: ArrowStream,  **kwargs: Any) -> PluginResponse[ArrowStream]:
         try:
-            return PluginResponse.success(self.service.insert_data(catalog, data, **kwargs))
+            self.service.insert_data(catalog, data, **kwargs)
+            return PluginResponse.success(data)
         except Exception as e:
             return PluginResponse.error(str(e))
 
@@ -34,15 +36,19 @@ class Oracle(Plugin):
         except Exception as e:
             return PluginResponse.error(str(e))
 
-    def update_data(self, catalog: Catalog, data: ArrowStream ,  **kwargs: Any) -> PluginResponse[None]:
+    def update_data(self, catalog: Catalog, data: ArrowStream ,  **kwargs: Any) -> PluginResponse[ArrowStream]:
         try:
-            return self.service.update_data(catalog, data, **kwargs)
+            result = self.service.update_data(catalog, data, **kwargs)
+            if not result.ok:
+                return PluginResponse.error(result.message)
+            return PluginResponse.success(data)
         except Exception as e:
             return PluginResponse.error(str(e))
 
     def upsert_data(self, catalog: Catalog, data: ArrowStream ,  **kwargs: Any) -> PluginResponse[ArrowStream]:
         try:
-            return PluginResponse.success(self.service.upsert_data(catalog, data, **kwargs))
+            self.service.upsert_data(catalog, data, **kwargs)
+            return PluginResponse.success(data)
         except Exception as e:
             return PluginResponse.error(str(e))
 
@@ -139,8 +145,7 @@ class Oracle(Plugin):
 
     def get_catalog(self, catalog: Catalog, **kwargs: Any) -> PluginResponse[Catalog]:
         try:
-            return PluginResponse.not_implemented("Oracle Service Not Available.")
-            # return PluginResponse.success(get_catalog(catalog, **kwargs))
+            return PluginResponse.success(self.service.get_catalog(catalog, **kwargs))
         except Exception as e:
             return PluginResponse.error(str(e))
 
@@ -154,4 +159,5 @@ class Oracle(Plugin):
         return PluginResponse.not_implemented("Oracle Service Not Available.")
 
 # Explicitly enforce duck-typing compliance at module load time
-assert isinstance(Oracle(), Plugin)
+# Intentionally avoid instantiating Oracle at import time because that creates
+# a live DB connection through OracleClient.

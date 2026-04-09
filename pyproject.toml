@@ -55,7 +55,6 @@ dependencies = [
 [project.optional-dependencies]
 dev = [
     "pytest",
-    "ruff",
     "Pygments",
     "pluggy",
     "iniconfig",
@@ -68,6 +67,3 @@ packages = ["quickbitlabs"]
 [tool.pytest.ini_options]
 pythonpath = ["."]
 testpaths = ["tests"]
-asyncio_mode = "auto"
-asyncio_default_fixture_loop_scope = "module"
-asyncio_default_test_loop_scope = "module"

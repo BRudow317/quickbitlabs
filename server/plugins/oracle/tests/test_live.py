@@ -7,6 +7,7 @@ Usage:
 """
 from __future__ import annotations
 
+import os
 import pytest
 import pyarrow as pa
 
@@ -28,7 +29,8 @@ state: dict = {}
 
 @pytest.fixture(scope="module")
 def client():
-    c = OracleClient()
+    service = os.getenv("ORACLE_SERVICE") or os.getenv("ORACLE_SID") or ""
+    c = OracleClient(oracle_service=service)
     print(f"\n  connected: {c}")
     yield c
     c.close()
@@ -110,7 +112,8 @@ def test_client_ping(client):
     with client.get_con().cursor() as cur:
         cur.execute("SELECT 1 FROM DUAL")
         row = cur.fetchone()
-    assert row == (1,)
+    # Oracle returns NUMBER as Decimal
+    assert row is not None and int(row[0]) == 1
 
 
 def test_client_repr_contains_user_and_host(client):
@@ -223,10 +226,11 @@ def test_service_insert_data(service):
 
     service.insert_data(catalog, stream)
 
-    rows = list(service.get_data(
+    reader = service.get_data(
         catalog,
         query=f"SELECT NAME FROM {TABLE} WHERE ID = 10",
-    ))
+    )
+    rows = reader.read_all().to_pylist()
     assert rows[0]["NAME"] == "Diana"
     state["service_inserted_id"] = 10
     print(f"\n  service insert_data confirmed: Diana (ID=10) found")
@@ -256,9 +260,10 @@ def test_service_upsert_data(service):
 
     service.upsert_data(catalog, stream)
 
+    reader = service.get_data(catalog, query=f"SELECT ID, NAME FROM {TABLE}")
     rows = {
-        r["ID"]: r
-        for r in service.get_data(catalog, query=f"SELECT ID, NAME FROM {TABLE}")
+        int(r["ID"]): r
+        for r in reader.read_all().to_pylist()
     }
     assert rows[1]["NAME"] == "Alice-Updated"
     assert rows[99]["NAME"] == "Eve"

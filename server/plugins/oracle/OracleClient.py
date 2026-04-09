@@ -44,6 +44,7 @@ class OracleClient:
                 port=self.oracle_port,
                 service_name=self.oracle_service,
             )
+            self._current_connection.autocommit = True
         except oracledb.Error as e:
             logger.error(f'Error connecting to Oracle: {self.__repr__}\nError: {e}')
             raise
