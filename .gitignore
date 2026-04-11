@@ -5,6 +5,7 @@ node_modules
 node_modules
 dist
 dist-ssr
+.gemini
 *.local
 
 # Editor directories and files

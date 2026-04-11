@@ -1,5 +1,5 @@
 # QuickBitLabs
-FastAPI + SQLAlchemy + React + TypeScript + Vite
+FastAPI + PyArrow + React + TypeScript + Vite
 
 See server/readme.md and frontend/readme.md for detailed information on the backend and frontend respectively.
 
@@ -32,10 +32,11 @@ See server/readme.md and frontend/readme.md for detailed information on the back
 11. [argon2-cffi](https://argon2-cffi.readthedocs.io/)
 12. [cryptography](https://cryptography.io/)
 13. [pydantic-settings](https://pydantic.dev/latest/settings/)
-14. [ruff](https://beta.ruff.rs/docs/)
+14. [httpx](https://www.python-httpx.org/)
 15. [oracledb](https://oracle.github.io/python-oracledb/)
 16. [Apache Arrow](https://arrow.apache.org/)
 17. [Pandas](https://pandas.pydata.org/)
-18. [NumPy](https://numpy.org/)
-19. [Docker](https://www.docker.com/)
-20. [Docker Compose](https://docs.docker.com/compose/)
+18. [Polars](https://www.pola.rs/)
+19. [NumPy](https://numpy.org/)
+20. [Docker](https://www.docker.com/)
+21. [Docker Compose](https://docs.docker.com/compose/)
