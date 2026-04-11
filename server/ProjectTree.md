@@ -19,6 +19,7 @@ Q:/quickbitlabs/server/
 ├── plugins/
 │   ├── lambdalith/
 │   ├── oracle/
+│   │   ├── tests/
 │   │   ├── __init__.py
 │   │   ├── arrow_array.py
 │   │   ├── Oracle.py
@@ -28,7 +29,8 @@ Q:/quickbitlabs/server/
 │   │   ├── OracleEngine.py
 │   │   ├── OracleServices.py
 │   │   ├── OracleTools.py
-│   │   └── OracleTypeMap.py
+│   │   ├── OracleTypeMap.py
+│   │   └── README.md
 │   ├── postgres/
 │   │   ├── postgres_utils/
 │   │   │   └── type_converter.py
@@ -36,7 +38,10 @@ Q:/quickbitlabs/server/
 │   │   │   ├── query.py
 │   │   │   └── table_ops.py
 │   │   ├── __init__.py
-│   │   └── Postgres.py
+│   │   ├── Postgres.py
+│   │   ├── PostgresEngine.py
+│   │   ├── PostgresServices.py
+│   │   └── PostgresTypeMap.py
 │   ├── readers/
 │   │   ├── reader_utils/
 │   │   │   ├── csv_utils.py
@@ -48,10 +53,6 @@ Q:/quickbitlabs/server/
 │   ├── scratch/
 │   │   └── README.md
 │   ├── sf/
-│   │   ├── docs/
-│   │   │   ├── .gitignore
-│   │   │   ├── plan_2.md
-│   │   │   └── plan.md
 │   │   ├── engines/
 │   │   │   ├── SfAuth.py
 │   │   │   ├── SfBulk2Engine.py
@@ -59,12 +60,13 @@ Q:/quickbitlabs/server/
 │   │   │   ├── SfRestEngine.py
 │   │   │   └── SfToolingEngine.py
 │   │   ├── models/
+│   │   │   ├── SfDialect.py
 │   │   │   ├── SfExceptions.py
 │   │   │   ├── SfModels.py
-│   │   │   ├── SfQueryBook.py
 │   │   │   └── SfTypeMap.py
 │   │   ├── services/
-│   │   │   ├── parquet.py
+│   │   │   ├── SfArrowServices.py
+│   │   │   ├── SfParquetServices.py
 │   │   │   └── SfServices.py
 │   │   ├── tests/
 │   │   ├── utils/
@@ -76,7 +78,9 @@ Q:/quickbitlabs/server/
 │   │   │   └── soql_utils.py
 │   │   ├── __init__.py
 │   │   ├── ReadMe Sf Plugin.md
-│   │   └── SfPlugin.py
+│   │   ├── repl.py
+│   │   └── Salesforce.py
+│   ├── tests/
 │   ├── utils/
 │   │   ├── date_to_iso8601.py
 │   │   ├── filter_null_bytes.py
@@ -88,9 +92,7 @@ Q:/quickbitlabs/server/
 │   └── PluginResponse.py
 ├── services/
 │   ├── __init__.py
-│   ├── get_customers_request.py
-│   ├── MigrationService.py
-│   └── plan.md
+│   └── FullMigration.py
 ├── tests/
 ├── utils/
 │   ├── __init__.py
@@ -98,10 +100,6 @@ Q:/quickbitlabs/server/
 │   ├── helpers.py
 │   └── logger.py
 ├── __init__.py
-├── plan.md
 ├── ProjectTree.md
 ├── README.md
-├── RULES.md
-├── start_server.py
-├── test_migration_oracle.py
-└── test_migration.py
+└── start_server.py

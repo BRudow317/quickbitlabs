@@ -64,38 +64,24 @@ class Oracle(Plugin):
 
     def create_column(self, catalog: Catalog, **kwargs: Any) -> PluginResponse[Column]:
         try:
-            return PluginResponse.not_implemented("Oracle Service Not Available.")
-            # return PluginResponse.success(create_column(catalog,  **kwargs))
+            return PluginResponse.success(self.service.create_column(catalog, **kwargs))
         except Exception as e:
             return PluginResponse.error(str(e))
 
     def get_column(self, catalog: Catalog, **kwargs: Any) -> PluginResponse[Column]:
         try:
-            return PluginResponse.not_implemented("Oracle Service Not Available.")
-            # return PluginResponse.success(get_column(catalog,  **kwargs))
+            return PluginResponse.success(self.service.get_column(catalog, **kwargs))
         except Exception as e:
             return PluginResponse.error(str(e))
 
     def update_column(self, catalog: Catalog, **kwargs: Any) -> PluginResponse[Column]:
-        try:
-            return PluginResponse.not_implemented("Oracle Service Not Available.")
-            # return PluginResponse.success(update_column(catalog, **kwargs))
-        except Exception as e:
-            return PluginResponse.error(str(e))
+        return PluginResponse.not_implemented("Oracle does not support ALTER COLUMN via this protocol. Use upsert_entity to add missing columns.")
 
     def upsert_column(self, catalog: Catalog, **kwargs: Any) -> PluginResponse[Column]:
-        try:
-            return PluginResponse.not_implemented("Oracle Service Not Available.")
-            # return PluginResponse.success(upsert_column(catalog,  **kwargs))
-        except Exception as e:
-            return PluginResponse.error(str(e))
+        return PluginResponse.not_implemented("Use upsert_entity to add missing columns to an existing table.")
 
     def delete_column(self, catalog: Catalog, **kwargs: Any) -> PluginResponse[None]:
-        try:
-            return PluginResponse.not_implemented("Oracle Service Not Available.")
-            # return PluginResponse.success(delete_column(catalog,  **kwargs))
-        except Exception as e:
-            return PluginResponse.error(str(e))
+        return PluginResponse.not_implemented("Oracle column deletion not implemented. Dropping columns is destructive and should be done manually.")
 
     # ==========================================
     # -- Entity (Table / Object Level) --
@@ -103,45 +89,34 @@ class Oracle(Plugin):
 
     def create_entity(self, catalog: Catalog, **kwargs: Any) -> PluginResponse[Entity]:
         try:
-            return PluginResponse.not_implemented("Oracle Service Not Available.")
-            # return PluginResponse.success(create_entity(catalog, **kwargs))
+            return PluginResponse.success(self.service.create_entity(catalog, **kwargs))
         except Exception as e:
             return PluginResponse.error(str(e))
 
     def get_entity(self, catalog: Catalog, **kwargs: Any) -> PluginResponse[Entity]:
         try:
-            return PluginResponse.not_implemented("Oracle Service Not Available.")
-            # return PluginResponse.success(get_entity(catalog, **kwargs))
+            return PluginResponse.success(self.service.get_entity(catalog, **kwargs))
         except Exception as e:
             return PluginResponse.error(str(e))
 
     def update_entity(self, catalog: Catalog, **kwargs: Any) -> PluginResponse[Entity]:
-        try:
-            return PluginResponse.not_implemented("Oracle Service Not Available.")
-            # return PluginResponse.success(update_entity(catalog, **kwargs))
-        except Exception as e:
-            return PluginResponse.error(str(e))
+        return PluginResponse.not_implemented("Use upsert_entity to create or add columns to a table.")
 
     def upsert_entity(self, catalog: Catalog, **kwargs: Any) -> PluginResponse[Entity]:
         try:
-            return PluginResponse.not_implemented("Oracle Service Not Available.")
-            # return PluginResponse.success(upsert_entity(catalog, **kwargs))
+            return PluginResponse.success(self.service.upsert_entity(catalog, **kwargs))
         except Exception as e:
             return PluginResponse.error(str(e))
 
-    def delete_entity(self, catalog: Catalog,**kwargs: Any) -> PluginResponse[None]:
-        try:
-            return PluginResponse.not_implemented("Oracle Service Not Available.")
-            # return PluginResponse.success(delete_entity(catalog, **kwargs))
-        except Exception as e:
-            return PluginResponse.error(str(e))
+    def delete_entity(self, catalog: Catalog, **kwargs: Any) -> PluginResponse[None]:
+        return PluginResponse.not_implemented("Oracle table deletion not implemented. Dropping tables is destructive and should be done manually.")
 
     # ==========================================
     # -- Catalog (Database / Schema Level) --
     # ==========================================
 
     def create_catalog(self, catalog: Catalog, **kwargs: Any) -> PluginResponse[Catalog]:
-        return PluginResponse.not_implemented("Oracle plugin cannot create catalogs.")
+        return PluginResponse.not_implemented("Oracle schemas are managed by DBAs. Use upsert_catalog to create/align tables within an existing schema.")
 
     def get_catalog(self, catalog: Catalog, **kwargs: Any) -> PluginResponse[Catalog]:
         try:
@@ -150,13 +125,16 @@ class Oracle(Plugin):
             return PluginResponse.error(str(e))
 
     def update_catalog(self, catalog: Catalog, **kwargs: Any) -> PluginResponse[Catalog]:
-        return PluginResponse.not_implemented("Oracle plugin cannot update catalogs.")
+        return PluginResponse.not_implemented("Use upsert_catalog to align tables within a schema.")
 
     def upsert_catalog(self, catalog: Catalog, **kwargs: Any) -> PluginResponse[Catalog]:
-        return PluginResponse.not_implemented("Oracle plugin cannot upsert catalogs.")
+        try:
+            return PluginResponse.success(self.service.upsert_catalog(catalog, **kwargs))
+        except Exception as e:
+            return PluginResponse.error(str(e))
 
     def delete_catalog(self, catalog: Catalog, **kwargs: Any) -> PluginResponse[None]:
-        return PluginResponse.not_implemented("Oracle Service Not Available.")
+        return PluginResponse.not_implemented("Oracle schema deletion not implemented. Dropping schemas is destructive and should be done manually.")
 
 # Explicitly enforce duck-typing compliance at module load time
 # Intentionally avoid instantiating Oracle at import time because that creates

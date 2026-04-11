@@ -7,6 +7,8 @@ from server.plugins.oracle.OracleTypeMap import (
     map_oracle_to_python,
     map_python_to_oracledb_input_size,
     map_python_to_oracle_ddl,
+    map_arrow_to_oracle_ddl,
+    map_column_to_oracledb_input_size,
 )
 from server.plugins.PluginResponse import PluginResponse
 from .OracleEngine import OracleEngine, OracleSchema, OracleTable
@@ -27,16 +29,21 @@ class OracleService:
         self.arrow_frame = OracleArrowFrame(client)
 
     def _build_input_sizes(self, catalog: Catalog) -> dict[str, Any]:
-        """Maps the Pydantic fields to oracledb native types."""
+        """Maps columns to oracledb native types for cursor.setinputsizes().
+        Prefers arrow_type_id (universal) over raw_type (Oracle-specific)."""
         sizes = {}
         for entity in catalog.entities:
             for column in entity.columns:
-                # Keep python_type as a Python semantic type; map to DDL in a separate property.
-                if not column.properties.get("python_type") and column.raw_type:
-                    column.properties["python_type"] = map_oracle_to_python(column.raw_type, column.scale)
-                column.properties["oracle_ddl"] = map_python_to_oracle_ddl(column)
-                column.properties['bind_name'] = column.name
-                sizes[column.name] = map_python_to_oracledb_input_size(column)
+                if column.arrow_type_id:
+                    sizes[column.name] = map_column_to_oracledb_input_size(column)
+                elif column.raw_type:
+                    if not column.properties.get("python_type"):
+                        column.properties["python_type"] = map_oracle_to_python(column.raw_type, column.scale)
+                    column.properties["oracle_ddl"] = map_python_to_oracle_ddl(column)
+                    column.properties['bind_name'] = column.name
+                    sizes[column.name] = map_python_to_oracledb_input_size(column)
+                else:
+                    sizes[column.name] = None
         return sizes
 
     # READ OPERATIONS
@@ -190,3 +197,117 @@ class OracleService:
             sql, binds = build_delete_dml(catalog, entity)
             input_sizes = self._build_input_sizes(catalog)
             self.arrow_frame.execute_many(sql=sql, data=data, input_sizes=input_sizes)
+
+    # ---------------------------------------------------------
+    # DDL / SCHEMA OPERATIONS
+    # ---------------------------------------------------------
+
+    def _build_column_ddl(self, column: Column) -> str:
+        """Build a single column DDL clause from a Column model."""
+        if column.arrow_type_id:
+            ddl_type = map_arrow_to_oracle_ddl(column)
+        elif column.raw_type:
+            if not column.properties.get("python_type"):
+                column.properties["python_type"] = map_oracle_to_python(column.raw_type, column.scale)
+            ddl_type = map_python_to_oracle_ddl(column)
+        else:
+            ddl_type = "VARCHAR2(255 CHAR)"
+        nullable = "NULL" if column.is_nullable else "NOT NULL"
+        return f"{column.name} {ddl_type} {nullable}"
+
+    def get_entity(self, catalog: Catalog, **kwargs: Any) -> Entity:
+        """Hydrate a single entity with column metadata from Oracle."""
+        if not catalog.entities:
+            raise ValueError("Catalog must contain at least one entity.")
+        schema_name = self._resolve_schema_name(catalog)
+        entity = catalog.entities[0]
+        table_name = (entity.name or entity.qualified_name or "").upper()
+        pk_set = self._fetch_table_primary_keys(schema_name, table_name)
+        rows = self._fetch_table_columns(schema_name, table_name)
+        columns = [self._column_from_row(table_name, row, pk_set) for row in rows]
+        return Entity(name=table_name, qualified_name=f"{schema_name}.{table_name}", columns=columns)
+
+    def create_entity(self, catalog: Catalog, **kwargs: Any) -> Entity:
+        """CREATE TABLE from the first entity in catalog."""
+        if not catalog.entities:
+            raise ValueError("Catalog must contain at least one entity.")
+        schema_name = self._resolve_schema_name(catalog)
+        entity = catalog.entities[0]
+        table_name = entity.name.upper()
+
+        col_defs = [self._build_column_ddl(col) for col in entity.columns]
+
+        pk_cols = entity.primary_key_columns
+        constraint = ""
+        if pk_cols:
+            pk_names = ", ".join(c.name for c in pk_cols)
+            constraint = f", CONSTRAINT {table_name}_PK PRIMARY KEY ({pk_names})"
+
+        sql = f"CREATE TABLE {schema_name}.{table_name} ({', '.join(col_defs)}{constraint})"
+        logger.info(f"DDL: {sql[:200]}")
+        self.engine.execute_ddl(sql)
+        return entity
+
+    def upsert_entity(self, catalog: Catalog, **kwargs: Any) -> Entity:
+        """CREATE TABLE if it doesn't exist, or ALTER TABLE ADD missing columns."""
+        if not catalog.entities:
+            raise ValueError("Catalog must contain at least one entity.")
+        schema_name = self._resolve_schema_name(catalog)
+        entity = catalog.entities[0]
+        table_name = entity.name.upper()
+
+        existing_tables = {t.upper() for t in self._list_schema_tables(schema_name)}
+        if table_name not in existing_tables:
+            logger.info(f"Table {schema_name}.{table_name} does not exist — creating.")
+            return self.create_entity(catalog, **kwargs)
+
+        # Table exists — check for missing columns
+        existing_rows = self._fetch_table_columns(schema_name, table_name) or []
+        existing_names = {str(r["COLUMN_NAME"]).upper() for r in existing_rows}
+
+        new_cols = [c for c in entity.columns if c.name.upper() not in existing_names]
+        if new_cols:
+            col_defs = [self._build_column_ddl(col) for col in new_cols]
+            sql = f"ALTER TABLE {schema_name}.{table_name} ADD ({', '.join(col_defs)})"
+            logger.info(f"DDL: {sql[:200]}")
+            self.engine.execute_ddl(sql)
+            logger.info(f"Added {len(new_cols)} column(s) to {schema_name}.{table_name}.")
+        else:
+            logger.info(f"Table {schema_name}.{table_name} already aligned — no DDL needed.")
+
+        return entity
+
+    def upsert_catalog(self, catalog: Catalog, **kwargs: Any) -> Catalog:
+        """Upsert all entities in catalog (CREATE/ALTER tables as needed)."""
+        for entity in catalog.entities:
+            sub = catalog.model_copy(update={"entities": [entity]})
+            self.upsert_entity(sub, **kwargs)
+        return catalog
+
+    def get_column(self, catalog: Catalog, **kwargs: Any) -> Column:
+        """Fetch a single column's metadata from Oracle."""
+        if not catalog.entities or not catalog.entities[0].columns:
+            raise ValueError("Catalog must specify an entity with at least one column.")
+        schema_name = self._resolve_schema_name(catalog)
+        entity = catalog.entities[0]
+        col = entity.columns[0]
+        table_name = (entity.name or "").upper()
+        pk_set = self._fetch_table_primary_keys(schema_name, table_name)
+        rows = self._fetch_table_columns(schema_name, table_name, {col.name.upper()})
+        if not rows:
+            raise ValueError(f"Column '{col.name}' not found on {schema_name}.{table_name}.")
+        return self._column_from_row(table_name, rows[0], pk_set)
+
+    def create_column(self, catalog: Catalog, **kwargs: Any) -> Column:
+        """ALTER TABLE ADD a single column."""
+        if not catalog.entities or not catalog.entities[0].columns:
+            raise ValueError("Catalog must specify an entity with at least one column.")
+        schema_name = self._resolve_schema_name(catalog)
+        entity = catalog.entities[0]
+        col = entity.columns[0]
+        table_name = (entity.name or "").upper()
+        col_ddl = self._build_column_ddl(col)
+        sql = f"ALTER TABLE {schema_name}.{table_name} ADD ({col_ddl})"
+        logger.info(f"DDL: {sql}")
+        self.engine.execute_ddl(sql)
+        return col

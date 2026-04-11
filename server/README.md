@@ -81,3 +81,20 @@ pip install -e .
 # Start the FastAPI server
 python server/start_server.py
 ```
+
+## Known Issues & Limitations
+
+### Import: `csv_bytes_to_arrow_inferred`
+`SfArrowServices.py` and `SfParquetServices.py` import `csv_bytes_to_arrow_inferred` from `SfBulk2Engine`, but this function no longer exists. These modules will fail on import. The equivalent is `Bulk2SObject.csv_bytes_to_arrow(data)` (static method, schema=None for inferred).
+
+### SF Compound Types Excluded from Migration
+Salesforce compound fields (`address`, `location`) have no Arrow type mapping and are excluded from `get_catalog` column lists. Data in these fields will not be migrated. If needed, their sub-fields (e.g., `MailingStreet`, `MailingCity`) are individual fields that DO migrate.
+
+### SF `time` Fields -> Oracle `VARCHAR2(15 CHAR)`
+Arrow `time64_us` has no direct Oracle equivalent. These are stored as `VARCHAR2(15 CHAR)`. The `oracledb` input size is unset (auto-detect), which may cause type errors during bulk insert if `datetime.time` objects arrive instead of strings. Workaround: cast time columns to string in a pre-processing step.
+
+### Target Schema Must Match Connection User
+The Oracle dialect builders use unqualified table names in DML (`MERGE INTO ACCOUNT ...`). Oracle resolves these against the session user's default schema. If `target_catalog_name` differs from the `ORACLE_USER` environment variable, DML will fail. Ensure they match, or set `ALTER SESSION SET CURRENT_SCHEMA` on the connection.
+
+### One-Way Migration (SF -> Oracle)
+Salesforce does not expose DDL via API. The `create_catalog`, `create_entity`, and `create_column` protocol methods return `not_implemented` on the SF plugin. Reverse migration (Oracle -> SF) would require creating SObjects/fields via the Metadata or Tooling API, which is not currently implemented.
