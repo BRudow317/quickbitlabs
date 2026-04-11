@@ -18,8 +18,6 @@ Previously data transmission occured between plugins through the use of a shared
 Current implementations include:
 - `Records` (Iterable[dict]): The original universal boundary for data transmission.
 - `ArrowStream` (Iterator[pa.RecordBatch]): A more efficient boundary for large data transfers, especially from databases or APIs that can natively produce Arrow RecordBatches. This allows for zero-copy data transmission and efficient in-memory processing.
-- `PolarsLazyFrame` (polars.LazyFrame): For plugins that can leverage Polars for efficient data manipulation, this allows for lazy evaluation and optimization of data transformations before execution.
-- `PolarsDataFrame` (polars.DataFrame): For plugins that need to return smaller datasets or prefer an eager evaluation model, this allows for direct transmission of Polars DataFrames.
 
 ## The Plugin Ecosystem (The Secret Sauce)
 

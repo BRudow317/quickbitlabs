@@ -55,18 +55,15 @@ class SfClient:
         api_version: str = API_VERSION,
         max_retries: int = 1,
     ) -> SfClient:
-        """Factory — use this instead of calling SfClient() directly."""
+        """Factory - use this instead of calling SfClient() directly."""
         resolved_url = base_url or SF_BASE_URL
-        if not resolved_url:
-            raise SalesforceAuthError("SF_BASE_URL is required.")
-
+        if not resolved_url: raise SalesforceAuthError("SF_BASE_URL is required.")
         if access_token is None:
             access_token = fetch_client_credentials(
                 consumer_key=consumer_key,
                 consumer_secret=consumer_secret,
                 base_url=resolved_url,
             )
-
         return cls(
             base_url=resolved_url,
             access_token=access_token,
@@ -102,34 +99,20 @@ class SfClient:
             if endpoint.startswith("https")
             else f"{self.services_url}/{endpoint.lstrip('/')}"
         )
-
         response = self._session.request(method, url, **kwargs)
-
         if response.status_code == 401:
             self._handle_401(response)
             response = self._session.request(method, url, **kwargs)
-
-        if response.status_code >= 300:
-            raise Exception(
-                f"HTTP {response.status_code} {method} {url}: {response.text}"
-            )
-
+        if response.status_code >= 300: raise Exception (f"HTTP {response.status_code} {method} {url}: {response.text}")
         limit_info = response.headers.get("Sforce-Limit-Info")
-        if limit_info:
-            self._parse_api_usage(limit_info)
-
+        if limit_info: self._parse_api_usage(limit_info)
         return response
 
     def _handle_401(self, response: httpx.Response) -> None:
         """Refresh the token on INVALID_SESSION_ID."""
-        try:
-            error_code = response.json()[0].get("errorCode")
-        except Exception:
-            return
-
-        if error_code != "INVALID_SESSION_ID":
-            return
-
+        try: error_code = response.json()[0].get("errorCode")
+        except Exception: return
+        if error_code != "INVALID_SESSION_ID": return
         logger.info("Session expired. Refreshing token...")
         for attempt in range(1, self._max_retries + 1):
             new_token = fetch_client_credentials(base_url=self.base_url)
@@ -137,13 +120,10 @@ class SfClient:
                 self._update_token(new_token)
                 return
             logger.warning(f"Token refresh attempt {attempt} returned same or empty token.")
-
         raise Exception("Max retries exceeded: could not refresh Salesforce token.")
 
     def _parse_api_usage(self, sforce_limit_info: str) -> None:
-        api_usage = re.match(
-            r"[^-]?api-usage=(?P<used>\d+)/(?P<tot>\d+)", sforce_limit_info
-        )
+        api_usage = re.match(r"[^-]?api-usage=(?P<used>\d+)/(?P<tot>\d+)", sforce_limit_info)
         pau = re.match(
             r".+per-app-api-usage=(?P<u>\d+)/(?P<t>\d+)\(appName=(?P<n>.+)\)",
             sforce_limit_info,
@@ -165,3 +145,4 @@ class SfClient:
 
     def __exit__(self, *_: Any) -> None:
         self.close()
+    

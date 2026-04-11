@@ -1,3 +1,10 @@
+"""
+https://developer.salesforce.com/docs/apis
+https://developer.salesforce.com/docs/atlas.en-us.object_reference.meta/object_reference/sforce_api_objects_concepts.htm
+https://developer.salesforce.com/docs/atlas.en-us.object_reference.meta/object_reference/access_for_fields.htm
+https://developer.salesforce.com/docs/atlas.en-us.soql_sosl.meta/soql_sosl/sforce_api_calls_soql_sosl_intro.htm
+https://developer.salesforce.com/docs/atlas.en-us.api_rest.meta/api_rest/intro_what_is_rest_api.htm
+"""
 from __future__ import annotations
 import base64, json
 from datetime import datetime
@@ -18,18 +25,18 @@ logger = logging.getLogger(__name__)
 class SfRest:
     """
     Global REST API operations - SOQL, limits, global describe.
-    Acts as a factory for SfObjType via dot-notation attribute access.
+    Acts as a factory for RestSObject via dot-notation attribute access.
     """
     _http: SfClient
 
     def __init__(self, http_client: SfClient) -> None:
         self._http = http_client
 
-    def __getattr__(self, name: str) -> "SfObjType":
+    def __getattr__(self, name: str) -> "RestSObject":
         """Dot-notation access to SObjects. Example: sf.rest.Contact.get('003...')"""
         if name.startswith("__"):
             return super().__getattribute__(name)
-        return SfObjType(object_name=name, http_client=self._http)
+        return RestSObject(object_name=name, http_client=self._http)
 
     def describe(self, **kwargs: Any) -> dict[str, Any]:
         """Global describe - all available SObjects."""
@@ -170,7 +177,7 @@ class SfRest:
             return result.text
 
 
-class SfObjType:
+class RestSObject:
     """
     Interface to a specific Salesforce SObject type.
     Constructed by SfRest.__getattr__ - not instantiated directly.

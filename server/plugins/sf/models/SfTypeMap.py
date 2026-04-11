@@ -2,6 +2,7 @@ from __future__ import annotations
 import datetime, json, re
 from typing import Any, TypeVar
 from server.plugins.PluginModels import PythonTypes
+from server.plugins.PluginModels import Catalog, Entity, Column, ArrowStream, Records, arrow_type_literal
 import pyarrow as pa
 
 SF_TYPE_TO_ARROW = {
@@ -31,14 +32,43 @@ SF_TYPE_TO_ARROW = {
     "location":        None,            # compound geolocation - exclude
 }
 
+# ---------------------------------------------------------------------------
+# SF type → arrow_type_literal  (Column.arrow_type_id)
+# ---------------------------------------------------------------------------
+
+SF_TO_ARROW_LITERAL: dict[str, arrow_type_literal] = {
+    "string":          "utf8",
+    "textarea":        "large_string",
+    "phone":           "utf8",
+    "email":           "utf8",
+    "url":             "utf8",
+    "picklist":        "utf8",
+    "multipicklist":   "large_string",
+    "combobox":        "utf8",
+    "id":              "utf8",
+    "reference":       "utf8",
+    "boolean":         "bool",
+    "int":             "int32",
+    "long":            "int64",
+    "double":          "float64",
+    "currency":        "decimal128",
+    "percent":         "float64",
+    "date":            "date32",
+    "datetime":        "timestamp_ms",
+    "time":            "time64_us",
+    "base64":          "large_binary",
+    "encryptedstring": "utf8",
+    "anyType":         "utf8",
+}
 
 # FieldDefinition.DataType (bulk describe) → PythonTypes
 # DataType comes with optional params e.g. "Text(80)", "Number(18, 0)" - strip before lookup.
 def _normalize_fielddef_type(raw: str) -> str:
     """Strip parameters from FieldDefinition DataType strings.
-    e.g. 'Text(80)' → 'text', 'Number(18, 0)' → 'number'
+    e.g. 'Text(80)' -> 'text', 'Number(18, 0)' -> 'number'
     """
     return re.sub(r'\(.*\)', '', raw).strip().lower()
+
 SF_FIELDDEF_TYPE_MAP: dict[str, PythonTypes] = {
     'id':                    'string',
     'text':                  'string',
@@ -135,33 +165,23 @@ _SF_CONVERTERS: dict[str, Any] = {
 
 def sf_to_python(sf_type: str, value: Any) -> Any:
     """Convert a Salesforce field value to its native Python type."""
-    if value is None or value == '':
-        return None
+    if value is None or value == '': return None
     converter = _SF_CONVERTERS.get(sf_type)
     if converter:
-        try:
-            return converter(value)
-        except (ValueError, TypeError):
-            return value
+        try: return converter(value)
+        except (ValueError, TypeError): return value
     return value
 
 
 def python_to_sf(value: Any) -> str:
     """Convert a Python value to its Salesforce API string representation."""
-    if value is None:
-        return ''
-    if isinstance(value, bool):
-        return 'true' if value else 'false'
-    if isinstance(value, datetime.datetime):
-        return value.isoformat()
-    if isinstance(value, datetime.date):
-        return value.isoformat()
-    if isinstance(value, datetime.time):
-        return value.isoformat()
-    if isinstance(value, (dict, list)):
-        return json.dumps(value)
+    if value is None: return ''
+    if isinstance(value, bool): return 'true' if value else 'false'
+    if isinstance(value, datetime.datetime): return value.isoformat()
+    if isinstance(value, datetime.date): return value.isoformat()
+    if isinstance(value, datetime.time): return value.isoformat()
+    if isinstance(value, (dict, list)): return json.dumps(value)
     return str(value)
-
 
 def cast_record(record: dict[str, Any], field_types: dict[str, str]) -> dict[str, Any]:
     """Apply sf_to_python to each field in a record using a {field_name: sf_type} map."""
@@ -179,8 +199,6 @@ def prepare_record(record: dict[str, Any]) -> dict[str, Any]:
     """
     out = {}
     for k, v in record.items():
-        if v is _CLEAR:
-            out[k] = None  # explicit null - SF will clear the field
-        elif v is not None:
-            out[k] = python_to_sf(v)
+        if v is _CLEAR: out[k] = None  # explicit null - SF will clear the field
+        elif v is not None: out[k] = python_to_sf(v)
     return out

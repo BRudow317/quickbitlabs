@@ -3,10 +3,9 @@ from __future__ import annotations
 from pydantic import BaseModel, ConfigDict, Field
 from typing import Literal, Any, TypeAlias
 from collections.abc import Iterator, Iterable
-from functools import cached_property
 import pyarrow as pa
 
-# Universal data format
+# Universal data formats
 ArrowStream: TypeAlias = pa.RecordBatchReader 
 Records: TypeAlias = Iterable[dict[str, Any]] # aka json/dict
 
@@ -100,12 +99,10 @@ class Column(BaseModel):
         """Dynamically build the C++ object, accounting for parameterized types."""
         if not self.arrow_type_id: return None
         arrow_type = self.arrow_type_id
-
         if arrow_type.startswith("decimal"):
             p = self.precision if self.precision is not None else 38
             s = self.scale if self.scale is not None else 9
-            return pa.decimal128(p, s)
-            
+            return pa.decimal128(p, s)  
         if arrow_type.startswith("timestamp"):
             unit = arrow_type.split("_")[1]
             return pa.timestamp(unit, tz=self.timezone)
@@ -131,12 +128,13 @@ class Sort(BaseModel):
 
 class Join(BaseModel):
     left_entity: Entity
-    left_column: Column      
+    left_column: Column
     right_entity: Entity
     right_column: Column
     join_type: Literal["INNER", "LEFT", "RIGHT", "OUTER"] = "INNER"
 
 class Operator(BaseModel):
+    """The single equal sign '=' is an assignment operator, it is not an equality operator."""
     model_config = ConfigDict(arbitrary_types_allowed=True)
     independent: Column
     operator: Literal["=", "==", "!=", ">", "<", ">=", "<=", "IN", "LIKE", "IS NULL", "IS NOT NULL"]
@@ -154,7 +152,6 @@ class Catalog(BaseModel):
     joins: list[Join] = Field(default_factory=list)
     sort_fields: list[Sort] = Field(default_factory=list)
     limit: int | None = None
-    stream_locators: dict[str, str] = Field(default_factory=dict)
     properties: dict[str, Any] = Field(default_factory=dict)
 
     @property
@@ -162,43 +159,45 @@ class Catalog(BaseModel):
         return {e.name: e for e in self.entities}
     
 # Catalog.model_rebuild()
+    def arrow_schema(self) -> pa.Schema:
+        nullable_entities: set[str] = set()
+        for j in self.joins:
+            if j.join_type in ("LEFT", "OUTER"):
+                nullable_entities.add(j.right_entity.name)
+            if j.join_type in ("RIGHT", "OUTER"):
+                nullable_entities.add(j.left_entity.name)
 
-def arrow_stream(catalog: Catalog, records: Records, chunk_size: int = 50_000) -> ArrowStream:
-    nullable_entities: set[str] = set()
-    for j in catalog.joins:
-        if j.join_type in ("LEFT", "OUTER"):
-            nullable_entities.add(j.right_entity.name)
-        if j.join_type in ("RIGHT", "OUTER"):
-            nullable_entities.add(j.left_entity.name)
+        arrow_fields = []
+        for entity in self.entities:
+            for column in entity.columns:
+                arrow_type = column.arrow_type
+                if not arrow_type: continue
+                final_nullable = column.is_nullable or (entity.name in nullable_entities)
+                arrow_fields.append(pa.field(f"{entity.name}_{column.name}", arrow_type, nullable=final_nullable))
 
-    arrow_fields = []
-    for entity in catalog.entities:
-        for column in entity.columns:
-            arrow_type = column.arrow_type
-            if not arrow_type: continue
-            final_nullable = column.is_nullable or (entity.name in nullable_entities)
-            arrow_fields.append(pa.field(f"{entity.name}_{column.name}", arrow_type, nullable=final_nullable))
+        schema = pa.schema(arrow_fields)
+        return schema
 
-    schema = pa.schema(arrow_fields).with_metadata({b"catalog": catalog.model_dump_json(exclude_none=False).encode()})
+    def arrow_stream(self, data: Records|ArrowStream, chunk_size: int = 50_000) -> ArrowStream:
+        schema = self.arrow_schema()
+        if schema.empty:
+            return pa.RecordBatchReader.from_batches(pa.schema([]), iter([]))
 
-    if schema.empty:
-        return pa.RecordBatchReader.from_batches(pa.schema([]), iter([]))
-
-    def batch_generator() -> Iterator[pa.RecordBatch]:
-        row_count = 0
-        field_map: dict[str, list[Any]] = {name: [] for name in schema.names}
-        for row in records:
-            for name in schema.names:
-                field_map[name].append(row.get(name))
-            row_count += 1
-            if row_count == chunk_size:
+        def batch_generator() -> Iterator[pa.RecordBatch]:
+            row_count = 0
+            field_map: dict[str, list[Any]] = {name: [] for name in schema.names}
+            for row in data if data else []:
+                for name in schema.names:
+                    field_map[name].append(row.get(name))
+                row_count += 1
+                if row_count == chunk_size:
+                    yield pa.record_batch([field_map[f] for f in schema.names], schema=schema)
+                    field_map = {name: [] for name in schema.names}
+                    row_count = 0
+            if row_count > 0:
                 yield pa.record_batch([field_map[f] for f in schema.names], schema=schema)
-                field_map = {name: [] for name in schema.names}
-                row_count = 0
-        if row_count > 0:
-            yield pa.record_batch([field_map[f] for f in schema.names], schema=schema)
 
-    return pa.RecordBatchReader.from_batches(schema, batch_generator())
+        return pa.RecordBatchReader.from_batches(schema, batch_generator())
 
 
 catalog_doc_string =     """

@@ -19,7 +19,7 @@ class SfToolingApi:
     def __init__(self, http_client: SfClient) -> None:
         self._http = http_client
     
-    async def request(
+    def request(
         self,
         path: str,
         params: dict[str, Any] | None = None,
@@ -27,10 +27,10 @@ class SfToolingApi:
         **kwargs: Any,
     ) -> dict[str, Any] | None:
         """Direct REST call by relative path."""
-        response = await self._http.request(method, path, params=params, **kwargs)
+        response = self._http.request(method, path, params=params, **kwargs)
         return response.json() if response.status_code != 204 else None
 
-    async def tooling_execute(
+    def tooling_execute(
             self,
             action: str | None = None,
             method: str = 'GET',
@@ -49,7 +49,7 @@ class SfToolingApi:
         # If data is None, we should send an empty body, not "null", which is
         # None in json.
         json_data = json.dumps(data) if data is not None else None
-        result = await self._http.request(
+        result = self._http.request(
             method = method,
             url = SF_TOOLING_URL,
             name="tooling_execute",
@@ -69,7 +69,7 @@ class SfToolingApi:
 # Test raw query
 # ---------------------------------------------------------------------------
 # QualifiedApiName, Label
-async def test_tooling_query(rest):
+def test_tooling_query(rest):
     response_dict = {}
     sobj_list = ["Account", "Contact", "Case", "User"]
     for sobj in sobj_list:
@@ -86,7 +86,7 @@ async def test_tooling_query(rest):
         WHERE DeveloperName like '%{sobj}%' 
         LIMIT 1
         """
-        response = await rest.toolingexecute(soql) 
+        response = rest.tooling_execute(soql) 
         response_dict[sobj] = response
     
         # 1. Check HTTP status before parsing
