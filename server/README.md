@@ -1,22 +1,30 @@
 # QuickBitLabs Data Integration Engine
 
-Welcome to the QuickBitLabs backend. This project is designed to solve the **N x M integration nightmare** by reducing it to **N + M**. 
+Welcome to the QuickBitLabs. This project is designed to solve the **N x M integration nightmare** by reducing it to **N + M**. 
 
 Instead of writing custom pipelines between every single database, flat file, and SaaS API, this system utilizes a **Universal Pydantic Contract**. The business logic (API/Services) never speaks directly to the databases. Instead, Data Streams are passed through a standardized `Plugin` interface, allowing us to hot-swap an Oracle database for a flat CSV file with zero changes to the core application code.
 
 ## Core Architecture
 
+- [ProjectTree.md](server\ProjectTree.md)
+
 The platform is strictly divided into three layers:
 
-1. **API & Models (`/server/api`, `/server/models`)**: The business domain. This handles FastAPI web requests, user authentication, and internal platform state.
-2. **Services (`/server/services`)**: The Air Traffic Controllers. These scripts orchestrate data movement (e.g., `MigrationService.py`). They don't know *how* to talk to Oracle or Salesforce; they just juggle the universal data models between them.
+1. **Backend (`/server`**: This handles FastAPI web requests, user authentication, and internal platform state.
+2. **Frontend (`/frontend`)**: The Typescript/React UI.
 3. **Plugins (`/server/plugins`)**: The Sandboxes. These are isolated, lazy-loaded modules that translate the universal platform language into system-specific execution (SQL, REST, File I/O).
+   1. Plugins have their own Service layer for internal orchestration of the plugin. 
+   2. Plugins usually have their own Dialect layer for translating the AST Catalog queries into native search language.
+   3. Plugins likely have a type mapping layer for translating system types into the universal Catalog types.
+   4. Plugin Engine layer is for execution of system-specific commands. To avoid import issues, this layer should rarely import anything else from the local plugin. 
+   5. Plugins typically have a Client to manage connections and sessions. 
+   6. Plugins must have a Facade that implements the Plugin Protocol.
 
 ## Data Transmission
-Previously data transmission occured between plugins through the use of a shared `Records` object returned as an Iterable of dictionaries. However now there are new methods I am implementing such as the Apache Arrow streaming. 
+Previously data transmission occured between plugins through the use of a shared `Records` object returned as an Iterable of dictionaries. However now there are new methods I am implementing such as the `Apache Arrow streaming`. 
 
 Current implementations include:
-- `Records` (Iterable[dict]): The original universal boundary for data transmission.
+- `Records` (Iterable[dict]): The deprecated universal boundary for data transmission.
 - `ArrowStream` (Iterator[pa.RecordBatch]): A more efficient boundary for large data transfers, especially from databases or APIs that can natively produce Arrow RecordBatches. This allows for zero-copy data transmission and efficient in-memory processing.
 
 ## The Plugin Ecosystem (The Secret Sauce)
@@ -84,17 +92,13 @@ python server/start_server.py
 
 ## Known Issues & Limitations
 
-### Import: `csv_bytes_to_arrow_inferred`
-`SfArrowServices.py` and `SfParquetServices.py` import `csv_bytes_to_arrow_inferred` from `SfBulk2Engine`, but this function no longer exists. These modules will fail on import. The equivalent is `Bulk2SObject.csv_bytes_to_arrow(data)` (static method, schema=None for inferred).
-
 ### SF Compound Types Excluded from Migration
-Salesforce compound fields (`address`, `location`) have no Arrow type mapping and are excluded from `get_catalog` column lists. Data in these fields will not be migrated. If needed, their sub-fields (e.g., `MailingStreet`, `MailingCity`) are individual fields that DO migrate.
+Salesforce compound fields (`address`, `location`) have no Arrow type mapping and are excluded from `get_catalog` column lists. Data in these fields will not be migrated. If needed, their sub-fields (e.g., `MailingStreet`, `MailingCity`) are individual fields that DO migrate. Salesforce mappings need to be reviewed as this should already be obvious, if the mappings are not already excluding compound types, they absolutely should be excluding compound types and any other unsupported types.
 
-### SF `time` Fields -> Oracle `VARCHAR2(15 CHAR)`
-Arrow `time64_us` has no direct Oracle equivalent. These are stored as `VARCHAR2(15 CHAR)`. The `oracledb` input size is unset (auto-detect), which may cause type errors during bulk insert if `datetime.time` objects arrive instead of strings. Workaround: cast time columns to string in a pre-processing step.
+It should be pretty obvious that if a field cannot be read, it can't be migrated.
 
-### Target Schema Must Match Connection User
-The Oracle dialect builders use unqualified table names in DML (`MERGE INTO ACCOUNT ...`). Oracle resolves these against the session user's default schema. If `target_catalog_name` differs from the `ORACLE_USER` environment variable, DML will fail. Ensure they match, or set `ALTER SESSION SET CURRENT_SCHEMA` on the connection.
+### SF `time` Fields -> Oracle
+Arrow `time64_us` has no direct Oracle equivalent. The `oracledb` input size is unset (auto-detect), which may cause type errors during bulk insert if `datetime.time` objects arrive without mapping first. Time mappings for Oracle need to be enhanced to accept `time` fields as `timestamps`.
 
 ### One-Way Migration (SF -> Oracle)
 Salesforce does not expose DDL via API. The `create_catalog`, `create_entity`, and `create_column` protocol methods return `not_implemented` on the SF plugin. Reverse migration (Oracle -> SF) would require creating SObjects/fields via the Metadata or Tooling API, which is not currently implemented.

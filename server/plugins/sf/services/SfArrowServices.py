@@ -6,11 +6,7 @@ from typing import Any, TYPE_CHECKING
 import pyarrow as pa
 
 from server.plugins.PluginModels import Catalog, ArrowStream
-from server.plugins.sf.engines.SfBulk2Engine import (
-    Bulk2,
-    DEFAULT_QUERY_PAGE_SIZE,
-    
-)
+from server.plugins.sf.engines.SfBulk2Engine import Bulk2, DEFAULT_QUERY_PAGE_SIZE
 from server.plugins.sf.models.SfTypeMap import sf_to_python
 
 if TYPE_CHECKING:
@@ -19,10 +15,6 @@ if TYPE_CHECKING:
 
 import logging
 logger = logging.getLogger(__name__)
-
-
-
-
 
 class SfArrowFrame:
     """
