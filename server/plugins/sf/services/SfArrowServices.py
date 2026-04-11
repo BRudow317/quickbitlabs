@@ -9,40 +9,19 @@ from server.plugins.PluginModels import Catalog, ArrowStream
 from server.plugins.sf.engines.SfBulk2Engine import (
     Bulk2,
     DEFAULT_QUERY_PAGE_SIZE,
-    csv_bytes_to_arrow_inferred,
+    
 )
 from server.plugins.sf.models.SfTypeMap import sf_to_python
 
 if TYPE_CHECKING:
     from server.plugins.sf.engines.SfRestEngine import SfRest
+    from server.plugins.sf.engines.SfBulk2Engine import Bulk2SObject
 
 import logging
 logger = logging.getLogger(__name__)
 
 
-def stream_to_table(data: ArrowStream, keep_cols: set[str] | None = None) -> pa.Table:
-    """Collect an ArrowStream into a pa.Table, optionally projecting to a column subset."""
-    batches = list(data)
-    if not batches:
-        return pa.table({})
-    table = pa.Table.from_batches(batches)
-    if keep_cols:
-        keep = [name for name in table.column_names if name in keep_cols]
-        table = table.select(keep)
-    return table
 
-
-def results_to_stream(results: list[dict[str, int]]) -> ArrowStream:
-    """Wrap Bulk2 job result summaries into a minimal ArrowStream."""
-    schema = pa.schema([
-        pa.field("job_id",                 pa.string()),
-        pa.field("numberRecordsProcessed", pa.int64()),
-        pa.field("numberRecordsFailed",    pa.int64()),
-        pa.field("numberRecordsTotal",     pa.int64()),
-    ])
-    rows = [{**r, "job_id": str(r.get("job_id", ""))} for r in results]
-    table = pa.Table.from_pylist(rows, schema=schema)
-    return pa.RecordBatchReader.from_batches(schema, table.to_batches())
 
 
 class SfArrowFrame:
@@ -100,7 +79,7 @@ class SfArrowFrame:
         No data touches disk.
         """
         entity = catalog.entities[0]
-        sf_obj = getattr(self._bulk2, object_name)
+        sf_obj: Bulk2SObject = getattr(self._bulk2, object_name)
         page_iter: Iterator[bytes] = (
             sf_obj.query_all(soql, max_records=max_records)
             if include_deleted
@@ -109,7 +88,32 @@ class SfArrowFrame:
 
         def _records() -> Iterator[dict[str, Any]]:
             for csv_bytes in page_iter:
-                for row in csv_bytes_to_arrow_inferred(csv_bytes).to_pylist():
+                for row in sf_obj.csv_bytes_to_arrow(csv_bytes).to_pylist():
                     yield {f"{entity.name}_{k}": v for k, v in row.items()}
 
         return catalog.arrow_stream(_records())
+
+    @staticmethod
+    def stream_to_table(data: ArrowStream, keep_cols: set[str] | None = None) -> pa.Table:
+        """Collect an ArrowStream into a pa.Table, optionally projecting to a column subset."""
+        batches = list(data)
+        if not batches:
+            return pa.table({})
+        table = pa.Table.from_batches(batches)
+        if keep_cols:
+            keep = [name for name in table.column_names if name in keep_cols]
+            table = table.select(keep)
+        return table
+
+    @staticmethod
+    def results_to_stream(results: list[dict[str, int]]) -> ArrowStream:
+        """Wrap Bulk2 job result summaries into a minimal ArrowStream."""
+        schema = pa.schema([
+            pa.field("job_id",                 pa.string()),
+            pa.field("numberRecordsProcessed", pa.int64()),
+            pa.field("numberRecordsFailed",    pa.int64()),
+            pa.field("numberRecordsTotal",     pa.int64()),
+        ])
+        rows = [{**r, "job_id": str(r.get("job_id", ""))} for r in results]
+        table = pa.Table.from_pylist(rows, schema=schema)
+        return pa.RecordBatchReader.from_batches(schema, table.to_batches())

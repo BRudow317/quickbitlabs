@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Generator
-from typing import Any, Literal
+from typing import Any, Literal, TYPE_CHECKING
 
 import pyarrow as pa
 
@@ -12,7 +12,10 @@ from server.plugins.sf.engines.SfClient import SfClient
 from server.plugins.sf.engines.SfRestEngine import SfRest
 from server.plugins.sf.models.SfDialect import build_soql, get_object_from_soql
 from server.plugins.sf.models.SfTypeMap import SF_TO_ARROW_LITERAL
-from server.plugins.sf.services.SfArrowServices import SfArrowFrame, stream_to_table, results_to_stream
+from server.plugins.sf.services.SfArrowServices import SfArrowFrame
+
+if TYPE_CHECKING:
+    from server.plugins.sf.engines.SfBulk2Engine import Bulk2SObject
 
 import logging
 logger = logging.getLogger(__name__)
@@ -151,6 +154,8 @@ class SfService:
             streams: list[ArrowStream] = []
             for entity in catalog.entities:
                 # TODO query for sObject count with rest to decide whether to use bulk or rest for this entity, unless user explicitly specified via kwargs
+                # TODO sniff the total record counts for all entities up front and determine if Arrow Tables in memory is feasible or if encrypted Parquet is needed.
+                # TODO implement custom data frame functionality to manage the Federated query protocols for multiple entities, including joining on the fly and limiting entities and fields to the minimum viable requirements for the query. Current state implements a list of iterators of the objects, and that's a violation of the contract.
                 object_name = entity.qualified_name or entity.name or ""
                 sub_catalog = catalog.model_copy(update={"entities": [entity]})
                 soql: str = kwargs.get("soql", None) or build_soql(sub_catalog, entity)
@@ -172,12 +177,11 @@ class SfService:
             logger.exception(f"get_data failed: {e}")
             return PluginResponse.error(str(e))
 
-    def create_data(
-        self, catalog: Catalog, data: ArrowStream, **kwargs: Any
+    def create_data(self, catalog: Catalog, data: ArrowStream, **kwargs: Any
     ) -> PluginResponse[ArrowStream]:
         try:
             if not catalog.entities: return PluginResponse.error("Catalog must contain at least one entity.")
-            table = stream_to_table(data)
+            table = self.arrow_frame.stream_to_table(data)
             all_results: list[dict] = []
             for entity in catalog.entities:
                 object_name = entity.qualified_name or entity.name or ""
@@ -188,7 +192,7 @@ class SfService:
                     wait=kwargs.get("wait", 5),
                 )
                 all_results.extend(results)
-            return PluginResponse.success(results_to_stream(all_results))
+            return PluginResponse.success(self.arrow_frame.results_to_stream(all_results))
         except Exception as e:
             logger.exception(f"create_data failed: {e}")
             return PluginResponse.error(str(e))
@@ -198,7 +202,7 @@ class SfService:
     ) -> PluginResponse[ArrowStream]:
         try:
             if not catalog.entities: return PluginResponse.error("Catalog must contain at least one entity.")
-            table = stream_to_table(data)
+            table = self.arrow_frame.stream_to_table(data)
             all_results: list[dict] = []
             for entity in catalog.entities:
                 object_name = entity.name or entity.qualified_name or ""
@@ -210,7 +214,7 @@ class SfService:
                     wait=kwargs.get("wait", 5),
                 )
                 all_results.extend(results)
-            return PluginResponse.success(results_to_stream(all_results))
+            return PluginResponse.success(self.arrow_frame.results_to_stream(all_results))
         except Exception as e:
             logger.exception(f"update_data failed: {e}")
             return PluginResponse.error(str(e))
@@ -224,7 +228,7 @@ class SfService:
             external_id_field: str | None = kwargs.get("external_id_field")
             if not external_id_field:
                 return PluginResponse.error("upsert_data requires 'external_id_field' kwarg.")
-            table = stream_to_table(data)
+            table = self.arrow_frame.stream_to_table(data)
             all_results: list[dict] = []
             for entity in catalog.entities:
                 object_name = entity.name or entity.qualified_name or ""
@@ -240,7 +244,7 @@ class SfService:
                     wait=kwargs.get("wait", 5),
                 )
                 all_results.extend(results)
-            return PluginResponse.success(results_to_stream(all_results))
+            return PluginResponse.success(self.arrow_frame.results_to_stream(all_results))
         except Exception as e:
             logger.exception(f"upsert_data failed: {e}")
             return PluginResponse.error(str(e))
@@ -251,7 +255,7 @@ class SfService:
         try:
             if not catalog.entities:
                 return PluginResponse.error("Catalog must contain at least one entity.")
-            table = stream_to_table(data, keep_cols={"Id"})
+            table = self.arrow_frame.stream_to_table(data, keep_cols={"Id"})
             for entity in catalog.entities:
                 object_name = entity.name or entity.qualified_name or ""
                 getattr(self.bulk2, object_name).delete(
@@ -265,13 +269,23 @@ class SfService:
 
     # Plugin Uniques
 
-    def rest_query(self, 
-                   soql: str, 
+    def rest_query(self,
+                   soql: str,
                    object_name: str | None = None,
                    return_type: Literal['Records', 'ArrowStream'] = 'Records'
                    ) -> Records | ArrowStream:
-        """Iterate REST query results as native Python dicts."""
-        return self.rest.query_all_iter(soql)
+        """Execute REST query and return as Records (dicts) or ArrowStream."""
+        records_iter = (
+            {k: v for k, v in r.items() if k != 'attributes'}
+            for r in self.rest.query_all_iter(soql)
+        )
+        if return_type == 'ArrowStream':
+            records = list(records_iter)
+            if not records:
+                return pa.RecordBatchReader.from_batches(pa.schema([]), iter([]))
+            table = pa.Table.from_pylist(records)
+            return pa.RecordBatchReader.from_batches(table.schema, table.to_batches())
+        return records_iter
 
     def bulk_query(
         self,
@@ -287,7 +301,7 @@ class SfService:
         """
         # TODO parse soql to extract object name if not provided, since Bulk2 API requires it for routing but REST does not
         if not object_name: raise ValueError("bulk_query requires object_name.")
-        sf_obj = getattr(self.bulk2, object_name)
+        sf_obj: Bulk2SObject = getattr(self.bulk2, object_name)
         for csv_bytes in sf_obj.query(soql):
             if return_type == 'ArrowStream':
                 yield sf_obj.csv_bytes_to_arrow(csv_bytes)

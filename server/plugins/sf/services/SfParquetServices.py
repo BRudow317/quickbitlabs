@@ -19,13 +19,11 @@ from server.plugins.PluginModels import Catalog
 from server.plugins.sf.engines.SfBulk2Engine import (
     Bulk2,
     DEFAULT_QUERY_PAGE_SIZE,
-    csv_bytes_to_arrow,
-    csv_bytes_to_arrow_inferred,
+    Bulk2SObject,
 )
 
 import logging
 logger = logging.getLogger(__name__)
-
 
 @dataclass
 class PqCacheEntry:
@@ -39,7 +37,6 @@ class PqCacheEntry:
 
 _FOOTER_KEY_ID = "sf_footer_key"
 _COL_KEY_ID = "sf_col_key"
-
 
 class _SessionKmsClient(pe.KmsClient):
     """In-memory KMS adapter backed by the per-session master key."""
@@ -110,11 +107,11 @@ def stream_bulk_to_parquet(
     )
 
     record_count = 0
-    sf_obj = getattr(bulk2, object_name)
+    sf_obj: Bulk2SObject = getattr(bulk2, object_name)
 
     try:
         for csv_bytes in sf_obj.query(soql, max_records=max_records):
-            chunk = csv_bytes_to_arrow(csv_bytes, nullable_schema)
+            chunk = sf_obj.csv_bytes_to_arrow(csv_bytes, nullable_schema)
             writer.write_table(chunk)
             record_count += len(chunk)
             del chunk
@@ -179,7 +176,6 @@ def open_parquet_arrow(entry: PqCacheEntry) -> pa.Table:
         str(entry.parquet_path),
         decryption_properties=dec_props,
     )
-
 
 def teardown_cache(entry: PqCacheEntry) -> None:
     """Zero in-memory key bytes and unlink parquet cache file."""

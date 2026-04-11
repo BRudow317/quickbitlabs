@@ -23,42 +23,42 @@ Current implementations include:
 
 At the root of the `/server/plugins/` directory sit the four pillars of the platform's SDK. **Every plugin must abide by these files:**
 
-- **`PluginModels.py` (The Nouns):** Defines `CatalogModel`, `EntityModel`, `FieldModel`, and `QueryModel` and data transmission. This is the blueprint. Plugins never share proprietary schema objects; everything is wrapped in these Pydantic models.
-  - ### CatalogModel
+- **`PluginModels.py` (The Nouns):** Defines `Catalog`, `Entity`, `Column`, `ArrowStream` and **Federated Querying Rules** and data transmission. This is the blueprint. Plugins never share proprietary schema objects; everything is wrapped in these Pydantic models.
+  - ### Catalog
     One of the smallest, but most important parts of the entire project.
 
     All metadata at the higher levels exists as a subset of this object.
-    Catalog -> Entities -> Fields -> Records(data, records, bytes, json, etc.)
+    Catalog -> Entities -> Columns -> Records(data, records, bytes, json, etc.)
 
     Catalog is the top-level wrapper. It may be called schema, namespace, database, etc. in different systems, but the concept is the same: a container for entities/objects/tables. 
 
-    When implementing a plugin it is up to you to decide how to route the catalog, but the catalog, its entity, and the fields needed for operations should be passed along. 
+    When implementing a plugin it is up to you to decide how to route the catalog, but the catalog, its entity, and the columns needed for operations should be passed along. 
 
-    The intention is not to populate an entire catalog and every entity and every field every call, but to provide the relevant metadata needed to perform the requested operation. 
+    The intention is not to populate an entire catalog and every entity and every column every call, but to provide the relevant metadata needed to perform the requested operation. 
 
-    An example might be implementing a csv plugin where the catalog is the source directory, the entity is the file, and the fields are the columns, and records, the rows.
+    An example might be implementing a csv plugin where the catalog is the source directory, the entity is the file, and the columns are the columns, and records, the rows.
 
-    Another example might be a REST API plugin where the catalog is the base URL, the entity is the endpoint, and the fields are the query parameters or body parameters needed to perform the request.
+    Another example might be a REST API plugin where the catalog is the base URL, the entity is the endpoint, and the columns are the query parameters or body parameters needed to perform the request.
 
-    Another example might be a SQL plugin where the catalog is the database, the entity is the table, and the fields are the columns needed to perform the query or DML operation.
+    Another example might be a SQL plugin where the catalog is the database, the entity is the table, and the columns are the columns needed to perform the query or DML operation.
 
-    Perhaps you only know the catalog to search for, the target plugin may accept an a catalog with an empty entity list and populate the entire catalog with its metadata, so the caller service can inspect and make relevant decisions about which entities and fields to operate on in subsequent calls.
+    Perhaps you only know the catalog to search for, the target plugin may accept an a catalog with an empty entity list and populate the entire catalog with its metadata, so the caller service can inspect and make relevant decisions about which entities and columns to operate on in subsequent calls.
 
-    Or perhaps you want to know the type of a specific field, so you provide a catalog with one entity and one field, and the plugin returns the catalog with the field's metadata populated.
+    Or perhaps you want to know the type of a specific column, so you provide a catalog with one entity and one column, and the plugin returns the catalog with the column's metadata populated.
 
     This is how the protocols should be designed, and implemented. The catalog is the envelope that carries the metadata and context needed to perform the requested operation.
     
     As a pydantic BaseModel you can serialize the entire working contract to JSON with catalog.json() or dict with catalog.dict(), and rehydrate with CatalogModel.parse_raw() or CatalogModel.parse_obj() respectively.
 
     It can also serve as a base for implementing openapi schemas, ORM models, or any other structured representation of metadata you need.
-  - ### EntityModel
-    The noun for the object being operated on. This could be a table, file, API endpoint, etc. It has a name and a list of fields.
-  - ### FieldModel
+  - ### Entity
+    The noun for the object being operated on. This could be a table, file, API endpoint, etc. It has a name and a list of columns.
+  - ### Column
     The noun for the attributes of the entity. This could be columns in a table, keys in a JSON object, etc. It has a name and a type.
-  - ### QueryModel
-    The universal JSON representation of a data request (AST). Instead of holding a raw SQL string, it structures the request abstractly with lists of entities, fields, and nested filter_groups (e.g., field: "status", operator: "==", value: "active"). This allows the FastAPI frontend to request data without knowing whether the target system speaks SQL, SOQL, or REST. (Note: It does include a native escape hatch for edge-case raw system queries).
+  - ### Querying
+    The universal JSON representation of a data request (AST). Instead of holding a raw SQL string, it structures the request abstractly with lists of entities, columns, and nested filter_groups (e.g., column: "status", operator: "==", value: "active"). This allows the FastAPI frontend to request data without knowing whether the target system speaks SQL, SOQL, or REST. (Note: It does include a native escape hatch for edge-case raw system queries).
 
-- **`PluginProtocol.py` (The Verbs):** The strict Python `Protocol` defining the standard CRUD methods ex) (`get_records`, `insert_records`, `update_catalog`, `upsert_entity`, `delete_field`). If a plugin doesn't support a verb, it returns a 501.
+- **`PluginProtocol.py` (The Verbs):** The strict Python `Protocol` defining the standard CRUD methods ex) (`get_data`, `create_data`, `update_catalog`, `upsert_entity`, `delete_column`). If a plugin doesn't support a verb, it returns a 501.
 
 - **`PluginResponse.py` (The Envelope):** Every plugin method returns this wrapper. It maps outcomes to standard HTTP status codes (200, 404, 500) and safely carries data stream generators without exhausting them.
 
@@ -82,3 +82,4 @@ pip install -e .
 
 # Start the FastAPI server
 python server/start_server.py
+```
