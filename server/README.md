@@ -66,9 +66,7 @@ At the root of the `/server/plugins/` directory sit the four pillars of the plat
 
 ### Existing Plugin Implementations
 * `/oracle` - Heavy enterprise SQL and DDL generation.
-* `/postgres` - Standard relational data operations.
 * `/sf` - Salesforce bulk and REST API integration.
-* `/readers` - Flat file (CSV, Excel) and JSON parsing.
 
 ## Getting Started
 
