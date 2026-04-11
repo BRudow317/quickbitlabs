@@ -110,6 +110,70 @@ def build_update_dml(catalog: Catalog, entity: Entity) -> tuple[str, dict[str, A
     return f"UPDATE {entity.name} SET {set_str}{where_clause}", binds
         
 
+from server.plugins.oracle.OracleTypeMap import map_arrow_to_oracle_ddl
+
+def build_rebuild_select(entity: Entity, existing_names: set[str]) -> str:
+    """
+    Constructs the SELECT part of an INSERT INTO ... SELECT for table rebuilds.
+    Explicitly CASTs columns to their target DDL types, with special handling for:
+    - LOBs: No CAST supported (select directly).
+    - Dates/Timestamps: No CAST for existing columns (avoid NLS format errors).
+    - Booleans: CASE expression for string-to-number conversion.
+    """
+    expressions = []
+    for col in entity.columns:
+        ddl_type = map_arrow_to_oracle_ddl(col).upper()
+        col_upper = col.name.upper()
+        is_lob = "CLOB" in ddl_type or "BLOB" in ddl_type
+        is_date = "DATE" in ddl_type or "TIMESTAMP" in ddl_type
+
+        if col_upper in existing_names:
+            # Existing column
+            if is_lob or is_date:
+                # Oracle handles LOB and Date/Time internal moves best without CAST.
+                expressions.append(f"{col.name} AS {col.name}")
+            else:
+                atype = col.arrow_type_id or ""
+                if atype == "bool":
+                    expr = (f"CASE WHEN {col.name} IN ('true', '1', 'Y') THEN 1 "
+                            f"WHEN {col.name} IN ('false', '0', 'N') THEN 0 "
+                            f"ELSE NULL END")
+                    expressions.append(f"CAST({expr} AS {ddl_type}) AS {col.name}")
+                else:
+                    expressions.append(f"CAST({col.name} AS {ddl_type}) AS {col.name}")
+        else:
+            # New column
+            if is_lob:
+                if col.default_value is not None:
+                    expressions.append(f"TO_CLOB('{col.default_value}') AS {col.name}")
+                elif not col.is_nullable:
+                    expressions.append(f"EMPTY_CLOB() AS {col.name}")
+                else:
+                    expressions.append(f"NULL AS {col.name}")
+            elif is_date:
+                if col.default_value is not None:
+                    # Use explicit format mask for default dates
+                    expressions.append(f"TO_TIMESTAMP('{col.default_value}', 'YYYY-MM-DD HH24:MI:SS') AS {col.name}")
+                elif not col.is_nullable:
+                    expressions.append(f"TO_TIMESTAMP('1970-01-01 00:00:00', 'YYYY-MM-DD HH24:MI:SS') AS {col.name}")
+                else:
+                    # Explicit CAST(NULL AS ...) for dates is safer for type inference
+                    expressions.append(f"CAST(NULL AS {ddl_type}) AS {col.name}")
+            else:
+                if col.default_value is not None:
+                    val = f"'{col.default_value}'" if isinstance(col.default_value, str) else str(col.default_value)
+                    expressions.append(f"CAST({val} AS {ddl_type}) AS {col.name}")
+                elif not col.is_nullable:
+                    atype = col.arrow_type_id or ""
+                    if atype in ("string", "utf8", "large_string"): dummy = "' '"
+                    elif any(atype.startswith(t) for t in ("int", "uint", "float", "decimal")) or atype == "bool": dummy = "0"
+                    else: dummy = "NULL"
+                    expressions.append(f"CAST({dummy} AS {ddl_type}) AS {col.name}")
+                else:
+                    expressions.append(f"CAST(NULL AS {ddl_type}) AS {col.name}")
+
+    return ", ".join(expressions)
+
 def build_merge_dml(catalog: Catalog, entity: Entity) -> str:
     pk_cols = entity.primary_key_columns
     if not pk_cols:

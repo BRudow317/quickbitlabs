@@ -78,7 +78,14 @@ class Oracle(Plugin):
         return PluginResponse.not_implemented("Oracle does not support ALTER COLUMN via this protocol. Use upsert_entity to add missing columns.")
 
     def upsert_column(self, catalog: Catalog, **kwargs: Any) -> PluginResponse[Column]:
-        return PluginResponse.not_implemented("Use upsert_entity to add missing columns to an existing table.")
+        try:
+            # Oracle upsert_entity already handles adding missing columns
+            self.service.upsert_entity(catalog, **kwargs)
+            if catalog.entities and catalog.entities[0].columns:
+                return PluginResponse.success(catalog.entities[0].columns[0])
+            return PluginResponse.error("Catalog must contain an entity with at least one column.")
+        except Exception as e:
+            return PluginResponse.error(str(e))
 
     def delete_column(self, catalog: Catalog, **kwargs: Any) -> PluginResponse[None]:
         return PluginResponse.not_implemented("Oracle column deletion not implemented. Dropping columns is destructive and should be done manually.")
@@ -100,7 +107,10 @@ class Oracle(Plugin):
             return PluginResponse.error(str(e))
 
     def update_entity(self, catalog: Catalog, **kwargs: Any) -> PluginResponse[Entity]:
-        return PluginResponse.not_implemented("Use upsert_entity to create or add columns to a table.")
+        try:
+            return PluginResponse.success(self.service.upsert_entity(catalog, **kwargs))
+        except Exception as e:
+            return PluginResponse.error(str(e))
 
     def upsert_entity(self, catalog: Catalog, **kwargs: Any) -> PluginResponse[Entity]:
         try:
@@ -116,7 +126,10 @@ class Oracle(Plugin):
     # ==========================================
 
     def create_catalog(self, catalog: Catalog, **kwargs: Any) -> PluginResponse[Catalog]:
-        return PluginResponse.not_implemented("Oracle schemas are managed by DBAs. Use upsert_catalog to create/align tables within an existing schema.")
+        try:
+            return PluginResponse.success(self.service.upsert_catalog(catalog, **kwargs))
+        except Exception as e:
+            return PluginResponse.error(str(e))
 
     def get_catalog(self, catalog: Catalog, **kwargs: Any) -> PluginResponse[Catalog]:
         try:
@@ -125,7 +138,10 @@ class Oracle(Plugin):
             return PluginResponse.error(str(e))
 
     def update_catalog(self, catalog: Catalog, **kwargs: Any) -> PluginResponse[Catalog]:
-        return PluginResponse.not_implemented("Use upsert_catalog to align tables within a schema.")
+        try:
+            return PluginResponse.success(self.service.upsert_catalog(catalog, **kwargs))
+        except Exception as e:
+            return PluginResponse.error(str(e))
 
     def upsert_catalog(self, catalog: Catalog, **kwargs: Any) -> PluginResponse[Catalog]:
         try:

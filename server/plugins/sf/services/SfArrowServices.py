@@ -66,11 +66,22 @@ class SfArrowFrame:
     ) -> ArrowStream:
         """
         Execute SOQL via Bulk 2.0 and return a lazily-paged ArrowStream.
-        CSV pages are parsed with type inference, renamed to entity_column format,
+        CSV pages are parsed with EXPLICIT schema mapping, renamed to entity_column format,
         and passed through PluginModels.arrow_stream for schema + metadata.
-        No data touches disk.
         """
         entity = catalog.entities[0]
+        # Create a schema for the SF-specific CSV columns (no prefix yet)
+        # Widen decimal precision to 38 to avoid "precision inferred" crashes
+        def _widen_type(t: pa.DataType) -> pa.DataType:
+            if pa.types.is_decimal(t):
+                return pa.decimal128(38, t.scale)
+            return t
+
+        sf_schema = pa.schema([
+            pa.field(c.name, _widen_type(c.arrow_type or pa.string()), nullable=True) 
+            for c in entity.columns
+        ])
+        
         sf_obj: Bulk2SObject = getattr(self._bulk2, object_name)
         page_iter: Iterator[bytes] = (
             sf_obj.query_all(soql, max_records=max_records)
@@ -80,7 +91,9 @@ class SfArrowFrame:
 
         def _records() -> Iterator[dict[str, Any]]:
             for csv_bytes in page_iter:
-                for row in sf_obj.csv_bytes_to_arrow(csv_bytes).to_pylist():
+                # Parse CSV with explicit schema to ensure correct types (Decimals, etc)
+                table = sf_obj.csv_bytes_to_arrow(csv_bytes, schema=sf_schema)
+                for row in table.to_pylist():
                     yield {f"{entity.name}_{k}": v for k, v in row.items()}
 
         return catalog.arrow_stream(_records())

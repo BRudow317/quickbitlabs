@@ -90,15 +90,25 @@ pip install -e .
 python server/start_server.py
 ```
 
+## Recent Migration Enhancements (SF -> Oracle)
+
+The following core enhancements were implemented to support full automated schema and data migration:
+
+### Oracle "Copy-Swap" Table Rebuild
+To handle complex DDL changes on populated tables (such as adding `NOT NULL` columns which triggers `ORA-01758`), the Oracle plugin now utilizes an Alembic-style "Copy-Swap" strategy. It creates a temporary table with the new schema, transfers existing data using type-safe defaults, and then performs a `DROP/RENAME` to align the live table without data loss.
+
+### Defensive Dialect Casting
+Oracle's internal SQL engine is strict with type inference during `INSERT INTO ... SELECT` operations. The `OracleDialect` was enhanced to wrap **every** column in an explicit `CAST(col AS target_type)` expression. 
+*   **Booleans:** Uses `CASE` expressions to safely convert Salesforce string-based booleans (`'true'`, `'false'`) to Oracle `NUMBER(1,0)`.
+*   **Dates/LOBs:** Intelligent exclusion of `CAST` for `CLOB`, `BLOB`, `DATE`, and `TIMESTAMP` columns to avoid NLS formatting errors (`ORA-01843`) and LOB-inconsistency errors (`ORA-00932`).
+
+### Global Precision Widening
+Salesforce metadata often under-reports the precision of currency and calculated fields. To prevent PyArrow and Oracle from crashing on high-precision data (e.g., 19+ digits arriving for an 18-precision field), the integration engine now globally "safety-widens" all `decimal128` types to precision 38 while preserving the original scale.
+
 ## Known Issues & Limitations
 
 ### SF Compound Types Excluded from Migration
-Salesforce compound fields (`address`, `location`) have no Arrow type mapping and are excluded from `get_catalog` column lists. Data in these fields will not be migrated. If needed, their sub-fields (e.g., `MailingStreet`, `MailingCity`) are individual fields that DO migrate. Salesforce mappings need to be reviewed as this should already be obvious, if the mappings are not already excluding compound types, they absolutely should be excluding compound types and any other unsupported types.
+Salesforce compound fields (`address`, `location`) have no Arrow type mapping and are excluded from `get_catalog` column lists. Sub-fields (e.g., `MailingStreet`, `MailingCity`) are migrated individually instead.
 
-It should be pretty obvious that if a field cannot be read, it can't be migrated.
-
-### SF `time` Fields -> Oracle
-Arrow `time64_us` has no direct Oracle equivalent. The `oracledb` input size is unset (auto-detect), which may cause type errors during bulk insert if `datetime.time` objects arrive without mapping first. Time mappings for Oracle need to be enhanced to accept `time` fields as `timestamps`.
-
-### One-Way Migration (SF -> Oracle)
-Salesforce does not expose DDL via API. The `create_catalog`, `create_entity`, and `create_column` protocol methods return `not_implemented` on the SF plugin. Reverse migration (Oracle -> SF) would require creating SObjects/fields via the Metadata or Tooling API, which is not currently implemented.
+### Salesforce DDL (Create/Update/Delete) Not Implemented
+The Salesforce plugin returns `not_implemented` for metadata mutation verbs. The standard REST/Bulk APIs do not support DDL; enabling this would require a separate implementation using the Salesforce Metadata API.

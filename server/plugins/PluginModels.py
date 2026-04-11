@@ -172,6 +172,11 @@ class Catalog(BaseModel):
             for column in entity.columns:
                 arrow_type = column.arrow_type
                 if not arrow_type: continue
+                
+                # Safety-widen decimals to max precision (38) to avoid "precision mismatch" errors
+                if pa.types.is_decimal(arrow_type):
+                    arrow_type = pa.decimal128(38, arrow_type.scale)
+                    
                 final_nullable = column.is_nullable or (entity.name in nullable_entities)
                 arrow_fields.append(pa.field(f"{entity.name}_{column.name}", arrow_type, nullable=final_nullable))
 
@@ -180,7 +185,7 @@ class Catalog(BaseModel):
 
     def arrow_stream(self, data: Records|ArrowStream, chunk_size: int = 50_000) -> ArrowStream:
         schema = self.arrow_schema()
-        if schema.empty:
+        if len(schema) == 0:
             return pa.RecordBatchReader.from_batches(pa.schema([]), iter([]))
 
         def batch_generator() -> Iterator[pa.RecordBatch]:
@@ -191,11 +196,13 @@ class Catalog(BaseModel):
                     field_map[name].append(row.get(name))
                 row_count += 1
                 if row_count == chunk_size:
-                    yield pa.record_batch([field_map[f] for f in schema.names], schema=schema)
+                    arrays = [pa.array(field_map[f], type=schema.field(f).type) for f in schema.names]
+                    yield pa.record_batch(arrays, schema=schema)
                     field_map = {name: [] for name in schema.names}
                     row_count = 0
             if row_count > 0:
-                yield pa.record_batch([field_map[f] for f in schema.names], schema=schema)
+                arrays = [pa.array(field_map[f], type=schema.field(f).type) for f in schema.names]
+                yield pa.record_batch(arrays, schema=schema)
 
         return pa.RecordBatchReader.from_batches(schema, batch_generator())
 

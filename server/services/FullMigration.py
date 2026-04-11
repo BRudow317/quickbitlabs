@@ -229,10 +229,7 @@ def run() -> int:
     migration = FullMigration(
         source_plugin="Salesforce",
         target_plugin="Oracle",
-        source_catalog_name="homelab",
-        target_catalog_name="brudow",
-        # Specify entities or set to None for all migratable entities
-        entities=["Account", "Contact", "Opportunity", "Lead"],
+        # all plugins should have a default to set catalog name.
     )
     try:
         results = migration.run_all()

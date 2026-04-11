@@ -248,8 +248,48 @@ class OracleService:
         self.engine.execute_ddl(sql)
         return entity
 
+    def _rebuild_table_copy_swap(self, catalog: Catalog, entity: Entity, existing_names: set[str]) -> None:
+        """Perform an Alembic-style rebuild (Copy-Swap) to align schema with constraints."""
+        from .OracleDialect import build_rebuild_select
+        
+        schema_name = self._resolve_schema_name(catalog)
+        original_table = entity.name.upper()
+        temp_table = f"{original_table}_TMP"
+        
+        # 1. Create Temp Table with full schema
+        temp_entity = entity.model_copy(update={"name": temp_table})
+        temp_catalog = catalog.model_copy(update={"entities": [temp_entity]})
+        self.create_entity(temp_catalog)
+
+        # 2. Construct Data Transfer SQL using the Dialect's type-safe expressions
+        target_cols = [c.name for c in entity.columns]
+        select_clause = build_rebuild_select(entity, existing_names)
+
+        transfer_sql = (
+            f"INSERT INTO {schema_name}.{temp_table} ({', '.join(target_cols)}) "
+            f"SELECT {select_clause} FROM {schema_name}.{original_table}"
+        )
+        
+        try:
+            logger.info(f"Rebuild Data Transfer: {transfer_sql[:200]}")
+            self.engine.execute_ddl(transfer_sql)
+            
+            # 3. Swap: Destructive but necessary for constraint alignment
+            logger.info(f"Swapping {original_table} with {temp_table}")
+            self.engine.execute_ddl(f"DROP TABLE {schema_name}.{original_table}")
+            self.engine.execute_ddl(f"RENAME {temp_table} TO {original_table}")
+            
+        except Exception as e:
+            logger.error(f"Table rebuild failed for {original_table}: {e}")
+            # Clean up temp table if transfer failed
+            try:
+                self.engine.execute_ddl(f"DROP TABLE {schema_name}.{temp_table}")
+            except:
+                pass
+            raise
+
     def upsert_entity(self, catalog: Catalog, **kwargs: Any) -> Entity:
-        """CREATE TABLE if it doesn't exist, or ALTER TABLE ADD missing columns."""
+        """CREATE TABLE if it doesn't exist, or REBUILD TABLE if missing columns (Copy-Swap)."""
         if not catalog.entities:
             raise ValueError("Catalog must contain at least one entity.")
         schema_name = self._resolve_schema_name(catalog)
@@ -265,13 +305,11 @@ class OracleService:
         existing_rows = self._fetch_table_columns(schema_name, table_name) or []
         existing_names = {str(r["COLUMN_NAME"]).upper() for r in existing_rows}
 
-        new_cols = [c for c in entity.columns if c.name.upper() not in existing_names]
-        if new_cols:
-            col_defs = [self._build_column_ddl(col) for col in new_cols]
-            sql = f"ALTER TABLE {schema_name}.{table_name} ADD ({', '.join(col_defs)})"
-            logger.info(f"DDL: {sql[:200]}")
-            self.engine.execute_ddl(sql)
-            logger.info(f"Added {len(new_cols)} column(s) to {schema_name}.{table_name}.")
+        missing_cols = [c for c in entity.columns if c.name.upper() not in existing_names]
+        if missing_cols:
+            logger.info(f"Table {schema_name}.{table_name} missing {len(missing_cols)} column(s) — triggering rebuild.")
+            self._rebuild_table_copy_swap(catalog, entity, existing_names)
+            logger.info(f"Table {schema_name}.{table_name} rebuild complete.")
         else:
             logger.info(f"Table {schema_name}.{table_name} already aligned — no DDL needed.")
 

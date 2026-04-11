@@ -31,7 +31,7 @@ def map_arrow_to_oracle_ddl(column: Column) -> str:
     if atype == "bool": return "NUMBER(1, 0)"
     if atype.startswith("timestamp"): return "TIMESTAMP WITH TIME ZONE" if column.timezone else "TIMESTAMP"
     if atype.startswith("date"): return "DATE"
-    if atype.startswith("time"): return "VARCHAR2(15 CHAR)"
+    if atype.startswith("time"): return "TIMESTAMP"
     if atype in ("binary", "large_binary"): return "BLOB"
     return "VARCHAR2(255 CHAR)"
 
@@ -47,6 +47,7 @@ def map_column_to_oracledb_input_size(column: Column) -> Any:
     if atype.startswith("int") or atype.startswith("uint") or atype.startswith("float") or atype.startswith("decimal") or atype == "bool": return oracledb.DB_TYPE_NUMBER
     if atype.startswith("timestamp"): return getattr(oracledb, "DB_TYPE_TIMESTAMP_TZ", oracledb.DB_TYPE_TIMESTAMP) if column.timezone else getattr(oracledb, "DB_TYPE_TIMESTAMP")
     if atype.startswith("date"): return oracledb.DB_TYPE_DATE
+    if atype.startswith("time"): return getattr(oracledb, "DB_TYPE_TIMESTAMP")
     if atype in ("binary", "large_binary"): return oracledb.DB_TYPE_BLOB
     return None
 
