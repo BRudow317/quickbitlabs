@@ -1,1 +1,0 @@
-# SFDX Scratch Org Connector

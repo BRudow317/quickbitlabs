@@ -152,6 +152,21 @@ class Oracle(Plugin):
     def delete_catalog(self, catalog: Catalog, **kwargs: Any) -> PluginResponse[None]:
         return PluginResponse.not_implemented("Oracle schema deletion not implemented. Dropping schemas is destructive and should be done manually.")
 
+    def query(self, statement: str, binds: dict[str, Any] | None = None, page_size: int | None = None, catalog: Catalog | None = None, **kwargs: Any) -> PluginResponse[ArrowStream]:
+        try:
+            kwargs['statement'] = statement
+            kwargs['binds'] = binds
+            kwargs['page_size'] = page_size
+            if not catalog:
+                catalog = Catalog(name=self.client.oracle_user)
+            return PluginResponse.success(
+                self.service.get_data(
+                    catalog=catalog,
+                    statement=statement, 
+                    **kwargs
+                    ))
+        except Exception as e:
+            return PluginResponse.error(str(e))
 # Explicitly enforce duck-typing compliance at module load time
 # Intentionally avoid instantiating Oracle at import time because that creates
 # a live DB connection through OracleClient.

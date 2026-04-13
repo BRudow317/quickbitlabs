@@ -152,9 +152,7 @@ class OracleService:
         **kwargs: Any
     ) -> ArrowStream:
         binds: dict[str, Any] = kwargs.get('binds', {})
-        
-        query = kwargs.get('query', None)
-        binds = kwargs.get('binds', {})
+        query: str | None = kwargs.get('statement', None)
         if query: return self.arrow_frame.arrow_stream(query, parameters=binds)
         if catalog:
             sql, binds = build_select(catalog)

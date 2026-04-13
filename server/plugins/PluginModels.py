@@ -4,10 +4,51 @@ from pydantic import BaseModel, ConfigDict, Field
 from typing import Literal, Any, TypeAlias
 from collections.abc import Iterator, Iterable
 import pyarrow as pa
+from polars._typing import (
+        ArrowArrayExportable,
+        ArrowStreamExportable,
+        Orientation,
+        PolarsDataType,
+        SchemaDefinition,
+        SchemaDict,
+        
+    )
 
 # Universal data formats
-ArrowStream: TypeAlias = pa.RecordBatchReader 
+# https://arrow.apache.org/docs/python/api/datatypes.html
+# https://arrow.apache.org/cookbook/py/
+
 Records: TypeAlias = Iterable[dict[str, Any]] # aka json/dict
+ArrowStream: TypeAlias = pa.RecordBatchReader
+# Polars zero-copy data frame interchange protocol types
+# polars_data_frame: TypeAlias = SupportsInterchange
+polars_arrow_stream: TypeAlias = ArrowStreamExportable
+polars_arrow_array: TypeAlias = ArrowArrayExportable
+polars_orientation: TypeAlias = Orientation
+polars_type: TypeAlias = PolarsDataType
+polars_schema: TypeAlias = SchemaDefinition
+polars_schema_dict: TypeAlias = SchemaDict
+
+arrow_field: TypeAlias = pa.Field
+arrow_table: TypeAlias = pa.Table
+arrow_schema: TypeAlias = pa.Schema
+arrow_batch: TypeAlias = pa.RecordBatch
+arrow_array: TypeAlias = pa.Array
+arrow_chunked_array: TypeAlias = pa.ChunkedArray
+arrow_table_groupby: TypeAlias = pa.TableGroupBy
+# arrow_interchange_protocol: TypeAlias = pa.interchange.from_dataframe
+
+arrow_type: TypeAlias = pa.DataType
+arrow_dict: TypeAlias = pa.DictionaryType
+arrow_json: TypeAlias = pa.JsonType
+arrow_struct: TypeAlias = pa.StructType
+arrow_map: TypeAlias = pa.MapType
+arrow_list: TypeAlias = pa.ListType
+arrow_large_list: TypeAlias = pa.LargeListType
+arrow_list_view: TypeAlias = pa.ListViewType
+arrow_large_list_view: TypeAlias = pa.LargeListViewType
+
+
 
 arrow_types = {
     # Primitives
@@ -27,6 +68,7 @@ arrow_types = {
     
     # Binary & String
     "string": pa.string(),
+    "string_view": pa.string_view(),
     "utf8": pa.utf8(),
     "large_string": pa.large_string(),
     "binary": pa.binary(),
@@ -48,6 +90,17 @@ arrow_types = {
     # Common Parameterized Defaults
     "decimal128": pa.decimal128(38, 9),
     "decimal256": pa.decimal256(76, 18),
+
+    # Complex Types
+    "json": pa.json_(),
+    "uuid": pa.uuid(),
+    "list": pa.list_(),
+    "large_list": pa.large_list(),
+    "list_view": pa.list_view(),
+    "large_list_view": pa.large_list_view(),
+    "dictionary": pa.dictionary(),
+    "struct": pa.struct(),
+    "map": pa.map_(),
 }
 
 arrow_type_literal = Literal[
@@ -56,7 +109,7 @@ arrow_type_literal = Literal[
     "string", "utf8", "large_string", "binary", "large_binary",
     "date32", "date64", "timestamp_s", "timestamp_ms", "timestamp_us", 
     "timestamp_ns", "time32_s", "time32_ms", "time64_us", "time64_ns", 
-    "duration_s", "decimal128", "decimal256"
+    "duration_s", "decimal128", "decimal256", "json", "uuid", "string_view", "list", "large_list", "struct", "map", "list_view", "large_list_view", "dictionary"
 ]
 
 # python types
@@ -127,11 +180,13 @@ class Sort(BaseModel):
     direction: Literal["ASC", "DESC"] = "ASC"
 
 class Join(BaseModel):
+    left_catalog: Catalog | None = None
     left_entity: Entity
     left_column: Column
+    right_catalog: Catalog | None = None
     right_entity: Entity
     right_column: Column
-    join_type: Literal["INNER", "LEFT", "RIGHT", "OUTER"] = "INNER"
+    join_type: Literal["INNER", "LEFT", "OUTER"] = "INNER" # removed "RIGHT", 
 
 class Operator(BaseModel):
     """The single equal sign '=' is an assignment operator, it is not an equality operator."""

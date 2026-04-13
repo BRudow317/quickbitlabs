@@ -3,9 +3,11 @@ import pyarrow as pa
 import polars as pl
 import oracledb
 from typing import Any, Iterator, Iterable, TYPE_CHECKING
+
+from server.plugins.PluginModels import ArrowStream
 from .OracleClient import OracleClient
 
-from .arrow_array import ArrowArray
+from oracledb import ArrowArray
 from oracledb.arrow_impl import DataFrameImpl
 from oracledb.base import BaseMetaClass
 from oracledb import errors
@@ -120,13 +122,10 @@ class OracleDataFrame:
         return polar_data_frame
 
 
-
-
-
 class OracleArrowFrame:
-    client: OracleClient
+    _client: OracleClient
     def __init__(self, client: OracleClient):
-        self.client: OracleClient = client
+        self._client: OracleClient = client
        
     def arrow_stream(
         self,
@@ -134,20 +133,20 @@ class OracleArrowFrame:
         parameters: list | tuple | dict | None = None,
         size: int = 50_000,
         fetch_decimals: bool = True,
-    ) -> pa.RecordBatchReader:
+    ) -> pa.RecordBatchReader | ArrowStream:
         """Returns a PyArrow RecordBatchReader"""
-        raw_iter: Iterator[oracledb.DataFrame] = self.client.get_con().fetch_df_batches(
+        raw_iter: Iterator[oracledb.DataFrame] = self.fetch_df_batches(
             statement=statement,
             parameters=parameters,
             size=size,
             fetch_decimals=fetch_decimals,
         )
         try:
-            first_table = OracleDataFrame(next(raw_iter)).to_pyarrow()
+            first_table: pa.Table = OracleDataFrame(next(raw_iter)).to_pyarrow()
         except StopIteration:
             return pa.RecordBatchReader.from_batches(pa.schema([]), iter([]))
 
-        schema = first_table.schema
+        schema: pa.Schema = first_table.schema
 
         def batch_generator() -> Iterator[pa.RecordBatch]:
             yield from first_table.to_batches()
@@ -155,7 +154,7 @@ class OracleArrowFrame:
                 yield from OracleDataFrame(record_batch).to_pyarrow().to_batches()
 
         return pa.RecordBatchReader.from_batches(schema, batch_generator())
-        
+
     def execute_many(
         self,
         sql: str | Iterable[tuple[str, dict]],
@@ -165,18 +164,16 @@ class OracleArrowFrame:
         batcherrors: bool = False,
     ) -> None:
         """Generic bulk DML over an Arrow stream.
-
         sql can be a single statement string, or an iterable of (statement, static_binds)
         tuples to execute multiple statements per batch (e.g. multi-entity UPDATE).
         """
         statements: list[tuple[str, dict]] = [(sql, {})] if isinstance(sql, str) else list(sql)
-        with self.client.get_con().cursor() as cursor:
+        with self._client.get_con().cursor() as cursor:
             if input_sizes:
                 cursor.setinputsizes(**input_sizes)
             for batch in data:
                 records = batch.to_pylist()
-                if not records:
-                    continue
+                if not records: continue
                 for stmt, binds in statements:
                     parameters = [{**r, **binds} for r in records] if binds else records
                     cursor.executemany(
@@ -184,7 +181,7 @@ class OracleArrowFrame:
                         parameters=parameters,
                         batcherrors=batcherrors,
                     )
-        self.client.get_con().commit()
+        self._client.get_con().commit()
 
     def fetch_df_all(
         self, 
@@ -194,7 +191,7 @@ class OracleArrowFrame:
         fetch_decimals: bool = True
     ) -> OracleDataFrame:
         """Fetch all rows into a single zero-copy OracleDataFrame facade."""
-        odf: oracledb.DataFrame = self.client.get_con().fetch_df_all(
+        odf: oracledb.DataFrame = self._client.get_con().fetch_df_all(
             statement=statement,
             parameters=parameters,
             arraysize=arraysize,
@@ -211,7 +208,7 @@ class OracleArrowFrame:
     ) -> Iterator[oracledb.DataFrame]:
         """Yield batches of zero-copy OracleDataFrame facades for memory-safe streaming.
         Connection.fetch_df_batches(statement, parameters=None, size=None)"""
-        iterator: Iterator[oracledb.DataFrame] = self.client.get_con().fetch_df_batches(
+        iterator: Iterator[oracledb.DataFrame] = self._client.get_con().fetch_df_batches(
             statement=statement,
             parameters=parameters,
             size=size,
