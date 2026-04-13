@@ -41,11 +41,6 @@ def _rename_stream(stream: ArrowStream, name_map: dict[str, str]) -> ArrowStream
 
 class FullMigration:
     """Orchestrates a full schema + data migration between two Plugin implementations.
-
-    Flow:
-        1. discover()      — introspect source and target schemas
-        2. prepare()       — map source schema to target naming/types, execute DDL
-        3. migrate_data()  — extract per entity, rename columns, MERGE into target
     """
     source: Plugin
     target: Plugin

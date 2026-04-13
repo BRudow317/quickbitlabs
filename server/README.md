@@ -112,3 +112,26 @@ Salesforce compound fields (`address`, `location`) have no Arrow type mapping an
 
 ### Salesforce DDL (Create/Update/Delete) Not Implemented
 The Salesforce plugin returns `not_implemented` for metadata mutation verbs. The standard REST/Bulk APIs do not support DDL; enabling this would require a separate implementation using the Salesforce Metadata API.
+
+## Last Run Error Summary (2026-04-11)
+
+From `.logs/last run.log` (run summary reported 185 succeeded, 9 failed):
+
+- Attachment -> ATTACHMENT: Bulk V2 Query with CSV does not support blob fields.
+  - Fix: Improve SalesforceService to only select Bulk2 Queries when necessary, rest should be the default.
+- BusinessHours -> BUSINESS_HOURS: CSV conversion error to `time64[us]` for value `00:00:00.000Z`.
+  - Fix: Salesforce Type Mapping should properly convert Salesforce 'time' type to an appropriate arrow type.
+- ConnectedApplication -> CONNECTED_APPLICATION: `INSUFFICIENT_ACCESS` on cross-reference id.
+  - Fix: Insufficient access should be gracefully handled and logged but not cause a hard failure.
+- ContentFolderItem -> CONTENT_FOLDER_ITEM: Query requires filter by `Id` or `ParentContentFolderId` (`=` or `IN`).
+  - Fix: Gracefully handle these, log them as warnings and skip. 
+- Document -> DOCUMENT: Bulk V2 Query with CSV does not support blob fields.
+  - Fix: Improve SalesforceService to only select Bulk2 Queries when necessary, rest should be the default.
+- DuplicateRule -> DUPLICATE_RULE: `ORA-01400` cannot insert NULL into `DUPLICATE_RULE.LANGUAGE`.
+  - Further Research Needed.
+- Group -> GROUP_COL: `ORA-01400` cannot insert NULL into `GROUP_COL.NAME`.
+  - Further Research Needed.
+- IdeaComment -> IDEA_COMMENT: Query requires restricted filter syntax (`CommunityId`, `Id`, or `IdeaId`, with single ID or `IN`).
+  - Fix: Gracefully handle these, log them as warnings and skip.
+- ListView -> LIST_VIEW: `ORA-12899` value too large for column `LIST_VIEW.NAME` (actual 44, max 40).
+  - Further Research needed: to see if expanding available length is possible, or Oracle will need to be configured to truncate strings instead of erroring.

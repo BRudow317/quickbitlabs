@@ -10,7 +10,12 @@ from server.plugins.PluginResponse import PluginResponse
 from server.plugins.sf.engines.SfBulk2Engine import Bulk2, DEFAULT_QUERY_PAGE_SIZE
 from server.plugins.sf.engines.SfClient import SfClient
 from server.plugins.sf.engines.SfRestEngine import SfRest
-from server.plugins.sf.models.SfDialect import build_soql, get_object_from_soql
+from server.plugins.sf.models.SfDialect import (
+    build_count_soql,
+    build_null_check_soql,
+    build_soql,
+    get_object_from_soql,
+)
 from server.plugins.sf.models.SfTypeMap import SF_TO_ARROW_LITERAL
 from server.plugins.sf.services.SfArrowServices import SfArrowFrame
 
@@ -19,6 +24,12 @@ if TYPE_CHECKING:
 
 import logging
 logger = logging.getLogger(__name__)
+
+# Records at or below this threshold are fetched via REST; above it, Bulk V2 is used.
+# REST pages at 2000 records per call with no job-creation overhead, so this is
+# conservative by design. Raise it (e.g. to 2000) if small-table bulk overhead
+# becomes noticeable.
+BULK_THRESHOLD: int = 200
 
 class SfService:
     """Salesforce service layer. Owns all describe -> PluginModels mapping,
@@ -93,6 +104,7 @@ class SfService:
                 return PluginResponse.success(catalog)
             
             # For each entity in the catalog, populate columns and metadata from describe.
+            validate_nullables: bool = kwargs.get("validate_nullables", False)
             for idx, entity in enumerate(catalog.entities):
                 object_name = entity.name or entity.qualified_name or ""
                 if not object_name:
@@ -106,6 +118,8 @@ class SfService:
                     entity.columns = populated.columns
                 entity.name = populated.name
                 entity.qualified_name = populated.qualified_name
+                if validate_nullables:
+                    entity = self._verify_entity_nullables(entity)
                 catalog.entities[idx] = entity
             return PluginResponse.success(catalog)
         except Exception as e:
@@ -145,20 +159,58 @@ class SfService:
             logger.exception("get_column failed")
             return PluginResponse.error(str(e))
 
+    def get_record_count(self, object_name: str) -> int:
+        """Return the total record count for an SObject via a lightweight REST COUNT() query.
+        Falls back to BULK_THRESHOLD + 1 on any error so the caller defaults to Bulk V2.
+        """
+        try:
+            result = self.rest.query(build_count_soql(object_name))
+            return result.get("totalSize", 0)
+        except Exception:
+            logger.warning(f"Could not get record count for '{object_name}'; defaulting to Bulk V2.")
+            return BULK_THRESHOLD + 1
+
+    def _verify_entity_nullables(self, entity: Entity) -> Entity:
+        """Cross-check columns marked non-nullable by SF describe against live data.
+        If null values are found in a supposedly non-nullable column, is_nullable is
+        corrected to True so downstream systems can trust the catalog value.
+        Only filterable columns are checked (non-filterable columns cannot be used in WHERE).
+        """
+        object_name = entity.qualified_name or entity.name or ""
+        for col in entity.columns:
+            if col.is_nullable or not col.properties.get("filterable", True):
+                continue
+            try:
+                result = self.rest.query(build_null_check_soql(object_name, col.name))
+                if result.get("totalSize", 0) > 0:
+                    col.is_nullable = True
+                    logger.warning(
+                        f"{object_name}.{col.name}: SF describe reports non-nullable "
+                        f"but null values exist in data; correcting catalog to nullable."
+                    )
+            except Exception:
+                logger.warning(f"{object_name}.{col.name}: null check query failed; leaving is_nullable as-is.")
+        return entity
+
     def get_data(self, catalog: Catalog, **kwargs: Any) -> PluginResponse[ArrowStream]:
         try:
             if not catalog.entities: return PluginResponse.error("Catalog must contain at least one entity.")
             include_deleted: bool = kwargs.get("include_deleted", False)
-            return_type: str = kwargs.get("return_type", "ArrowStream")
-            use_bulk: bool = kwargs.get("query_type", catalog.limit is None)
+            # Explicit query_type kwarg ('rest' or 'bulk2') bypasses the count check entirely.
+            explicit_query_type: str | None = kwargs.get("query_type")
             streams: list[ArrowStream] = []
             for entity in catalog.entities:
-                # TODO query for sObject count with rest to decide whether to use bulk or rest for this entity, unless user explicitly specified via kwargs
                 # TODO sniff the total record counts for all entities up front and determine if Arrow Tables in memory is feasible or if encrypted Parquet is needed.
                 # TODO implement custom data frame functionality to manage the Federated query protocols for multiple entities, including joining on the fly and limiting entities and fields to the minimum viable requirements for the query. Current state implements a list of iterators of the objects, and that's a violation of the contract.
                 object_name = entity.qualified_name or entity.name or ""
                 sub_catalog = catalog.model_copy(update={"entities": [entity]})
                 soql: str = kwargs.get("soql", None) or build_soql(sub_catalog, entity)
+                if explicit_query_type is not None:
+                    use_bulk = explicit_query_type.lower() == "bulk2"
+                else:
+                    count = self.get_record_count(object_name)
+                    use_bulk = count > BULK_THRESHOLD
+                    logger.info(f"{object_name}: {count} records -> {'Bulk V2' if use_bulk else 'REST'}")
                 if use_bulk:
                     streams.append(self.arrow_frame.bulk_to_arrow_stream(
                         object_name, soql, sub_catalog, include_deleted=include_deleted,
