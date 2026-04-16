@@ -81,7 +81,7 @@ class OracleService:
         max_length = row["CHAR_LENGTH"]
         return Column(
             name=name,
-            qualified_name=f"{table_name}.{name}",
+            parent_names=[table_name],
             raw_type=raw_type,
             arrow_type_id=map_oracle_to_arrow(raw_type, scale),
             primary_key=name in primary_keys,
@@ -104,7 +104,7 @@ class OracleService:
                 entities.append(
                     Entity(
                         name=table_name,
-                        qualified_name=f"{schema_name}.{table_name}",
+                        parent_names=[schema_name],
                         columns=columns,
                     )
                 )
@@ -114,7 +114,7 @@ class OracleService:
             return catalog
 
         for idx, entity in enumerate(catalog.entities):
-            table_name = (entity.name or entity.qualified_name or "").upper()
+            table_name = (entity.name or "").upper()
             if not table_name:
                 continue
 
@@ -139,7 +139,7 @@ class OracleService:
                 entity.columns = list(fetched_by_name.values())
 
             entity.name = table_name
-            entity.qualified_name = f"{schema_name}.{table_name}"
+            entity.parent_names = [schema_name]
             catalog.entities[idx] = entity
 
         catalog.name = schema_name
@@ -219,11 +219,11 @@ class OracleService:
             raise ValueError("Catalog must contain at least one entity.")
         schema_name = self._resolve_schema_name(catalog)
         entity = catalog.entities[0]
-        table_name = (entity.name or entity.qualified_name or "").upper()
+        table_name = (entity.name or "").upper()
         pk_set = self._fetch_table_primary_keys(schema_name, table_name)
         rows = self._fetch_table_columns(schema_name, table_name)
         columns = [self._column_from_row(table_name, row, pk_set) for row in rows]
-        return Entity(name=table_name, qualified_name=f"{schema_name}.{table_name}", columns=columns)
+        return Entity(name=table_name, parent_names=[schema_name], columns=columns)
 
     def create_entity(self, catalog: Catalog, **kwargs: Any) -> Entity:
         """CREATE TABLE from the first entity in catalog."""

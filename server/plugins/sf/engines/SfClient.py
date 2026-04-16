@@ -14,11 +14,7 @@ logger = logging.getLogger(__name__)
 
 
 class SfClient:
-    """
-    Sync HTTP client for Salesforce REST and Bulk 2.0 APIs.
-    Always construct via SfClient.create() - not __init__ directly.
-    """
-
+    """Sync HTTP client for Salesforce REST and Bulk 2.0 APIs."""
     base_url: str
     services_url: str
     access_token: str
@@ -29,46 +25,40 @@ class SfClient:
 
     def __init__(
         self,
-        base_url: str,
-        access_token: str,
-        api_version: str = API_VERSION,
-        max_retries: int = 1,
-    ) -> None:
-        self.base_url = base_url
-        self.access_token = access_token
-        self.api_version = api_version
-        self.services_url = f"{base_url}/services/data/v{api_version}"
-        self.api_usage = {}
-        self._max_retries = max_retries
-        self._session = httpx.Client(
-            headers=self._auth_headers(access_token),
-            timeout=httpx.Timeout(30.0, connect=10.0),
-        )
-
-    @classmethod
-    def create(
-        cls,
         base_url: str | None = None,
         consumer_key: str | None = None,
         consumer_secret: str | None = None,
         access_token: str | None = None,
         api_version: str = API_VERSION,
         max_retries: int = 1,
-    ) -> SfClient:
-        """Factory - use this instead of calling SfClient() directly."""
+    ) -> None:
         resolved_url = base_url or SF_BASE_URL
-        if not resolved_url: raise SalesforceAuthError("SF_BASE_URL is required.")
+        if not resolved_url:
+            raise SalesforceAuthError("base_url or SF_BASE_URL environment variable is required.")
         if access_token is None:
             access_token = fetch_client_credentials(
                 consumer_key=consumer_key,
                 consumer_secret=consumer_secret,
                 base_url=resolved_url,
             )
-        return cls(
-            base_url=resolved_url,
-            access_token=access_token,
-            api_version=api_version,
-            max_retries=max_retries,
+        self.base_url = resolved_url
+        self.access_token = access_token
+        self.api_version = api_version
+        self.services_url = f"{resolved_url}/services/data/v{api_version}"
+        self.api_usage = {}
+        self._max_retries = max_retries
+        # Credentials are captured in a closure so they are not stored as plain
+        # attributes on the instance, avoiding exposure via serialization or logging.
+        if consumer_key and consumer_secret:
+            _ck, _cs, _url = consumer_key, consumer_secret, resolved_url
+            self._token_refresher = lambda: fetch_client_credentials(
+                consumer_key=_ck, consumer_secret=_cs, base_url=_url,
+            )
+        else:
+            self._token_refresher = None
+        self._session = httpx.Client(
+            headers=self._auth_headers(access_token),
+            timeout=httpx.Timeout(30.0, connect=10.0),
         )
 
     @staticmethod
@@ -113,9 +103,11 @@ class SfClient:
         try: error_code = response.json()[0].get("errorCode")
         except Exception: return
         if error_code != "INVALID_SESSION_ID": return
+        if self._token_refresher is None:
+            raise Exception("Session expired and no credentials are available to refresh the token.")
         logger.info("Session expired. Refreshing token...")
         for attempt in range(1, self._max_retries + 1):
-            new_token = fetch_client_credentials(base_url=self.base_url)
+            new_token = self._token_refresher()
             if new_token and new_token != self.access_token:
                 self._update_token(new_token)
                 return

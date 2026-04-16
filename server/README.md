@@ -135,7 +135,7 @@ A column has a single dtype. It can consist of multiple chunks . A single chunk 
 A data frame is an ordered collection of columns , which are identified with names that are unique strings. All the data frame’s rows are the same length. It can consist of multiple chunks . A single chunk of a data frame is modeled as again a DataFrame instance.
 
 ## mask concept
-A mask of a single-chunk column is a buffer .
+A mask of a single-chunk column is a buffer.
 
 ## chunk concept
 A chunk is a sub-dividing element that can be applied to a data frame or a column .

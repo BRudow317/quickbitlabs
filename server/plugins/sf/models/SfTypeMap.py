@@ -32,10 +32,9 @@ SF_TYPE_TO_ARROW = {
     "location":        None,            # compound geolocation - exclude
 }
 
-# ---------------------------------------------------------------------------
+# ---------------------------------------------------------------
 # SF type → arrow_type_literal  (Column.arrow_type_id)
-# ---------------------------------------------------------------------------
-
+# ---------------------------------------------------------------
 SF_TO_ARROW_LITERAL: dict[str, arrow_type_literal] = {
     "string":          "utf8",
     "textarea":        "large_string",

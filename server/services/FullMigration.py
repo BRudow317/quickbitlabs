@@ -40,8 +40,7 @@ def _rename_stream(stream: ArrowStream, name_map: dict[str, str]) -> ArrowStream
 
 
 class FullMigration:
-    """Orchestrates a full schema + data migration between two Plugin implementations.
-    """
+    """Orchestrates a full schema + data migration between two Plugin implementations."""
     source: Plugin
     target: Plugin
     source_catalog: Catalog
@@ -125,9 +124,8 @@ class FullMigration:
                     continue  # skip unmappable columns (compound types)
 
                 oracle_col = to_oracle_snake(col.name)
-                # get_data ArrowStream names columns as "EntityName_ColumnName"
-                stream_col = f"{src_entity.name}_{col.name}"
-                name_map[stream_col] = oracle_col
+                # get_data ArrowStream uses bare column names ("Name", not "Account_Name")
+                name_map[col.name] = oracle_col
 
                 target_columns.append(col.model_copy(update={
                     "name": oracle_col,
@@ -136,7 +134,8 @@ class FullMigration:
 
             migration_entities.append(Entity(
                 name=target_table,
-                qualified_name=f"{self.target_catalog.name}.{target_table}" if self.target_catalog.name else target_table,
+                parent_names=[self.target_catalog.name] if self.target_catalog.name else None,
+                alias=target_table,
                 columns=target_columns,
             ))
             self._column_maps[src_entity.name] = name_map

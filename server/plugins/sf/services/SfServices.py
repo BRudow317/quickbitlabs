@@ -48,17 +48,20 @@ class SfService:
         self.bulk2 = Bulk2(client)
         self.arrow_frame = SfArrowFrame(self.rest, self.bulk2)
 
-    def _describe_to_column(self, field: dict[str, Any]) -> Column | None:
+    def _describe_to_column(self, field: dict[str, Any], object_name: str = "") -> Column | None:
         """Map one SF field describe dict to a Column. Returns None for compound types (address, location) that have no Arrow mapping."""
         sf_type = field.get("type", "anyType")
         arrow_id = SF_TO_ARROW_LITERAL.get(sf_type)
         if arrow_id is None: return None
+        field_name = field["name"]
         return Column(
-            name=field["name"],
-            qualified_name=field["name"],
+            name=field_name,
+            parent_names=[object_name] if object_name else None,
+            alias=field_name,
             raw_type=sf_type,
             arrow_type_id=arrow_id,
-            primary_key=field["name"] == "Id",
+            primary_key=field_name == "Id",
+            is_unique=field.get("unique", False),
             is_nullable=field.get("nillable", True),
             is_read_only=not field.get("createable", False) and not field.get("updateable", False),
             max_length=field.get("length") or None,
@@ -87,9 +90,9 @@ class SfService:
         columns = [
             col
             for f in describe.get("fields", [])
-            if (col := self._describe_to_column(f)) is not None
+            if (col := self._describe_to_column(f, object_name)) is not None
         ]
-        return Entity(name=object_name, qualified_name=object_name, columns=columns)
+        return Entity(name=object_name, alias=object_name, columns=columns)
     
     def get_catalog(self, catalog: Catalog, **kwargs: Any) -> PluginResponse[Catalog]:
         try:
@@ -98,7 +101,9 @@ class SfService:
             if not catalog.entities:
                 sobjects = self.rest.describe_migratable()
                 catalog.entities = [
-                    Entity(name=obj.get("name", ""), qualified_name=obj.get("name", ""))
+                    Entity(name=obj.get("name", ""), 
+                           parent_names=[catalog.name] if catalog.name else None,
+                           alias=obj.get("name", ""))
                     for obj in sobjects
                 ]
                 return PluginResponse.success(catalog)
@@ -106,7 +111,7 @@ class SfService:
             # For each entity in the catalog, populate columns and metadata from describe.
             validate_nullables: bool = kwargs.get("validate_nullables", False)
             for idx, entity in enumerate(catalog.entities):
-                object_name = entity.name or entity.qualified_name or ""
+                object_name = entity.name or ""
                 if not object_name:
                     continue
                 describe = getattr(self.rest, object_name).describe()
@@ -117,7 +122,7 @@ class SfService:
                 else:
                     entity.columns = populated.columns
                 entity.name = populated.name
-                entity.qualified_name = populated.qualified_name
+                entity.alias = populated.alias
                 if validate_nullables:
                     entity = self._verify_entity_nullables(entity)
                 catalog.entities[idx] = entity
@@ -130,7 +135,7 @@ class SfService:
         try:
             if not catalog.entities: return PluginResponse.not_found("No entities specified in catalog.")
             entity = catalog.entities[0]
-            object_name = entity.name or entity.qualified_name or ""
+            object_name = entity.name or ""
             describe = getattr(self.rest, object_name).describe()
             return PluginResponse.success(self._describe_to_entity(describe))
         except Exception as e:
@@ -143,13 +148,13 @@ class SfService:
                 return PluginResponse.not_found("No column specified in catalog.")
             entity = catalog.entities[0]
             col = entity.columns[0]
-            object_name = entity.name or entity.qualified_name or ""
+            object_name = entity.name or ""
             describe = getattr(self.rest, object_name).describe()
             field_map = {f["name"]: f for f in describe.get("fields", [])}
             sf_field = field_map.get(col.name)
             if not sf_field:
                 return PluginResponse.not_found(f"Field '{col.name}' not found on {object_name}.")
-            result = self._describe_to_column(sf_field)
+            result = self._describe_to_column(sf_field, object_name)
             if result is None:
                 return PluginResponse.not_found(
                     f"Field '{col.name}' is a compound type with no Arrow mapping."
@@ -176,7 +181,7 @@ class SfService:
         corrected to True so downstream systems can trust the catalog value.
         Only filterable columns are checked (non-filterable columns cannot be used in WHERE).
         """
-        object_name = entity.qualified_name or entity.name or ""
+        object_name = entity.name or ""
         for col in entity.columns:
             if col.is_nullable or not col.properties.get("filterable", True):
                 continue
@@ -202,7 +207,7 @@ class SfService:
             for entity in catalog.entities:
                 # TODO sniff the total record counts for all entities up front and determine if Arrow Tables in memory is feasible or if encrypted Parquet is needed.
                 # TODO implement custom data frame functionality to manage the Federated query protocols for multiple entities, including joining on the fly and limiting entities and fields to the minimum viable requirements for the query. Current state implements a list of iterators of the objects, and that's a violation of the contract.
-                object_name = entity.qualified_name or entity.name or ""
+                object_name = entity.name or ""
                 sub_catalog = catalog.model_copy(update={"entities": [entity]})
                 soql: str = kwargs.get("soql", None) or build_soql(sub_catalog, entity)
                 if explicit_query_type is not None:
@@ -236,7 +241,7 @@ class SfService:
             table = self.arrow_frame.stream_to_table(data)
             all_results: list[dict] = []
             for entity in catalog.entities:
-                object_name = entity.qualified_name or entity.name or ""
+                object_name = entity.name or ""
                 keep = [c.name for c in entity.columns if c.properties.get("createable") and c.name in table.column_names]
                 results = getattr(self.bulk2, object_name).insert(
                     table.select(keep),
@@ -257,7 +262,7 @@ class SfService:
             table = self.arrow_frame.stream_to_table(data)
             all_results: list[dict] = []
             for entity in catalog.entities:
-                object_name = entity.name or entity.qualified_name or ""
+                object_name = entity.name or ""
                 updateable = {c.name for c in entity.columns if c.properties.get("updateable")} | {"Id"}
                 keep = [n for n in table.column_names if n in updateable]
                 results = getattr(self.bulk2, object_name).update(
@@ -277,13 +282,24 @@ class SfService:
         try:
             if not catalog.entities:
                 return PluginResponse.error("Catalog must contain at least one entity.")
-            external_id_field: str | None = kwargs.get("external_id_field")
-            if not external_id_field:
-                return PluginResponse.error("upsert_data requires 'external_id_field' kwarg.")
+            # Explicit caller kwarg overrides entity-level properties and auto-detection.
+            caller_ext_id: str | None = kwargs.get("external_id_field")
             table = self.arrow_frame.stream_to_table(data)
             all_results: list[dict] = []
             for entity in catalog.entities:
-                object_name = entity.name or entity.qualified_name or ""
+                object_name = entity.name or ""
+                # Resolution order: caller kwarg → entity.properties → auto-detect from catalog.
+                external_id_field = (
+                    caller_ext_id
+                    or entity.properties.get("external_id_field")
+                    or next((c.name for c in entity.columns if c.is_unique and not c.primary_key), None)
+                )
+                if not external_id_field:
+                    logger.error(
+                        f"upsert_data: no external ID found for {object_name} — "
+                        f"set entity.properties['external_id_field'] or pass the kwarg explicitly."
+                    )
+                    continue
                 updateable = (
                     {c.name for c in entity.columns if c.properties.get("updateable")}
                     | {external_id_field}
@@ -309,7 +325,7 @@ class SfService:
                 return PluginResponse.error("Catalog must contain at least one entity.")
             table = self.arrow_frame.stream_to_table(data, keep_cols={"Id"})
             for entity in catalog.entities:
-                object_name = entity.name or entity.qualified_name or ""
+                object_name = entity.name or ""
                 getattr(self.bulk2, object_name).delete(
                     table,
                     wait=kwargs.get("wait", 5),
@@ -319,8 +335,7 @@ class SfService:
             logger.exception(f"delete_data failed: {e}")
             return PluginResponse.error(str(e))
 
-    # Plugin Uniques
-
+    # Plugin Uniques``
     def rest_query(self,
                    soql: str,
                    object_name: str | None = None,
@@ -381,4 +396,5 @@ class SfService:
             return PluginResponse.error(str(e))
 
     def get_limits(self) -> dict[str, Any]:
+        """Return current Salesforce API limits as a dict."""
         return self.rest.limits()

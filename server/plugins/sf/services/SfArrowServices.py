@@ -16,12 +16,21 @@ if TYPE_CHECKING:
 import logging
 logger = logging.getLogger(__name__)
 
+# TODO this is a bandaid fix for failures in the sniffing and describe phase. Salesforce is not accurately reporting decimal precision in the metadata, which leads to Arrow type inference picking a narrower type that then fails when we encounter higher-precision values in the data. To avoid this, we widen all decimals to the max precision of 38. The real fix is to implement proper sniffing and metadata describe logic that can detect the actual precision and scale of decimal fields and set the Column.arrow_type accordingly, but this is a quick mitigation to get things working without crashing or using this bandaid at the cost of memory and storage inefficiency.
+def _widen_type(t: pa.DataType) -> pa.DataType:
+    """Safety-widen decimal precision to 38 to avoid precision-mismatch crashes."""
+    if pa.types.is_decimal(t):
+        return pa.decimal128(38, t.scale)
+    return t
+
+
 class SfArrowFrame:
     """
     Arrow conversion layer for the Salesforce plugin.
-    The Catalog is the schema - pm_arrow_stream handles schema derivation,
-    join nullability, and metadata embedding.
-    Records are adapted to entity_column format before passing through.
+
+    Data streams use bare column names (``FieldName``, not ``EntityName_FieldName``).
+    The entity-qualified name is available on ``Column.qualified_name`` if callers
+    need disambiguation in multi-entity contexts.
     """
 
     def __init__(self, rest: SfRest, bulk2: Bulk2) -> None:
@@ -33,28 +42,48 @@ class SfArrowFrame:
         soql: str,
         catalog: Catalog,
         include_deleted: bool = False,
+        chunk_size: int = 50_000,
     ) -> ArrowStream:
         """
         Execute SOQL via REST and return a lazily-paginated ArrowStream.
-        Records are adapted from SF field names to entity_column format
-        and passed through PluginModels.arrow_stream for schema + metadata.
+        Column names in the stream match the bare SF field names (``Name``, not
+        ``Account_Name``). Type conversion is applied via the SF type map.
         """
         entity = catalog.entities[0]
         field_types = {c.name: (c.raw_type or "anyType") for c in entity.columns}
 
-        def _records() -> Iterator[dict[str, Any]]:
+        schema = pa.schema([
+            pa.field(c.name, _widen_type(c.arrow_type or pa.string()), nullable=True)
+            for c in entity.columns
+            if c.arrow_type is not None
+        ])
+
+        def _batches() -> Iterator[pa.RecordBatch]:
+            buf: dict[str, list] = {name: [] for name in schema.names}
+            count = 0
             result = self._rest.query(soql, include_deleted=include_deleted)
             while True:
                 for r in result.get("records", []):
-                    yield {
-                        f"{entity.name}_{k}": sf_to_python(field_types.get(k, "anyType"), v)
-                        for k, v in r.items() if k != "attributes"
-                    }
+                    for name in schema.names:
+                        buf[name].append(sf_to_python(field_types.get(name, "anyType"), r.get(name)))
+                    count += 1
+                    if count == chunk_size:
+                        yield pa.record_batch(
+                            [pa.array(buf[f], type=schema.field(f).type) for f in schema.names],
+                            schema=schema,
+                        )
+                        buf = {name: [] for name in schema.names}
+                        count = 0
                 if result.get("done", True):
                     break
                 result = self._rest.query_more(result["nextRecordsUrl"], identifier_is_url=True)
+            if count > 0:
+                yield pa.record_batch(
+                    [pa.array(buf[f], type=schema.field(f).type) for f in schema.names],
+                    schema=schema,
+                )
 
-        return catalog.arrow_stream(_records())
+        return pa.RecordBatchReader.from_batches(schema, _batches())
 
     def bulk_to_arrow_stream(
         self,
@@ -66,22 +95,14 @@ class SfArrowFrame:
     ) -> ArrowStream:
         """
         Execute SOQL via Bulk 2.0 and return a lazily-paged ArrowStream.
-        CSV pages are parsed with EXPLICIT schema mapping, renamed to entity_column format,
-        and passed through PluginModels.arrow_stream for schema + metadata.
+        CSV pages are parsed with explicit schema mapping using bare field names.
         """
         entity = catalog.entities[0]
-        # Create a schema for the SF-specific CSV columns (no prefix yet)
-        # Widen decimal precision to 38 to avoid "precision inferred" crashes
-        def _widen_type(t: pa.DataType) -> pa.DataType:
-            if pa.types.is_decimal(t):
-                return pa.decimal128(38, t.scale)
-            return t
-
-        sf_schema = pa.schema([
-            pa.field(c.name, _widen_type(c.arrow_type or pa.string()), nullable=True) 
+        schema = pa.schema([
+            pa.field(c.name, _widen_type(c.arrow_type or pa.string()), nullable=True)
             for c in entity.columns
         ])
-        
+
         sf_obj: Bulk2SObject = getattr(self._bulk2, object_name)
         page_iter: Iterator[bytes] = (
             sf_obj.query_all(soql, max_records=max_records)
@@ -89,14 +110,11 @@ class SfArrowFrame:
             else sf_obj.query(soql, max_records=max_records)
         )
 
-        def _records() -> Iterator[dict[str, Any]]:
+        def _batches() -> Iterator[pa.RecordBatch]:
             for csv_bytes in page_iter:
-                # Parse CSV with explicit schema to ensure correct types (Decimals, etc)
-                table = sf_obj.csv_bytes_to_arrow(csv_bytes, schema=sf_schema)
-                for row in table.to_pylist():
-                    yield {f"{entity.name}_{k}": v for k, v in row.items()}
+                yield sf_obj.csv_bytes_to_arrow(csv_bytes, schema=schema)
 
-        return catalog.arrow_stream(_records())
+        return pa.RecordBatchReader.from_batches(schema, _batches())
 
     @staticmethod
     def stream_to_table(data: ArrowStream, keep_cols: set[str] | None = None) -> pa.Table:

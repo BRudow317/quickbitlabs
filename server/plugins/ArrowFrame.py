@@ -21,6 +21,8 @@ from typing import Any, Literal, Sequence, TypeAlias
 
 import pandas
 import polars
+from polars.lazyframe import LazyFrame
+from polars.lazyframe.group_by import LazyGroupBy
 import pyarrow as pa
 import pyarrow.acero as acero
 import pyarrow.compute as pc
@@ -1014,6 +1016,973 @@ class ArrowFrame(DataFrame):
         cuDF, vaex, etc.). Delegates to pyarrow.interchange.from_dataframe.
         """
         return cls.from_interchange(obj, allow_copy=allow_copy)
+
+    # =======================================================================
+    # POLARS LAZY API
+    #
+    # Every polars_ method converts the internal pa.Table to a polars
+    # LazyFrame (zero-copy via the Arrow PyCapsule / __arrow_c_stream__
+    # interface), applies the polars operation, collects, and converts back
+    # to ArrowFrame (zero-copy on the return path via __arrow_c_stream__).
+    #
+    # Name-collision policy:
+    #   Methods whose names collide with existing ArrowFrame / interchange
+    #   methods are always prefixed: polars_filter, polars_select,
+    #   polars_join, polars_rename, polars_cast, polars_limit.
+    #   New methods also carry the polars_ prefix for consistency so callers
+    #   always know which engine is driving the operation.
+    #
+    # Multi-step pipelines should avoid per-step round-trips by using the
+    # escape hatch directly:
+    #
+    #   result = ArrowFrame.from_polars(
+    #       frame.polars_lazy()
+    #           .filter(pl.col("age") > 18)
+    #           .with_columns((pl.col("price") * pl.col("qty")).alias("rev"))
+    #           .collect()
+    #   )
+    #
+    # Streaming engine:
+    #   polars_from_lazy(lf, streaming=True) and polars_collect_streaming()
+    #   pass engine="streaming" to LazyFrame.collect().  Not all Polars ops
+    #   support the streaming engine; Polars silently falls back to in-memory
+    #   for unsupported ones.
+    # =======================================================================
+
+    # --- Escape hatch: raw polars objects -----------------------------------
+
+    def polars_lazy(self) -> polars.LazyFrame:
+        """
+        Zero-copy conversion to a polars.LazyFrame.
+        pa.Table -> pl.DataFrame (via __arrow_c_stream__) -> .lazy()
+        Use this to chain multiple polars operations before collecting.
+        """
+        return polars.from_arrow(self._df).lazy()
+
+    @classmethod
+    def polars_from_lazy(
+        cls, lf: polars.LazyFrame, streaming: bool = False
+    ) -> ArrowFrame:
+        """
+        Collect a polars.LazyFrame and wrap the result as an ArrowFrame.
+        Pass streaming=True to engage the Polars streaming engine (lower peak
+        memory for large datasets; not all ops are supported).
+        """
+        if streaming:
+            try:
+                collected = lf.collect(engine="streaming")
+            except TypeError:
+                # older polars API (<= 0.20)
+                collected = lf.collect(streaming=True)  # type: ignore[call-arg]
+        else:
+            collected = lf.collect()
+        return cls.from_polars(collected)
+
+    # --- Schema / type introspection ----------------------------------------
+
+    @property
+    def polars_schema(self) -> Any:
+        """Return the polars Schema (column name -> polars DataType mapping)."""
+        return polars.from_arrow(self._df).schema
+
+    @property
+    def polars_dtypes(self) -> list[Any]:
+        """Return a list of polars DataTypes, one per column."""
+        return polars.from_arrow(self._df).dtypes
+
+    # --- Selection & projection ---------------------------------------------
+
+    def polars_select(self, *exprs: Any, **named_exprs: Any) -> ArrowFrame:
+        """
+        Select columns or compute expressions.
+        Mirrors polars.LazyFrame.select(*exprs, **named_exprs).
+        Prefixed to avoid collision with the pyarrow-backed .select().
+
+        Example:
+            frame.polars_select(pl.col("a"), (pl.col("b") * 2).alias("b2"))
+        """
+        return self.polars_from_lazy(
+            self.polars_lazy().select(*exprs, **named_exprs)
+        )
+
+    def polars_with_columns(self, *exprs: Any, **named_exprs: Any) -> ArrowFrame:
+        """
+        Add or replace columns using polars expressions.
+        Mirrors polars.LazyFrame.with_columns(*exprs, **named_exprs).
+
+        Example:
+            frame.polars_with_columns(
+                (pl.col("price") * pl.col("qty")).alias("revenue")
+            )
+        """
+        return self.polars_from_lazy(
+            self.polars_lazy().with_columns(*exprs, **named_exprs)
+        )
+
+    # --- Filtering ----------------------------------------------------------
+
+    def polars_filter(self, *exprs: Any, **named_exprs: Any) -> ArrowFrame:
+        """
+        Filter rows using polars boolean expressions.
+        Mirrors polars.LazyFrame.filter(*exprs).
+        Prefixed to avoid collision with the pyarrow compute-backed .filter().
+
+        Example:
+            frame.polars_filter(pl.col("age") > 18)
+            frame.polars_filter(
+                (pl.col("status") == "active") & (pl.col("balance") > 0)
+            )
+        """
+        return self.polars_from_lazy(
+            self.polars_lazy().filter(*exprs, **named_exprs)
+        )
+
+    # --- Sorting ------------------------------------------------------------
+
+    def polars_sort(
+        self,
+        by: str | list[str] | Any,
+        *,
+        descending: bool | list[bool] = False,
+        nulls_last: bool | list[bool] = False,
+        multithreaded: bool = True,
+        maintain_order: bool = False,
+    ) -> ArrowFrame:
+        """
+        Sort rows by one or more columns or expressions.
+        Mirrors polars.LazyFrame.sort().
+
+        Example:
+            frame.polars_sort("age")
+            frame.polars_sort(["region", "sales"], descending=[False, True])
+        """
+        return self.polars_from_lazy(
+            self.polars_lazy().sort(
+                by,
+                descending=descending,
+                nulls_last=nulls_last,
+                multithreaded=multithreaded,
+                maintain_order=maintain_order,
+            )
+        )
+
+    def polars_top_k(
+        self,
+        k: int,
+        *,
+        by: str | list[str] | Any,
+        descending: bool | list[bool] = False,
+        nulls_last: bool = False,
+        maintain_order: bool = False,
+    ) -> ArrowFrame:
+        """
+        Return the top k rows by column(s), without a full sort.
+        Mirrors polars.LazyFrame.top_k().
+        """
+        return self.polars_from_lazy(
+            self.polars_lazy().top_k(
+                k,
+                by=by
+            )
+        )
+
+    def polars_bottom_k(
+        self,
+        k: int,
+        *,
+        by: str | list[str] | Any,
+        descending: bool | list[bool] = False,
+        nulls_last: bool = False,
+        maintain_order: bool = False,
+    ) -> ArrowFrame:
+        """
+        Return the bottom k rows by column(s), without a full sort.
+        Mirrors polars.LazyFrame.bottom_k().
+        """
+        return self.polars_from_lazy(
+            self.polars_lazy().bottom_k(
+                k,
+                by=by
+            )
+        )
+
+    # --- Column manipulation ------------------------------------------------
+
+    def polars_rename(self, mapping: dict[str, str]) -> ArrowFrame:
+        """
+        Rename columns.
+        Mirrors polars.LazyFrame.rename(mapping).
+        Prefixed to avoid collision with the pyarrow-backed .rename().
+        """
+        return self.polars_from_lazy(self.polars_lazy().rename(mapping))
+
+    def polars_drop(self, *columns: str) -> ArrowFrame:
+        """
+        Drop one or more columns by name.
+        Mirrors polars.LazyFrame.drop(*columns).
+        """
+        return self.polars_from_lazy(self.polars_lazy().drop(list(columns)))
+
+    def polars_cast(
+        self,
+        dtypes: dict[str, Any] | Any,
+        strict: bool = True,
+    ) -> ArrowFrame:
+        """
+        Cast columns to new polars types.
+        Mirrors polars.LazyFrame.cast(dtypes, strict=strict).
+        Prefixed to avoid collision with the pyarrow schema-backed .cast().
+
+        dtypes: {col_name: PolarsType} mapping, or a single type applied to all.
+
+        Example:
+            frame.polars_cast({"amount": pl.Float64, "id": pl.Int32})
+        """
+        return self.polars_from_lazy(
+            self.polars_lazy().cast(dtypes, strict=strict)
+        )
+
+    def polars_with_row_index(
+        self, name: str = "index", offset: int = 0
+    ) -> ArrowFrame:
+        """
+        Prepend a zero-based row index column.
+        Mirrors polars.LazyFrame.with_row_index(name, offset).
+        """
+        return self.polars_from_lazy(
+            self.polars_lazy().with_row_index(name=name, offset=offset)
+        )
+
+    def polars_set_sorted(
+        self, column: str, *, descending: bool = False
+    ) -> ArrowFrame:
+        """
+        Hint to the query optimizer that column is already sorted.
+        Mirrors polars.LazyFrame.set_sorted().
+        No-op at the data level; purely an optimizer hint.
+        """
+        return self.polars_from_lazy(
+            self.polars_lazy().set_sorted(column, descending=descending)
+        )
+
+    # --- Grouping & aggregation ---------------------------------------------
+
+    def polars_group_by(
+        self, *by: str | Any, maintain_order: bool = False
+    ) -> Any:
+        """
+        Return a polars LazyGroupBy for custom .agg() chaining.
+
+        Example:
+            gb = frame.polars_group_by("region")
+            result = ArrowFrame.from_polars(
+                gb.agg(pl.col("sales").sum()).collect()
+            )
+        """
+        return self.polars_lazy().group_by(*by, maintain_order=maintain_order)
+
+    def polars_agg(
+        self,
+        by: str | list[str] | Any,
+        *agg_exprs: Any,
+        maintain_order: bool = False,
+    ) -> ArrowFrame:
+        """
+        Group-by + aggregate in one shot.
+
+        Example:
+            frame.polars_agg(
+                "region",
+                pl.col("sales").sum().alias("total"),
+                pl.col("sales").mean().alias("avg"),
+            )
+        """
+        return self.polars_from_lazy(
+            self.polars_lazy()
+            .group_by(by, maintain_order=maintain_order)
+            .agg(*agg_exprs)
+        )
+
+    def polars_group_by_rolling(
+        self,
+        index_column: str,
+        *,
+        period: str,
+        offset: str | None = None,
+        closed: Literal["left", "right", "both", "none"] = "right",
+        group_by: str | list[str] | None = None,
+        agg_exprs: list[Any] | None = None,
+    ) -> ArrowFrame:
+        """
+        Rolling group-by aggregation over a time/numeric index.
+        Mirrors polars.LazyFrame.rolling().
+
+        Example:
+            frame.polars_group_by_rolling(
+                "timestamp", period="7d",
+                agg_exprs=[pl.col("sales").sum().alias("rolling_sales")]
+            )
+        """
+        lf: LazyFrame | LazyGroupBy = self.polars_lazy().rolling(
+            index_column=index_column,
+            period=period,
+            offset=offset,
+            closed=closed,
+            group_by=group_by,
+        )
+        if agg_exprs:
+            agg_to_lf = lf.agg(*agg_exprs)
+            return self.polars_from_lazy(agg_to_lf)
+        else:
+            return self.polars_from_lazy(lf)
+
+    def polars_group_by_dynamic(
+        self,
+        index_column: str,
+        *,
+        every: str,
+        period: str | None = None,
+        offset: str | None = None,
+        truncate: bool = True,
+        include_boundaries: bool = False,
+        closed: Literal["left", "right", "both", "none"] = "left",
+        label: Literal["left", "right", "datapoint"] = "left",
+        start_by: Literal["window", "datapoint"] = "window",
+        group_by: str | list[str] | None = None,
+        agg_exprs: list[Any] | None = None,
+    ) -> ArrowFrame:
+        """
+        Dynamic (calendar-aligned) group-by aggregation.
+        Mirrors polars.LazyFrame.group_by_dynamic().
+
+        Example:
+            frame.polars_group_by_dynamic(
+                "timestamp", every="1mo",
+                agg_exprs=[pl.col("revenue").sum()]
+            )
+        """
+        lf = self.polars_lazy().group_by_dynamic(
+            index_column=index_column,
+            every=every,
+            period=period,
+            offset=offset,
+            include_boundaries=include_boundaries,
+            closed=closed,
+            label=label,
+            group_by=group_by,
+            start_by=start_by
+        )
+        if agg_exprs:
+            lf = lf.agg(*agg_exprs)
+        return self.polars_from_lazy(lf)
+
+    # --- Joins --------------------------------------------------------------
+
+    def polars_join(
+        self,
+        other: ArrowFrame,
+        on: str | list[str] | Any | None = None,
+        how: Literal[
+            "inner", "left", "right", "full", "semi", "anti", "cross",
+            "left_anti", "left_semi",
+        ] = "inner",
+        *,
+        left_on: str | list[str] | Any | None = None,
+        right_on: str | list[str] | Any | None = None,
+        suffix: str = "_right",
+        validate: Literal["m:m", "m:1", "1:m", "1:1"] = "m:m",
+        coalesce: bool | None = None,
+    ) -> ArrowFrame:
+        """
+        Join with another ArrowFrame using Polars' join engine.
+        Prefixed to avoid collision with the pyarrow-backed .join().
+
+        Example:
+            orders.polars_join(customers, on="customer_id", how="left")
+        """
+        other_lf = polars.from_arrow(other._df).lazy()
+        kwargs: dict[str, Any] = dict(
+            on=on,
+            how=how,
+            left_on=left_on,
+            right_on=right_on,
+            suffix=suffix,
+            validate=validate,
+        )
+        if coalesce is not None:
+            kwargs["coalesce"] = coalesce
+        return self.polars_from_lazy(self.polars_lazy().join(other_lf, **kwargs))
+
+    def polars_join_asof(
+        self,
+        other: ArrowFrame,
+        *,
+        left_on: str | None = None,
+        right_on: str | None = None,
+        on: str | None = None,
+        by_left: str | list[str] | None = None,
+        by_right: str | list[str] | None = None,
+        by: str | list[str] | None = None,
+        strategy: Literal["backward", "forward", "nearest"] = "backward",
+        suffix: str = "_right",
+        tolerance: int | float | str | None = None,
+    ) -> ArrowFrame:
+        """
+        Asof (nearest-key) join - useful for time-series alignment.
+        Mirrors polars.LazyFrame.join_asof().
+        """
+        other_lf = polars.from_arrow(other._df).lazy()
+        return self.polars_from_lazy(
+            self.polars_lazy().join_asof(
+                other_lf,
+                left_on=left_on,
+                right_on=right_on,
+                on=on,
+                by_left=by_left,
+                by_right=by_right,
+                by=by,
+                strategy=strategy,
+                suffix=suffix,
+                tolerance=tolerance,
+            )
+        )
+
+    # --- Reshaping ----------------------------------------------------------
+
+    def polars_unpivot(
+        self,
+        on: str | list[str] | None = None,
+        *,
+        index: str | list[str] | None = None,
+        variable_name: str = "variable",
+        value_name: str = "value",
+    ) -> ArrowFrame:
+        """
+        Unpivot (melt) from wide to long format.
+        Mirrors polars.LazyFrame.unpivot().
+
+        Example:
+            frame.polars_unpivot(on=["jan", "feb", "mar"], index="product")
+        """
+        return self.polars_from_lazy(
+            self.polars_lazy().unpivot(
+                on=on,
+                index=index,
+                variable_name=variable_name,
+                value_name=value_name,
+            )
+        )
+
+    def polars_melt(
+        self,
+        id_vars: str | list[str] | None = None,
+        value_vars: str | list[str] | None = None,
+        variable_name: str = "variable",
+        value_name: str = "value",
+    ) -> ArrowFrame:
+        """Alias for polars_unpivot (polars renamed melt -> unpivot in v1.0)."""
+        return self.polars_unpivot(
+            on=value_vars,
+            index=id_vars,
+            variable_name=variable_name,
+            value_name=value_name,
+        )
+
+    def polars_pivot(
+        self,
+        on: str | list[str],
+        *,
+        index: str | list[str] | None = None,
+        values: str | list[str] | None = None,
+        aggregate_function: Literal[
+            "first", "sum", "min", "max", "mean", "median", "count", "last"
+        ] = "first",
+        maintain_order: bool = True,
+        sort_columns: bool = False,
+        separator: str = "_",
+    ) -> ArrowFrame:
+        """
+        Pivot from long to wide format.
+        # TODO: polars.LazyFrame has no lazy pivot - runs eagerly for now.
+        # Wire to a lazy path once polars adds LazyFrame.pivot().
+        Mirrors polars.DataFrame.pivot().
+
+        Example:
+            frame.polars_pivot(
+                on="month", index="product",
+                values="sales", aggregate_function="sum"
+            )
+        """
+        pl_df = polars.from_arrow(self._df)
+        result = pl_df.pivot(
+            on=on,
+            index=index,
+            values=values,
+            aggregate_function=aggregate_function,
+            maintain_order=maintain_order,
+            sort_columns=sort_columns,
+            separator=separator,
+        )
+        return self.from_polars(result)
+
+    def polars_transpose(
+        self,
+        include_header: bool = False,
+        header_name: str = "column",
+        column_names: str | list[str] | None = None,
+    ) -> ArrowFrame:
+        """
+        Transpose rows and columns.
+        # TODO: polars.LazyFrame has no lazy transpose - runs eagerly.
+        Mirrors polars.DataFrame.transpose().
+        """
+        pl_df = polars.from_arrow(self._df)
+        result = pl_df.transpose(
+            include_header=include_header,
+            header_name=header_name,
+            column_names=column_names,
+        )
+        return self.from_polars(result)
+
+    def polars_explode(self, *columns: str | Any) -> ArrowFrame:
+        """
+        Explode list-typed columns into individual rows.
+        Mirrors polars.LazyFrame.explode(*columns).
+
+        Example:
+            frame.polars_explode("tags")
+        """
+        return self.polars_from_lazy(self.polars_lazy().explode(*columns))
+
+    # --- Missing data -------------------------------------------------------
+
+    def polars_fill_null(
+        self,
+        value: Any = None,
+        strategy: Literal[
+            "forward", "backward", "min", "max", "mean", "zero", "one"
+        ] | None = None,
+        limit: int | None = None,
+        *,
+        matches_supertype: bool = True,
+    ) -> ArrowFrame:
+        """
+        Replace null values with a literal or a fill strategy.
+        Mirrors polars.LazyFrame.fill_null().
+        Provide either value or strategy, not both.
+        """
+        return self.polars_from_lazy(
+            self.polars_lazy().fill_null(
+                value=value,
+                strategy=strategy,
+                limit=limit,
+                matches_supertype=matches_supertype,
+            )
+        )
+
+    def polars_fill_nan(self, value: Any) -> ArrowFrame:
+        """
+        Replace floating-point NaN values.
+        Mirrors polars.LazyFrame.fill_nan().
+        """
+        return self.polars_from_lazy(self.polars_lazy().fill_nan(value))
+
+    def polars_drop_nulls(
+        self, subset: str | list[str] | None = None
+    ) -> ArrowFrame:
+        """
+        Drop rows containing any null (or nulls in subset columns).
+        Mirrors polars.LazyFrame.drop_nulls().
+        """
+        return self.polars_from_lazy(self.polars_lazy().drop_nulls(subset=subset))
+
+    def polars_interpolate(self) -> ArrowFrame:
+        """
+        Linear interpolation over missing values (numeric columns only).
+        # TODO: polars.LazyFrame has no lazy interpolate - runs eagerly.
+        # Move to lazy path once polars adds LazyFrame.interpolate().
+        """
+        pl_df = polars.from_arrow(self._df)
+        return self.from_polars(pl_df.interpolate())
+
+    # --- Row operations -----------------------------------------------------
+
+    def polars_head(self, n: int = 5) -> ArrowFrame:
+        """Return the first n rows.  Mirrors polars.LazyFrame.head(n)."""
+        return self.polars_from_lazy(self.polars_lazy().head(n))
+
+    def polars_tail(self, n: int = 5) -> ArrowFrame:
+        """Return the last n rows.  Mirrors polars.LazyFrame.tail(n)."""
+        return self.polars_from_lazy(self.polars_lazy().tail(n))
+
+    def polars_limit(self, n: int) -> ArrowFrame:
+        """
+        Return the first n rows.  Mirrors polars.LazyFrame.limit(n).
+        Prefixed to avoid collision with the acero-backed .limit().
+        """
+        return self.polars_from_lazy(self.polars_lazy().limit(n))
+
+    def polars_slice(self, offset: int, length: int | None = None) -> ArrowFrame:
+        """
+        Return a slice of rows.  Mirrors polars.LazyFrame.slice(offset, length).
+        """
+        return self.polars_from_lazy(self.polars_lazy().slice(offset, length))
+
+    def polars_unique(
+        self,
+        subset: str | list[str] | None = None,
+        *,
+        keep: Literal["first", "last", "any", "none"] = "any",
+        maintain_order: bool = False,
+    ) -> ArrowFrame:
+        """
+        Deduplicate rows.  Mirrors polars.LazyFrame.unique().
+
+        Example:
+            frame.polars_unique(subset=["email"])
+        """
+        return self.polars_from_lazy(
+            self.polars_lazy().unique(
+                subset=subset, keep=keep, maintain_order=maintain_order
+            )
+        )
+
+    def polars_reverse(self) -> ArrowFrame:
+        """Reverse row order.  Mirrors polars.LazyFrame.reverse()."""
+        return self.polars_from_lazy(self.polars_lazy().reverse())
+
+    def polars_shift(self, n: int, *, fill_value: Any = None) -> ArrowFrame:
+        """
+        Shift column values by n rows (positive = down, negative = up).
+        Mirrors polars.LazyFrame.shift().
+
+        Example:
+            frame.polars_shift(1)    # shift down, nulls fill top
+            frame.polars_shift(-1)   # shift up,   nulls fill bottom
+        """
+        return self.polars_from_lazy(
+            self.polars_lazy().shift(n, fill_value=fill_value)
+        )
+
+    def polars_gather_every(self, n: int, offset: int = 0) -> ArrowFrame:
+        """
+        Take every nth row starting from offset.
+        Mirrors polars.LazyFrame.gather_every().
+        """
+        return self.polars_from_lazy(
+            self.polars_lazy().gather_every(n, offset=offset)
+        )
+
+    def polars_sample(
+        self,
+        n: int | None = None,
+        *,
+        fraction: float | None = None,
+        with_replacement: bool = False,
+        shuffle: bool = False,
+        seed: int | None = None,
+    ) -> ArrowFrame:
+        """
+        Random row sample.
+        # TODO: polars.LazyFrame has no lazy sample - runs eagerly.
+        # Move to lazy path once polars adds LazyFrame.sample().
+        """
+        pl_df = polars.from_arrow(self._df)
+        result = pl_df.sample(
+            n=n,
+            fraction=fraction,
+            with_replacement=with_replacement,
+            shuffle=shuffle,
+            seed=seed,
+        )
+        return self.from_polars(result)
+
+    # --- Combining frames ---------------------------------------------------
+
+    def polars_vstack(self, other: ArrowFrame) -> ArrowFrame:
+        """
+        Vertically stack two frames (row-wise union, schemas must match).
+        Uses polars.concat([...]) internally which supports lazy frames.
+
+        Example:
+            frame_a.polars_vstack(frame_b)
+        """
+        combined = polars.concat(
+            [self.polars_lazy(), polars.from_arrow(other._df).lazy()]
+        )
+        return self.polars_from_lazy(combined)
+
+    def polars_hstack(self, other: ArrowFrame) -> ArrowFrame:
+        """
+        Horizontally stack two frames (column-wise concat, row counts must match).
+        # TODO: polars.LazyFrame has no lazy hstack - runs eagerly.
+        Mirrors polars.DataFrame.hstack().
+        """
+        pl_left = polars.from_arrow(self._df)
+        pl_right = polars.from_arrow(other._df)
+        return self.from_polars(pl_left.hstack(pl_right))
+
+    # --- Statistics ---------------------------------------------------------
+
+    def polars_describe(
+        self,
+        percentiles: list[float] | tuple[float, ...] | None = (0.25, 0.5, 0.75),
+        interpolation: Literal[
+            "nearest", "higher", "lower", "midpoint", "linear"
+        ] = "nearest",
+    ) -> ArrowFrame:
+        """
+        Summary statistics (count, mean, std, min, percentiles, max).
+        # TODO: polars.LazyFrame has no lazy describe - runs eagerly.
+        Mirrors polars.DataFrame.describe().
+        """
+        pl_df = polars.from_arrow(self._df)
+        return self.from_polars(
+            pl_df.describe(percentiles=percentiles, interpolation=interpolation)
+        )
+
+    # --- Pipe ---------------------------------------------------------------
+
+    def polars_pipe(
+        self,
+        function: Any,
+        *args: Any,
+        streaming: bool = False,
+        **kwargs: Any,
+    ) -> ArrowFrame:
+        """
+        Apply a callable to the underlying polars.LazyFrame and collect.
+        The callable receives a polars.LazyFrame as its first positional arg
+        and must return a LazyFrame or DataFrame.
+
+        Example:
+            def normalize(lf, col):
+                return lf.with_columns(
+                    ((pl.col(col) - pl.col(col).mean()) / pl.col(col).std()).alias(col)
+                )
+
+            frame.polars_pipe(normalize, "salary")
+        """
+        result = function(self.polars_lazy(), *args, **kwargs)
+        if isinstance(result, polars.LazyFrame):
+            return self.polars_from_lazy(result, streaming=streaming)
+        if isinstance(result, polars.DataFrame):
+            return self.from_polars(result)
+        raise TypeError(
+            f"polars_pipe function must return LazyFrame or DataFrame, got {type(result)}"
+        )
+
+    # --- SQL via polars.SQLContext ------------------------------------------
+
+    def polars_sql(
+        self,
+        query: str,
+        table_name: str = "frame",
+        *,
+        eager: bool = True,
+        streaming: bool = False,
+    ) -> ArrowFrame:
+        """
+        Execute a SQL query against this frame using polars.SQLContext.
+        The frame is registered under `table_name` (default: "frame").
+
+        Polars SQL is largely PostgreSQL-compatible.
+        https://docs.pola.rs/user-guide/sql/intro/
+
+        Example:
+            frame.polars_sql(
+                "SELECT region, SUM(sales) AS total FROM frame GROUP BY region"
+            )
+        """
+        ctx = polars.SQLContext({table_name: self.polars_lazy()}, eager=eager)
+        result = ctx.execute(query)
+        if isinstance(result, polars.LazyFrame):
+            return self.polars_from_lazy(result, streaming=streaming)
+        return self.from_polars(result)
+
+    def polars_sql_multi(
+        self,
+        query: str,
+        frames: dict[str, ArrowFrame],
+        *,
+        eager: bool = True,
+        streaming: bool = False,
+    ) -> ArrowFrame:
+        """
+        Run a SQL query across multiple named ArrowFrames.
+
+        Example:
+            result = frame.polars_sql_multi(
+                "SELECT o.id, c.name FROM orders o JOIN customers c ON o.cid = c.id",
+                frames={"orders": orders_frame, "customers": customers_frame},
+            )
+        """
+        ctx = polars.SQLContext(
+            {name: af.polars_lazy() for name, af in frames.items()},
+            eager=eager,
+        )
+        result = ctx.execute(query)
+        if isinstance(result, polars.LazyFrame):
+            return self.polars_from_lazy(result, streaming=streaming)
+        return self.from_polars(result)
+
+    # --- Streaming collect --------------------------------------------------
+
+    def polars_collect_streaming(self) -> ArrowFrame:
+        """
+        Materialize via Polars' streaming engine (lower peak memory for large
+        tables).  The underlying pa.Table is round-tripped through the lazy
+        plan; Polars falls back to in-memory for unsupported ops.
+
+        # TODO: Most useful when chained after a polars_scan_* class method -
+        # those produce genuinely lazy plans.  On an already-materialized
+        # pa.Table the streaming benefit is limited to Polars' internal batching.
+        """
+        return self.polars_from_lazy(self.polars_lazy(), streaming=True)
+
+    # --- Fetch (lazy preview without full materialization) ------------------
+
+    def polars_fetch(self, n_rows: int = 500) -> ArrowFrame:
+        """
+        Execute the lazy plan on only the first n_rows of each source.
+        Useful for schema / data exploration without full materialization.
+        Mirrors polars.LazyFrame.fetch().
+        """
+        return self.from_polars(self.polars_lazy().fetch(n_rows))
+
+    # --- Lazy IO: scan class methods ----------------------------------------
+
+    @classmethod
+    def polars_scan_csv(
+        cls,
+        source: str | Path,
+        *,
+        has_header: bool = True,
+        separator: str = ",",
+        null_values: str | list[str] | dict[str, str] | None = None,
+        infer_schema_length: int | None = 100,
+        n_rows: int | None = None,
+        skip_rows: int = 0,
+        low_memory: bool = False,
+        streaming: bool = False,
+        lazy_transform: Any | None = None,
+        **kwargs: Any,
+    ) -> ArrowFrame:
+        """
+        Lazily scan a CSV with predicate/projection pushdown, then collect.
+
+        Pass lazy_transform=fn to attach filter/select before materializing:
+            ArrowFrame.polars_scan_csv(
+                "big.csv",
+                lazy_transform=lambda lf: lf.filter(pl.col("year") == 2024)
+            )
+
+        This avoids loading the full file when only a slice is needed.
+        """
+        lf: polars.LazyFrame = polars.scan_csv(
+            source,
+            has_header=has_header,
+            separator=separator,
+            null_values=null_values,
+            infer_schema_length=infer_schema_length,
+            n_rows=n_rows,
+            skip_rows=skip_rows,
+            low_memory=low_memory,
+            **kwargs,
+        )
+        if lazy_transform is not None:
+            lf = lazy_transform(lf)
+        return cls.polars_from_lazy(lf, streaming=streaming)
+
+    @classmethod
+    def polars_scan_parquet(
+        cls,
+        source: str | Path,
+        *,
+        n_rows: int | None = None,
+        row_index_name: str | None = None,
+        row_index_offset: int = 0,
+        low_memory: bool = False,
+        rechunk: bool = False,
+        streaming: bool = False,
+        lazy_transform: Any | None = None,
+        **kwargs: Any,
+    ) -> ArrowFrame:
+        """
+        Lazily scan a Parquet file (supports predicate/projection pushdown).
+        See polars_scan_csv for lazy_transform usage pattern.
+        """
+        lf: polars.LazyFrame = polars.scan_parquet(
+            source,
+            n_rows=n_rows,
+            row_index_name=row_index_name,
+            row_index_offset=row_index_offset,
+            low_memory=low_memory,
+            rechunk=rechunk,
+            **kwargs,
+        )
+        if lazy_transform is not None:
+            lf = lazy_transform(lf)
+        return cls.polars_from_lazy(lf, streaming=streaming)
+
+    @classmethod
+    def polars_scan_ipc(
+        cls,
+        source: str | Path,
+        *,
+        n_rows: int | None = None,
+        row_index_name: str | None = None,
+        row_index_offset: int = 0,
+        memory_map: bool = True,
+        streaming: bool = False,
+        lazy_transform: Any | None = None,
+        **kwargs: Any,
+    ) -> ArrowFrame:
+        """
+        Lazily scan an Arrow IPC file.
+        memory_map=True (default) enables zero-copy reads via mmap.
+        See polars_scan_csv for lazy_transform usage pattern.
+        """
+        lf: polars.LazyFrame = polars.scan_ipc(
+            source,
+            n_rows=n_rows,
+            row_index_name=row_index_name,
+            row_index_offset=row_index_offset,
+            memory_map=memory_map,
+            **kwargs,
+        )
+        if lazy_transform is not None:
+            lf = lazy_transform(lf)
+        return cls.polars_from_lazy(lf, streaming=streaming)
+
+    @classmethod
+    def polars_scan_ndjson(
+        cls,
+        source: str | Path,
+        *,
+        infer_schema_length: int | None = 100,
+        batch_size: int | None = None,
+        n_rows: int | None = None,
+        low_memory: bool = False,
+        streaming: bool = False,
+        lazy_transform: Any | None = None,
+        **kwargs: Any,
+    ) -> ArrowFrame:
+        """
+        Lazily scan a newline-delimited JSON (NDJSON) file.
+        See polars_scan_csv for lazy_transform usage pattern.
+        """
+        lf: polars.LazyFrame = polars.scan_ndjson(
+            source,
+            infer_schema_length=infer_schema_length,
+            batch_size=batch_size,
+            n_rows=n_rows,
+            low_memory=low_memory,
+            **kwargs,
+        )
+        if lazy_transform is not None:
+            lf = lazy_transform(lf)
+        return cls.polars_from_lazy(lf, streaming=streaming)
 
     # -----------------------------------------------------------------------
     # Convenience repr

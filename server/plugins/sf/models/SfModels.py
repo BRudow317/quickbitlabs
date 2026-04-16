@@ -10,18 +10,6 @@ SF_EXTERNAL_CLIENT_APP_NAME: str = os.getenv('SF_EXTERNAL_CLIENT_APP_NAME', 'aut
 SF_BASE_URL: str = os.getenv('SF_BASE_URL') or f"https://{os.getenv('SF_BASE_DOMAIN')}.salesforce.com"
 SF_CALLBACK_URL: str = os.getenv('SF_CALLBACK_URL', 'http://localhost:1717/OauthRedirect')
 
-
-class SfFieldMeta(TypedDict):
-    name:              str
-    sf_type:           str
-    arrow_type:        str
-    filterable:        bool
-    createable:        bool
-    updateable:        bool
-    nillable:          bool
-    reference_to:      list[str]
-    relationship_name: str | None
-
 # --- Common Types ---
 Headers = MutableMapping[str, str]
 BulkDataAny = list[Mapping[str, any]]

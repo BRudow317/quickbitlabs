@@ -128,7 +128,8 @@ PythonTypes = Literal[
 
 class Column(BaseModel):
     name: str
-    qualified_name: str | None = None
+    alias: str | None = None
+    parent_names: list[str] | None = None
     raw_type: str | None = None
     arrow_type_id: arrow_type_literal | None = None
     primary_key: bool = False
@@ -160,10 +161,16 @@ class Column(BaseModel):
             unit = arrow_type.split("_")[1]
             return pa.timestamp(unit, tz=self.timezone)
         return arrow_types.get(arrow_type)
+    @property
+    def qualified_name(self) -> str:
+        if self.parent_names:
+            return ".".join(self.parent_names + [self.name])
+        return self.name
 
 class Entity(BaseModel):
     name: str
-    qualified_name: str | None = None
+    alias: str | None = None
+    parent_names: list[str] | None = None
     columns: list[Column] = Field(default_factory=list)
     properties: dict[str, Any] = Field(default_factory=dict)
     @property
@@ -172,6 +179,12 @@ class Entity(BaseModel):
     @property
     def column_map(self) -> dict[str, Column]:
         return {f.name: f for f in self.columns}
+    @property
+    def qualified_name(self) -> str:
+        if self.parent_names:
+            return ".".join(self.parent_names + [self.name])
+        return self.name
+
 
 
 class Sort(BaseModel):
@@ -229,6 +242,7 @@ class Catalog(BaseModel):
                 if not arrow_type: continue
                 
                 # Safety-widen decimals to max precision (38) to avoid "precision mismatch" errors
+                # TODO implement proper sniffing and metadata describe logic to set the correct precision and scale in Column.arrow_type to avoid this inefficiency
                 if pa.types.is_decimal(arrow_type):
                     arrow_type = pa.decimal128(38, arrow_type.scale)
                     

@@ -23,12 +23,14 @@ class Salesforce(Plugin):
         self,
         consumer_key: str | None = None,
         consumer_secret: str | None = None,
-        org_url: str | None = None,
+        base_url: str | None = None,
+        access_token: str | None = None,
     ):
-        self.client = SfClient.create(
+        self.client = SfClient(
             consumer_key=consumer_key,
             consumer_secret=consumer_secret,
-            base_url=org_url,
+            base_url=base_url,
+            access_token=access_token,
         )
         self.service = SfService(self.client)
 
@@ -42,12 +44,16 @@ class Salesforce(Plugin):
 
     # plugin specifics
     def query(self, soql: str, object_name: str | None = None, query_type: Literal['Rest', 'Bulk2'] = 'Rest', return_type: Literal['Records', 'ArrowStream'] = 'Records') -> Records | ArrowStream:
+        """Execute a SOQL query and return results as either Records or ArrowStream.
+        This is only to be used when other existing functionality is insufficient."""
         return self.service.query(soql, object_name, query_type, return_type)
 
     def bulk_query(self, soql: str, object_name: str | None = None) -> Records:
+        """Execute a SOQL query via the Bulk 2.0 API and return results as Records. This is only to be used when other existing functionality is insufficient."""
         return self.service.bulk_query(soql, object_name)
 
     def get_limits(self) -> dict[str, Any]:
+        """Get current API limits for the org. This is only to be used when other existing functionality is insufficient."""
         return self.service.get_limits()
 
     # Catalog
