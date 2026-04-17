@@ -19,6 +19,7 @@ from collections.abc import Iterable
 from pathlib import Path
 from typing import Any, Literal, Sequence, TypeAlias
 
+from fastapi import UploadFile
 import pandas
 import polars
 from polars.lazyframe import LazyFrame
@@ -601,6 +602,27 @@ class ArrowFrame(DataFrame):
 
     def get_batch_reader(self) -> pa.RecordBatchReader:
         return self.to_reader()
+    
+    @staticmethod
+    def deserialize_arrow_upload(file: UploadFile) -> pa.RecordBatchReader:
+        """Converts an uploaded binary file back into a PyArrow RecordBatchReader."""
+        file_bytes = file.read()
+        if not file_bytes:
+            # Return an empty stream if no data was passed
+            return pa.RecordBatchReader.from_batches(pa.schema([]), iter([]))
+        return pa.ipc.open_stream(file_bytes)
+
+    @staticmethod
+    def serialize_arrow_stream(stream: pa.RecordBatchReader) -> bytes:
+        """Consumes an ArrowStream and writes it to IPC binary bytes for the HTTP response."""
+        if stream is None:
+            return b""
+            
+        sink = pa.BufferOutputStream()
+        with pa.ipc.new_stream(sink, stream.schema) as writer:
+            for batch in stream:
+                writer.write_batch(batch)
+        return sink.getvalue().to_pybytes()
 
     # -----------------------------------------------------------------------
     # Relational API - powered by pyarrow.acero

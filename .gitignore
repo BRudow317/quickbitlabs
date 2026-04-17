@@ -31,5 +31,5 @@ plan.md
 
 # Environment files
 *secret*
-*data*
+.data
 *.env*

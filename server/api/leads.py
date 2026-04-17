@@ -1,4 +1,3 @@
-from typing import List
 from fastapi import APIRouter, Depends, HTTPException
 from sqlmodel import Session, select
 from server.configs.db import get_session
@@ -8,7 +7,7 @@ from server.models.user import User
 
 router = APIRouter()
 
-@router.get("/", response_model=List[Lead], operation_id="get_leads")
+@router.get("/", response_model=list[Lead], operation_id="get_leads")
 def read_leads(
     session: Session = Depends(get_session),
     current_user: User = Depends(get_current_user)

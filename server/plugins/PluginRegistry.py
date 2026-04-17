@@ -11,8 +11,9 @@ logger = logging.getLogger(__name__)
 # Maps plugin facade name -> (module_path, class_name)
 PLUGIN_REGISTRY: dict[str, tuple[str, str]] = {
     'salesforce': ('server.plugins.sf.Salesforce', 'Salesforce'),
-    # 'postgres':   ('server.plugins.postgres.Postgres', 'Postgres'),
     'oracle':     ('server.plugins.oracle.Oracle', 'Oracle'),
+    
+    # 'postgres':   ('server.plugins.postgres.Postgres', 'Postgres'),
     # 'csv':        ('server.plugins.readers.Csv', 'Csv'),
     # 'json':       ('server.plugins.readers.Json', 'Json'),
     # 'excel':      ('server.plugins.readers.Excel', 'Excel'),
