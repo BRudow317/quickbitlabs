@@ -108,9 +108,20 @@ def build_update_dml(catalog: Catalog, entity: Entity) -> tuple[str, dict[str, A
         raise ValueError(f"Cannot update {entity.name}: No Operator conditions defined in catalog.")
     set_str = ", ".join([f"{c.name} = :{c.name}" for c in entity.columns])
     return f"UPDATE {entity.name} SET {set_str}{where_clause}", binds
-        
 
-from server.plugins.oracle.OracleTypeMap import map_arrow_to_oracle_ddl
+def build_merge_dml(catalog: Catalog, entity: Entity) -> str:
+    pk_cols = entity.primary_key_columns
+    if not pk_cols:
+        raise ValueError(f"Cannot merge: Entity {entity.name} has no primary keys.")
+    update_cols = [c for c in entity.columns if c not in pk_cols]
+    on_clause = " AND ".join([f"tgt.{c.name} = src.{c.name}" for c in pk_cols])
+    set_clause = ", ".join([f"tgt.{c.name} = src.{c.name}" for c in update_cols])
+    insert_cols = ", ".join([c.name for c in entity.columns])
+    values_cols = ", ".join([f"src.{c.name}" for c in entity.columns])
+    bind_selects = ", ".join([f":{c.name} AS {c.name}" for c in entity.columns])
+    return f"MERGE INTO {entity.name} tgt USING (SELECT {bind_selects} FROM DUAL) src ON ({on_clause}) WHEN MATCHED THEN UPDATE SET {set_clause} WHEN NOT MATCHED THEN INSERT ({insert_cols}) VALUES ({values_cols})"       
+
+
 
 def build_rebuild_select(entity: Entity, existing_names: set[str]) -> str:
     """
@@ -120,6 +131,7 @@ def build_rebuild_select(entity: Entity, existing_names: set[str]) -> str:
     - Dates/Timestamps: No CAST for existing columns (avoid NLS format errors).
     - Booleans: CASE expression for string-to-number conversion.
     """
+    from server.plugins.oracle.OracleTypeMap import map_arrow_to_oracle_ddl
     expressions = []
     for col in entity.columns:
         ddl_type = map_arrow_to_oracle_ddl(col).upper()
@@ -174,14 +186,4 @@ def build_rebuild_select(entity: Entity, existing_names: set[str]) -> str:
 
     return ", ".join(expressions)
 
-def build_merge_dml(catalog: Catalog, entity: Entity) -> str:
-    pk_cols = entity.primary_key_columns
-    if not pk_cols:
-        raise ValueError(f"Cannot merge: Entity {entity.name} has no primary keys.")
-    update_cols = [c for c in entity.columns if c not in pk_cols]
-    on_clause = " AND ".join([f"tgt.{c.name} = src.{c.name}" for c in pk_cols])
-    set_clause = ", ".join([f"tgt.{c.name} = src.{c.name}" for c in update_cols])
-    insert_cols = ", ".join([c.name for c in entity.columns])
-    values_cols = ", ".join([f"src.{c.name}" for c in entity.columns])
-    bind_selects = ", ".join([f":{c.name} AS {c.name}" for c in entity.columns])
-    return f"MERGE INTO {entity.name} tgt USING (SELECT {bind_selects} FROM DUAL) src ON ({on_clause}) WHEN MATCHED THEN UPDATE SET {set_clause} WHEN NOT MATCHED THEN INSERT ({insert_cols}) VALUES ({values_cols})"
+

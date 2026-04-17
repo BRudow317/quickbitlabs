@@ -185,8 +185,6 @@ class Entity(BaseModel):
             return ".".join(self.parent_names + [self.name])
         return self.name
 
-
-
 class Sort(BaseModel):
     entity: Entity
     column: Column
