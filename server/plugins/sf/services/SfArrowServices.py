@@ -5,7 +5,7 @@ from typing import Any, TYPE_CHECKING
 
 import pyarrow as pa
 
-from server.plugins.PluginModels import Catalog, ArrowStream
+from server.plugins.PluginModels import Catalog, ArrowReader
 from server.plugins.sf.engines.SfBulk2Engine import Bulk2, DEFAULT_QUERY_PAGE_SIZE
 from server.plugins.sf.models.SfTypeMap import sf_to_python
 
@@ -43,9 +43,9 @@ class SfArrowFrame:
         catalog: Catalog,
         include_deleted: bool = False,
         chunk_size: int = 50_000,
-    ) -> ArrowStream:
+    ) -> ArrowReader:
         """
-        Execute SOQL via REST and return a lazily-paginated ArrowStream.
+        Execute SOQL via REST and return a lazily-paginated ArrowReader.
         Column names in the stream match the bare SF field names (``Name``, not
         ``Account_Name``). Type conversion is applied via the SF type map.
         """
@@ -92,9 +92,9 @@ class SfArrowFrame:
         catalog: Catalog,
         include_deleted: bool = False,
         max_records: int = DEFAULT_QUERY_PAGE_SIZE,
-    ) -> ArrowStream:
+    ) -> ArrowReader:
         """
-        Execute SOQL via Bulk 2.0 and return a lazily-paged ArrowStream.
+        Execute SOQL via Bulk 2.0 and return a lazily-paged ArrowReader.
         CSV pages are parsed with explicit schema mapping using bare field names.
         """
         entity = catalog.entities[0]
@@ -117,8 +117,8 @@ class SfArrowFrame:
         return pa.RecordBatchReader.from_batches(schema, _batches())
 
     @staticmethod
-    def stream_to_table(data: ArrowStream, keep_cols: set[str] | None = None) -> pa.Table:
-        """Collect an ArrowStream into a pa.Table, optionally projecting to a column subset."""
+    def stream_to_table(data: ArrowReader, keep_cols: set[str] | None = None) -> pa.Table:
+        """Collect an ArrowReader into a pa.Table, optionally projecting to a column subset."""
         batches = list(data)
         if not batches:
             return pa.table({})
@@ -129,8 +129,8 @@ class SfArrowFrame:
         return table
 
     @staticmethod
-    def results_to_stream(results: list[dict[str, int]]) -> ArrowStream:
-        """Wrap Bulk2 job result summaries into a minimal ArrowStream."""
+    def results_to_stream(results: list[dict[str, int]]) -> ArrowReader:
+        """Wrap Bulk2 job result summaries into a minimal ArrowReader."""
         schema = pa.schema([
             pa.field("job_id",                 pa.string()),
             pa.field("numberRecordsProcessed", pa.int64()),

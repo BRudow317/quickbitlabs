@@ -1,8 +1,8 @@
 from __future__ import annotations
 import datetime, json, re
-from typing import Any, TypeVar
-from server.plugins.PluginModels import PythonTypes
-from server.plugins.PluginModels import Catalog, Entity, Column, ArrowStream, Records, arrow_type_literal
+from typing import Any, Literal, TypeVar
+# from server.plugins.PluginModels import PythonTypes
+from server.plugins.PluginModels import Catalog, Entity, Column, ArrowReader, Records, arrow_type_literal
 import pyarrow as pa
 
 SF_TYPE_TO_ARROW = {
@@ -67,6 +67,20 @@ def _normalize_fielddef_type(raw: str) -> str:
     e.g. 'Text(80)' -> 'text', 'Number(18, 0)' -> 'number'
     """
     return re.sub(r'\(.*\)', '', raw).strip().lower()
+
+# Legacy mapping.
+PythonTypes = Literal[
+    "string",
+    "integer",
+    "float",
+    "boolean",
+    "datetime", # datetime.datetime # timezone format
+    "date",     # datetime.date
+    "time",     # datetime.time
+    "byte",
+    "bytearray",
+    "json",     # dict or list
+]
 
 SF_FIELDDEF_TYPE_MAP: dict[str, PythonTypes] = {
     'id':                    'string',

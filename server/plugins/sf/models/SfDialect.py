@@ -4,7 +4,7 @@ import urllib.parse
 from datetime import date, datetime, timezone
 from string import Formatter
 from typing import Any, AnyStr, Iterable, cast
-from server.plugins.PluginModels import Catalog, Entity, Operator, OperatorGroup
+from server.plugins.PluginModels import Catalog, Entity, Operation, OperatorGroup
 
 soql_escapes = str.maketrans({
     '\\': '\\\\',
@@ -84,7 +84,7 @@ def _escape_soql_value(value: Any) -> str:
     escaped = str(value).replace("\\", "\\\\").replace("'", "\\'")
     return f"'{escaped}'"
 
-def _operator_to_soql(op: Operator) -> str:
+def _operator_to_soql(op: Operation) -> str:
     field = op.independent.name
     operator = op.operator
     if operator == "IS NULL": return f"{field} = null"
@@ -97,7 +97,7 @@ def _operator_to_soql(op: Operator) -> str:
 
 def _group_to_soql(group: OperatorGroup) -> str:
     parts: list[str] = []
-    for item in group.operators:
+    for item in group.operation_group:
         if isinstance(item, OperatorGroup): parts.append(f"({_group_to_soql(item)})")
         else: parts.append(_operator_to_soql(item))
     if not parts: return ""
@@ -108,7 +108,7 @@ def build_soql(catalog: Catalog, entity: Entity) -> str:
     """
     Build a SOQL SELECT from Catalog + Entity using PluginModels contracts.
     Columns without an Arrow type mapping are excluded (compound types, etc).
-    Operator groups, sort fields, and limit are applied when present.
+    Operation groups, sort fields, and limit are applied when present.
     """
     queryable = [c for c in entity.columns if c.arrow_type is not None]
     if not queryable: raise ValueError(f"No queryable columns found for entity '{entity.name}'.")
@@ -116,11 +116,11 @@ def build_soql(catalog: Catalog, entity: Entity) -> str:
     soql = f"SELECT {fields} FROM {entity.name}"
     where_parts = [
         p for g in catalog.operator_groups
-        if g.operators and (p := _group_to_soql(g))
+        if g.operation_group and (p := _group_to_soql(g))
     ]
     if where_parts: soql += f" WHERE {' AND '.join(where_parts)}"
-    if catalog.sort_fields:
-        order_clauses = [f"{s.column.name} {s.direction}" for s in catalog.sort_fields]
+    if catalog.sort_columns:
+        order_clauses = [f"{s.column.name} {s.direction}" for s in catalog.sort_columns]
         soql += f" ORDER BY {', '.join(order_clauses)}"
     if catalog.limit is not None: soql += f" LIMIT {catalog.limit}"
 
