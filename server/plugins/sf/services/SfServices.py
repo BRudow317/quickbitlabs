@@ -5,7 +5,7 @@ from typing import Any, Literal, TYPE_CHECKING
 
 import pyarrow as pa
 
-from server.plugins.PluginModels import ArrowStream, Catalog, Column, Entity, Records
+from server.plugins.PluginModels import ArrowReader, Catalog, Column, Entity, Locator, Records
 from server.plugins.PluginResponse import PluginResponse
 from server.plugins.sf.engines.SfBulk2Engine import Bulk2, DEFAULT_QUERY_PAGE_SIZE
 from server.plugins.sf.engines.SfClient import SfClient
@@ -56,7 +56,7 @@ class SfService:
         field_name = field["name"]
         return Column(
             name=field_name,
-            parent_names=[object_name] if object_name else None,
+            locator=Locator(entity_name=object_name) if object_name else None,
             alias=field_name,
             raw_type=sf_type,
             arrow_type_id=arrow_id,
@@ -102,7 +102,7 @@ class SfService:
                 sobjects = self.rest.describe_migratable()
                 catalog.entities = [
                     Entity(name=obj.get("name", ""), 
-                           parent_names=[catalog.name] if catalog.name else None,
+                           namespace=catalog.name if catalog.name else None,
                            alias=obj.get("name", ""))
                     for obj in sobjects
                 ]
@@ -197,13 +197,13 @@ class SfService:
                 logger.warning(f"{object_name}.{col.name}: null check query failed; leaving is_nullable as-is.")
         return entity
 
-    def get_data(self, catalog: Catalog, **kwargs: Any) -> PluginResponse[ArrowStream]:
+    def get_data(self, catalog: Catalog, **kwargs: Any) -> PluginResponse[ArrowReader]:
         try:
             if not catalog.entities: return PluginResponse.error("Catalog must contain at least one entity.")
             include_deleted: bool = kwargs.get("include_deleted", False)
             # Explicit query_type kwarg ('rest' or 'bulk2') bypasses the count check entirely.
             explicit_query_type: str | None = kwargs.get("query_type")
-            streams: list[ArrowStream] = []
+            streams: list[ArrowReader] = []
             for entity in catalog.entities:
                 # TODO sniff the total record counts for all entities up front and determine if Arrow Tables in memory is feasible or if encrypted Parquet is needed.
                 # TODO implement custom data frame functionality to manage the Federated query protocols for multiple entities, including joining on the fly and limiting entities and fields to the minimum viable requirements for the query. Current state implements a list of iterators of the objects, and that's a violation of the contract.
@@ -234,8 +234,8 @@ class SfService:
             logger.exception(f"get_data failed: {e}")
             return PluginResponse.error(str(e))
 
-    def create_data(self, catalog: Catalog, data: ArrowStream, **kwargs: Any
-    ) -> PluginResponse[ArrowStream]:
+    def create_data(self, catalog: Catalog, data: ArrowReader, **kwargs: Any
+    ) -> PluginResponse[ArrowReader]:
         try:
             if not catalog.entities: return PluginResponse.error("Catalog must contain at least one entity.")
             table = self.arrow_frame.stream_to_table(data)
@@ -255,8 +255,8 @@ class SfService:
             return PluginResponse.error(str(e))
 
     def update_data(
-        self, catalog: Catalog, data: ArrowStream, **kwargs: Any
-    ) -> PluginResponse[ArrowStream]:
+        self, catalog: Catalog, data: ArrowReader, **kwargs: Any
+    ) -> PluginResponse[ArrowReader]:
         try:
             if not catalog.entities: return PluginResponse.error("Catalog must contain at least one entity.")
             table = self.arrow_frame.stream_to_table(data)
@@ -277,8 +277,8 @@ class SfService:
             return PluginResponse.error(str(e))
 
     def upsert_data(
-        self, catalog: Catalog, data: ArrowStream, **kwargs: Any
-    ) -> PluginResponse[ArrowStream]:
+        self, catalog: Catalog, data: ArrowReader, **kwargs: Any
+    ) -> PluginResponse[ArrowReader]:
         try:
             if not catalog.entities:
                 return PluginResponse.error("Catalog must contain at least one entity.")
@@ -318,7 +318,7 @@ class SfService:
             return PluginResponse.error(str(e))
 
     def delete_data(
-        self, catalog: Catalog, data: ArrowStream, **kwargs: Any
+        self, catalog: Catalog, data: ArrowReader, **kwargs: Any
     ) -> PluginResponse[None]:
         try:
             if not catalog.entities:
@@ -339,14 +339,14 @@ class SfService:
     def rest_query(self,
                    soql: str,
                    object_name: str | None = None,
-                   return_type: Literal['Records', 'ArrowStream'] = 'Records'
-                   ) -> Records | ArrowStream:
-        """Execute REST query and return as Records (dicts) or ArrowStream."""
+                   return_type: Literal['Records', 'ArrowReader'] = 'Records'
+                   ) -> Records | ArrowReader:
+        """Execute REST query and return as Records (dicts) or ArrowReader."""
         records_iter = (
             {k: v for k, v in r.items() if k != 'attributes'}
             for r in self.rest.query_all_iter(soql)
         )
-        if return_type == 'ArrowStream':
+        if return_type == 'ArrowReader':
             records = list(records_iter)
             if not records:
                 return pa.RecordBatchReader.from_batches(pa.schema([]), iter([]))
@@ -358,9 +358,9 @@ class SfService:
         self,
         soql: str,
         object_name: str | None = None,
-        return_type: Literal['Records', 'ArrowStream', 'CSV'] = 'ArrowStream',
+        return_type: Literal['Records', 'ArrowReader', 'CSV'] = 'ArrowReader',
         page_size: int = DEFAULT_QUERY_PAGE_SIZE,
-    ) -> Generator[dict[str, Any], None, None] | ArrowStream:
+    ) -> Generator[dict[str, Any], None, None] | ArrowReader:
         """
         Iterate Bulk2 query results as native Python dicts.
         Memory is bounded by page size
@@ -370,7 +370,7 @@ class SfService:
         if not object_name: raise ValueError("bulk_query requires object_name.")
         sf_obj: Bulk2SObject = getattr(self.bulk2, object_name)
         for csv_bytes in sf_obj.query(soql):
-            if return_type == 'ArrowStream':
+            if return_type == 'ArrowReader':
                 yield sf_obj.csv_bytes_to_arrow(csv_bytes)
             elif return_type == 'Records':
                 yield from sf_obj.csv_bytes_to_arrow(csv_bytes).to_pylist()
@@ -381,7 +381,7 @@ class SfService:
               soql: str, 
               object_name: str | None = None, 
               query_type: Literal['Rest', 'Bulk2'] = 'Rest', 
-              return_type: Literal['Records', 'ArrowStream'] = 'Records') -> PluginResponse[Records | ArrowStream]:
+              return_type: Literal['Records', 'ArrowReader'] = 'Records') -> PluginResponse[Records | ArrowReader]:
         try:
             if not object_name:
                 object_name = get_object_from_soql(soql)
