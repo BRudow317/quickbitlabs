@@ -17,7 +17,7 @@ from __future__ import annotations
 import io
 from collections.abc import Iterable
 from pathlib import Path
-from typing import Any, Literal, Sequence, TypeAlias
+from typing import Any, Literal, Sequence, TypeAlias, Iterator, cast
 
 from fastapi import UploadFile
 import pandas
@@ -33,31 +33,41 @@ import pyarrow.feather as feather
 import pyarrow.ipc as ipc
 import pyarrow.json as pa_json
 import pyarrow.parquet as pq
-from pyarrow.interchange.buffer import DlpackDeviceType
 from pyarrow.interchange.column import (
     _PYARROW_KINDS,
-    CategoricalDescription,
-    Dtype,
-    DtypeKind,
     Endianness,
     NoBufferPresent,
     _PyArrowColumn,
 )
+from pyarrow import (
+    # RecordBatch,
+    # RecordBatchReader,
+    RecordBatchFileReader,
+    RecordBatchStreamReader,
+    RecordBatchFileWriter,
+    RecordBatchStreamWriter,
+)
 from pyarrow.interchange.from_dataframe import from_dataframe
+from pyarrow.dataset import dataset, Dataset, FileSystemDataset
 
 from server.core.DataFrame import (
     Buffer as Buffer_,
+    CategoricalDescription,
     Column as Column_,
     ColumnBuffers,
     ColumnNullType,
     DataFrame,
+    Dtype,
+    DtypeKind,
+    DlpackDeviceType,
 )
 from server.plugins.PluginModels import (
     Catalog,
     Column as CatalogColumn,
     Entity,
     arrow_type_literal,
-    arrow_types,
+    ARROW_TYPE,
+    ArrowReader,
 )
 
 # ---------------------------------------------------------------------------
@@ -169,7 +179,7 @@ class ArrowColumn(Column_):
     # Interchange state
     _col: pa.Array
     _allow_copy: bool
-    _dtype: tuple[DtypeKind, int, str, str]
+    _dtype: Dtype
 
     # Optional catalog metadata (class-level defaults; callers may override per instance)
     name: str | None = None
@@ -200,7 +210,7 @@ class ArrowColumn(Column_):
         if tid.startswith("timestamp"):
             unit = tid.split("_")[1]
             return pa.timestamp(unit, tz=self.timezone)
-        return arrow_types.get(tid)
+        return ARROW_TYPE.get(tid)
 
     def __init__(
         self, column: pa.Array | pa.ChunkedArray, allow_copy: bool = True
@@ -243,12 +253,12 @@ class ArrowColumn(Column_):
         return self._col.offset
 
     @property
-    def dtype(self) -> tuple[DtypeKind, int, str, str] | Dtype:
+    def dtype(self) -> Dtype:
         return self._dtype
 
     def _dtype_from_arrowdtype(
         self, dtype: pa.DataType, bit_width: int
-    ) -> tuple[DtypeKind, int, str, str]:
+    ) -> Dtype:
         if pa.types.is_timestamp(dtype):
             ts = dtype.unit[0]
             tz = dtype.tz if dtype.tz else ""
@@ -264,6 +274,7 @@ class ArrowColumn(Column_):
         if kind_info is None:
             raise ValueError(f"Data type {dtype} not supported by interchange protocol")
         kind, f_string = kind_info
+        kind = DtypeKind(kind)
         return kind, bit_width, f_string or "", Endianness.NATIVE
 
     @property
@@ -417,7 +428,8 @@ class ArrowFrame(DataFrame):
         elif isinstance(df, pa.Table):
             self._df = df
         elif isinstance(df, pa.RecordBatchReader):
-            self._df = df.read_all()
+            rbc: pa.RecordBatchReader = df
+            self._df = rbc.read_all()
         elif isinstance(df, DataFrame) and hasattr(df, "__dataframe__"):
             self._df = from_dataframe(df, allow_copy=allow_copy)
         else:
@@ -602,27 +614,6 @@ class ArrowFrame(DataFrame):
 
     def get_batch_reader(self) -> pa.RecordBatchReader:
         return self.to_reader()
-    
-    @staticmethod
-    def deserialize_arrow_upload(file: UploadFile) -> pa.RecordBatchReader:
-        """Converts an uploaded binary file back into a PyArrow RecordBatchReader."""
-        file_bytes = file.read()
-        if not file_bytes:
-            # Return an empty stream if no data was passed
-            return pa.RecordBatchReader.from_batches(pa.schema([]), iter([]))
-        return pa.ipc.open_stream(file_bytes)
-
-    @staticmethod
-    def serialize_arrow_stream(stream: pa.RecordBatchReader) -> bytes:
-        """Consumes an ArrowStream and writes it to IPC binary bytes for the HTTP response."""
-        if stream is None:
-            return b""
-            
-        sink = pa.BufferOutputStream()
-        with pa.ipc.new_stream(sink, stream.schema) as writer:
-            for batch in stream:
-                writer.write_batch(batch)
-        return sink.getvalue().to_pybytes()
 
     # -----------------------------------------------------------------------
     # Relational API - powered by pyarrow.acero
@@ -964,7 +955,6 @@ class ArrowFrame(DataFrame):
             t = field.type
             columns.append(CatalogColumn(
                 name=field.name,
-                qualified_name=field.name,
                 arrow_type_id=self._arrow_type_to_id(t),  # type: ignore[arg-type]
                 is_nullable=field.nullable,
                 precision=t.precision if hasattr(t, "precision") else None,
@@ -972,7 +962,7 @@ class ArrowFrame(DataFrame):
                 timezone=getattr(t, "tz", None),
             ))
         ename = entity_name or name or "frame"
-        entity = Entity(name=ename, qualified_name=ename, columns=columns)
+        entity = Entity(name=ename, columns=columns)
         return Catalog(name=name or "ArrowFrame", entities=[entity])
 
     # -----------------------------------------------------------------------
@@ -1079,7 +1069,24 @@ class ArrowFrame(DataFrame):
         pa.Table -> pl.DataFrame (via __arrow_c_stream__) -> .lazy()
         Use this to chain multiple polars operations before collecting.
         """
-        return polars.from_arrow(self._df).lazy()
+        if isinstance(self._df, polars.DataFrame):
+            return self._df.lazy()
+        if isinstance(self._df, pa.Table):
+            arrow_table: pa.Table = self._df
+            lazy_frame: polars.LazyFrame = self._polars_frame_from_arrow(arrow_table).lazy()
+            return lazy_frame
+        raise TypeError(f"Unsupported internal type for polars_lazy(): {type(self._df)}")
+
+    @staticmethod
+    def _polars_frame_from_arrow(data: Any) -> polars.DataFrame:
+        pl_obj = polars.from_arrow(data)
+        if isinstance(pl_obj, polars.Series):
+            return pl_obj.to_frame()
+        if isinstance(pl_obj, polars.DataFrame):
+            return pl_obj
+        raise TypeError(
+            f"polars.from_arrow returned unsupported type: {type(pl_obj)}"
+        )
 
     @classmethod
     def polars_from_lazy(
@@ -1105,12 +1112,12 @@ class ArrowFrame(DataFrame):
     @property
     def polars_schema(self) -> Any:
         """Return the polars Schema (column name -> polars DataType mapping)."""
-        return polars.from_arrow(self._df).schema
+        return self._polars_frame_from_arrow(self._df).schema
 
     @property
     def polars_dtypes(self) -> list[Any]:
         """Return a list of polars DataTypes, one per column."""
-        return polars.from_arrow(self._df).dtypes
+        return self._polars_frame_from_arrow(self._df).dtypes
 
     # --- Selection & projection ---------------------------------------------
 
@@ -1247,7 +1254,7 @@ class ArrowFrame(DataFrame):
 
     def polars_cast(
         self,
-        dtypes: dict[str, Any] | Any,
+        dtypes: Any,
         strict: bool = True,
     ) -> ArrowFrame:
         """
@@ -1356,7 +1363,10 @@ class ArrowFrame(DataFrame):
             agg_to_lf = lf.agg(*agg_exprs)
             return self.polars_from_lazy(agg_to_lf)
         else:
-            return self.polars_from_lazy(lf)
+            if isinstance(lf, polars.LazyFrame):
+                lzf: polars.LazyFrame = lf 
+                return self.polars_from_lazy(lzf)
+        raise TypeError(f"Unexpected type from rolling(): {type(lf)}")
 
     def polars_group_by_dynamic(
         self,
@@ -1396,7 +1406,11 @@ class ArrowFrame(DataFrame):
         )
         if agg_exprs:
             lf = lf.agg(*agg_exprs)
-        return self.polars_from_lazy(lf)
+        
+        if isinstance(lf, polars.LazyFrame):
+            return self.polars_from_lazy(lf)
+        else:
+            raise TypeError(f"Unexpected type from group_by_dynamic(): {type(lf)}")
 
     # --- Joins --------------------------------------------------------------
 
@@ -1422,7 +1436,12 @@ class ArrowFrame(DataFrame):
         Example:
             orders.polars_join(customers, on="customer_id", how="left")
         """
-        other_lf = polars.from_arrow(other._df).lazy()
+        if isinstance(other._df, polars.DataFrame):
+            other_lf = other._df.lazy()
+        elif isinstance(other._df, pa.Table):
+            other_lf = self._polars_frame_from_arrow(other._df).lazy()
+        else:
+            raise TypeError(f"Unexpected type for other._df: {type(other._df)}")
         kwargs: dict[str, Any] = dict(
             on=on,
             how=how,
@@ -1453,7 +1472,7 @@ class ArrowFrame(DataFrame):
         Asof (nearest-key) join - useful for time-series alignment.
         Mirrors polars.LazyFrame.join_asof().
         """
-        other_lf = polars.from_arrow(other._df).lazy()
+        other_lf = self._polars_frame_from_arrow(other._df).lazy()
         return self.polars_from_lazy(
             self.polars_lazy().join_asof(
                 other_lf,
@@ -1510,15 +1529,14 @@ class ArrowFrame(DataFrame):
             value_name=value_name,
         )
 
+    import polars._typing as pl_typing
     def polars_pivot(
         self,
         on: str | list[str],
         *,
         index: str | list[str] | None = None,
         values: str | list[str] | None = None,
-        aggregate_function: Literal[
-            "first", "sum", "min", "max", "mean", "median", "count", "last"
-        ] = "first",
+        aggregate_function: pl_typing.PivotAgg,
         maintain_order: bool = True,
         sort_columns: bool = False,
         separator: str = "_",
@@ -1535,7 +1553,7 @@ class ArrowFrame(DataFrame):
                 values="sales", aggregate_function="sum"
             )
         """
-        pl_df = polars.from_arrow(self._df)
+        pl_df = self._polars_frame_from_arrow(self._df)
         result = pl_df.pivot(
             on=on,
             index=index,
@@ -1558,7 +1576,7 @@ class ArrowFrame(DataFrame):
         # TODO: polars.LazyFrame has no lazy transpose - runs eagerly.
         Mirrors polars.DataFrame.transpose().
         """
-        pl_df = polars.from_arrow(self._df)
+        pl_df = self._polars_frame_from_arrow(self._df)
         result = pl_df.transpose(
             include_header=include_header,
             header_name=header_name,
@@ -1624,7 +1642,7 @@ class ArrowFrame(DataFrame):
         # TODO: polars.LazyFrame has no lazy interpolate - runs eagerly.
         # Move to lazy path once polars adds LazyFrame.interpolate().
         """
-        pl_df = polars.from_arrow(self._df)
+        pl_df = self._polars_frame_from_arrow(self._df)
         return self.from_polars(pl_df.interpolate())
 
     # --- Row operations -----------------------------------------------------
@@ -1709,7 +1727,7 @@ class ArrowFrame(DataFrame):
         # TODO: polars.LazyFrame has no lazy sample - runs eagerly.
         # Move to lazy path once polars adds LazyFrame.sample().
         """
-        pl_df = polars.from_arrow(self._df)
+        pl_df = self._polars_frame_from_arrow(self._df)
         result = pl_df.sample(
             n=n,
             fraction=fraction,
@@ -1730,7 +1748,7 @@ class ArrowFrame(DataFrame):
             frame_a.polars_vstack(frame_b)
         """
         combined = polars.concat(
-            [self.polars_lazy(), polars.from_arrow(other._df).lazy()]
+            [self.polars_lazy(), self._polars_frame_from_arrow(other._df).lazy()]
         )
         return self.polars_from_lazy(combined)
 
@@ -1740,8 +1758,8 @@ class ArrowFrame(DataFrame):
         # TODO: polars.LazyFrame has no lazy hstack - runs eagerly.
         Mirrors polars.DataFrame.hstack().
         """
-        pl_left = polars.from_arrow(self._df)
-        pl_right = polars.from_arrow(other._df)
+        pl_left = self._polars_frame_from_arrow(self._df)
+        pl_right = self._polars_frame_from_arrow(other._df)
         return self.from_polars(pl_left.hstack(pl_right))
 
     # --- Statistics ---------------------------------------------------------
@@ -1758,7 +1776,7 @@ class ArrowFrame(DataFrame):
         # TODO: polars.LazyFrame has no lazy describe - runs eagerly.
         Mirrors polars.DataFrame.describe().
         """
-        pl_df = polars.from_arrow(self._df)
+        pl_df = self._polars_frame_from_arrow(self._df)
         return self.from_polars(
             pl_df.describe(percentiles=percentiles, interpolation=interpolation)
         )
@@ -2006,11 +2024,13 @@ class ArrowFrame(DataFrame):
             lf = lazy_transform(lf)
         return cls.polars_from_lazy(lf, streaming=streaming)
 
-        def arrow_reader(self, 
+
+
+    def arrow_reader(self, 
                      data: pa.Table | pa.RecordBatch, 
                      chunk_size: int = 25_000
                      ) -> ArrowReader | pa.RecordBatchReader:
-        schema = self.arrow_schema()
+        schema = pa.schema(data)
         if len(schema) == 0:
             return pa.RecordBatchReader.from_batches(pa.schema([]), iter([]))
 
@@ -2036,7 +2056,7 @@ class ArrowFrame(DataFrame):
                      data: Records | pa.Table | pa.RecordBatch | pa.RecordBatchReader | None = None, 
                      chunk_size: int = 50_000) -> ArrowReader | pa.RecordBatchReader:
         
-        schema = self.arrow_schema()
+        schema = pa.schema(data)
         
         if len(schema) == 0 or data is None:
             return pa.RecordBatchReader.from_batches(schema, iter([]))
@@ -2048,7 +2068,8 @@ class ArrowFrame(DataFrame):
         # ---------------------------------------------------------
         if isinstance(data, pa.Table):
             # .cast() handles widening ints, fixing nullability, etc., in C++
-            casted_table = data.cast(schema)
+            d: pa.Table = data
+            casted_table: pa.Table = d.cast(schema)
             return casted_table.to_reader(max_chunksize=chunk_size)
             
         if isinstance(data, pa.RecordBatch):
@@ -2057,7 +2078,8 @@ class ArrowFrame(DataFrame):
             
         if isinstance(data, pa.RecordBatchReader):
             # Read to memory, cast, and return a new reader
-            casted_table = data.read_all().cast(schema)
+            d: pa.RecordBatchReader = data
+            casted_table = d.read_all().cast(schema)
             return casted_table.to_reader(max_chunksize=chunk_size)
 
         # ---------------------------------------------------------

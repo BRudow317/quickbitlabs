@@ -1,13 +1,13 @@
 from fastapi import APIRouter, HTTPException, Response, UploadFile, File, Form, Body, Query
 from typing import Annotated, cast, TYPE_CHECKING
 import pyarrow as pa
-from server.engine.federation import resolve_catalog_plugins, FederationPlan
+from server.core.federation import resolve_catalog_plugins, FederationPlan
 from server.plugins.PluginModels import Catalog, Entity
 # from server.engine.ArrowFrame import ArrowFrame as af
 
 if TYPE_CHECKING:
     from server.plugins.PluginRegistry import PLUGIN
-    from server.engine.federation import PluginPlan
+    from server.core.federation import PluginPlan
     from server.plugins.PluginModels import ArrowReader
 
 router = APIRouter(prefix="/api/data", tags=["Federated Data Execution"])

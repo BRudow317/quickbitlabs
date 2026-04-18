@@ -3,7 +3,7 @@ from typing import Any
 from fastapi import HTTPException
 from fastapi.responses import JSONResponse
 
-from server.engine.federation import FederationPlan, PluginPlan, resolve_catalog_plugins
+from server.core.federation import FederationPlan, PluginPlan, resolve_catalog_plugins
 from server.plugins.PluginModels import Catalog
 
 def _resolve_plans(catalog: Catalog) -> dict[str, PluginPlan]:
