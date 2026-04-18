@@ -2006,6 +2006,525 @@ class ArrowFrame(DataFrame):
             lf = lazy_transform(lf)
         return cls.polars_from_lazy(lf, streaming=streaming)
 
+        def arrow_reader(self, 
+                     data: pa.Table | pa.RecordBatch, 
+                     chunk_size: int = 25_000
+                     ) -> ArrowReader | pa.RecordBatchReader:
+        schema = self.arrow_schema()
+        if len(schema) == 0:
+            return pa.RecordBatchReader.from_batches(pa.schema([]), iter([]))
+
+        def batch_generator() -> Iterator[pa.RecordBatch]:
+            row_count = 0
+            field_map: dict[str, list[Any]] = {name: [] for name in schema.names}
+            for row in data if data else []:
+                for name in schema.names:
+                    field_map[name].append(row.get(name))
+                row_count += 1
+                if row_count == chunk_size:
+                    arrays = [pa.array(field_map[f], type=schema.field(f).type) for f in schema.names]
+                    yield pa.record_batch(arrays, schema=schema)
+                    field_map = {name: [] for name in schema.names}
+                    row_count = 0
+            if row_count > 0:
+                arrays = [pa.array(field_map[f], type=schema.field(f).type) for f in schema.names]
+                yield pa.record_batch(arrays, schema=schema)
+
+        return pa.RecordBatchReader.from_batches(schema, batch_generator())
+    
+    def arrow_stream(self, 
+                     data: Records | pa.Table | pa.RecordBatch | pa.RecordBatchReader | None = None, 
+                     chunk_size: int = 50_000) -> ArrowReader | pa.RecordBatchReader:
+        
+        schema = self.arrow_schema()
+        
+        if len(schema) == 0 or data is None:
+            return pa.RecordBatchReader.from_batches(schema, iter([]))
+
+        # ---------------------------------------------------------
+        # FAST PATH: Data is already an Arrow Object
+        # We use PyArrow's C++ `.cast()` to force the data to 
+        # perfectly match your catalog's strict schema contract.
+        # ---------------------------------------------------------
+        if isinstance(data, pa.Table):
+            # .cast() handles widening ints, fixing nullability, etc., in C++
+            casted_table = data.cast(schema)
+            return casted_table.to_reader(max_chunksize=chunk_size)
+            
+        if isinstance(data, pa.RecordBatch):
+            casted_batch = pa.Table.from_batches([data]).cast(schema)
+            return casted_batch.to_reader(max_chunksize=chunk_size)
+            
+        if isinstance(data, pa.RecordBatchReader):
+            # Read to memory, cast, and return a new reader
+            casted_table = data.read_all().cast(schema)
+            return casted_table.to_reader(max_chunksize=chunk_size)
+
+        # ---------------------------------------------------------
+        # SLOW PATH: Fallback for Python Dicts (Records)
+        # Used by Salesforce, SOAP APIs, or generic JSON dumps
+        # ---------------------------------------------------------
+        def batch_generator() -> Iterator[pa.RecordBatch]:
+            row_count = 0
+            field_map: dict[str, list[Any]] = {name: [] for name in schema.names}
+            
+            for row in data:
+                for name in schema.names:
+                    field_map[name].append(row.get(name))
+                row_count += 1
+                
+                if row_count == chunk_size:
+                    arrays = [pa.array(field_map[f], type=schema.field(f).type) for f in schema.names]
+                    yield pa.record_batch(arrays, schema=schema)
+                    field_map = {name: [] for name in schema.names}
+                    row_count = 0
+                    
+            if row_count > 0:
+                arrays = [pa.array(field_map[f], type=schema.field(f).type) for f in schema.names]
+                yield pa.record_batch(arrays, schema=schema)
+
+        return pa.RecordBatchReader.from_batches(schema, batch_generator())
+    
+    @staticmethod
+    def deserialize_arrow_upload(file: UploadFile) -> pa.RecordBatchReader | RecordBatchStreamReader:
+        """Converts an uploaded binary file back into a PyArrow RecordBatchReader."""
+        file_bytes = file.file.read()
+        if not file_bytes:
+            # Return an empty stream if no data was passed
+            return pa.RecordBatchReader.from_batches(pa.schema([]), iter([]))
+        return pa.ipc.open_stream(file_bytes)
+
+    @staticmethod
+    def serialize_arrow_stream(stream: ArrowReader | pa.RecordBatchReader) -> bytes:
+        """Consumes an ArrowStream and writes it to IPC binary bytes for the HTTP response."""
+        if stream is None:
+            return b""
+        sink = pa.BufferOutputStream()
+        with pa.ipc.new_stream(sink, stream.schema) as writer:
+            for batch in stream:
+                writer.write_batch(batch)
+        return sink.getvalue().to_pybytes()
+    
+    @staticmethod
+    def ipc_new_stream(sink, schema, *, options=None) -> RecordBatchStreamWriter:
+        return ipc.new_stream(
+            sink=sink, 
+            schema=schema, 
+            options=options
+        )
+
+    @staticmethod
+    def ipc_open_stream(source, *, options=None, memory_pool=None) -> RecordBatchStreamReader: 
+        """
+        Create reader for Arrow streaming format.
+
+        Parameters
+        ----------
+        source : bytes/buffer-like, pyarrow.NativeFile, or file-like Python object
+            Either an in-memory buffer, or a readable file object.
+        options : pyarrow.ipc.IpcReadOptions
+            Options for IPC serialization.
+            If None, default values will be used.
+        memory_pool : MemoryPool, default None
+            If None, default memory pool is used.
+
+        Returns
+        -------
+        reader : RecordBatchStreamReader
+            A reader for the given source
+        """
+        return ipc.open_stream(
+            source=source, 
+            options=options, 
+            memory_pool=memory_pool
+        )
+
+    @staticmethod
+    def ipc_open_file(source, footer_offset=None, *, options=None, memory_pool=None) -> RecordBatchFileReader:
+        """
+    Create reader for Arrow file format.
+
+    Parameters
+    ----------
+    source : bytes/buffer-like, pyarrow.NativeFile, or file-like Python object
+        Either an in-memory buffer, or a readable file object.
+    footer_offset : int, default None
+        If the file is embedded in some larger file, this is the byte offset to
+        the very end of the file data.
+    options : pyarrow.ipc.IpcReadOptions
+        Options for IPC serialization.
+        If None, default values will be used.
+    memory_pool : MemoryPool, default None
+        If None, default memory pool is used.
+
+    Returns
+    -------
+    reader : RecordBatchFileReader
+        A reader for the given source
+    """
+        return ipc.open_file(
+            source=source,
+            footer_offset=footer_offset,
+            options=options,
+            memory_pool=memory_pool
+        )
+    
+    @staticmethod
+    def ipc_new_file(sink, schema=None, *, options=None, metadata=None) -> RecordBatchFileWriter:
+        return ipc.new_file(
+            sink=sink,
+            schema=schema,
+            options=options,
+            metadata=metadata
+        )
+
+    @staticmethod
+    def write_arrow_dataset(data, base_dir, *, basename_template=None, format=None,
+                  partitioning=None, partitioning_flavor=None,
+                  schema=None, filesystem=None, file_options=None, use_threads=True,
+                  preserve_order=False, max_partitions=None, max_open_files=None,
+                  max_rows_per_file=None, min_rows_per_group=None,
+                  max_rows_per_group=None, file_visitor=None,
+                  existing_data_behavior='error', create_dir=True) -> None:
+        """
+        Write a dataset to a given format and partitioning.
+
+        Parameters
+        ----------
+        data : Dataset, Table/RecordBatch, RecordBatchReader, list of \
+    Table/RecordBatch, or iterable of RecordBatch
+            The data to write. This can be a Dataset instance or
+            in-memory Arrow data. If an iterable is given, the schema must
+            also be given.
+        base_dir : str
+            The root directory where to write the dataset.
+        basename_template : str, optional
+            A template string used to generate basenames of written data files.
+            The token '{i}' will be replaced with an automatically incremented
+            integer. If not specified, it defaults to
+            "part-{i}." + format.default_extname
+        format : FileFormat or str
+            The format in which to write the dataset. Currently supported:
+            "parquet", "ipc"/"arrow"/"feather", and "csv". If a FileSystemDataset
+            is being written and `format` is not specified, it defaults to the
+            same format as the specified FileSystemDataset. When writing a
+            Table or RecordBatch, this keyword is required.
+        partitioning : Partitioning or list[str], optional
+            The partitioning scheme specified with the ``partitioning()``
+            function or a list of field names. When providing a list of
+            field names, you can use ``partitioning_flavor`` to drive which
+            partitioning type should be used.
+        partitioning_flavor : str, optional
+            One of the partitioning flavors supported by
+            ``pyarrow.dataset.partitioning``. If omitted will use the
+            default of ``partitioning()`` which is directory partitioning.
+        schema : Schema, optional
+        filesystem : FileSystem, optional
+        file_options : pyarrow.dataset.FileWriteOptions, optional
+            FileFormat specific write options, created using the
+            ``FileFormat.make_write_options()`` function.
+        use_threads : bool, default True
+            Write files in parallel. If enabled, then maximum parallelism will be
+            used determined by the number of available CPU cores. Using multiple
+            threads may change the order of rows in the written dataset if
+            preserve_order is set to False.
+        preserve_order : bool, default False
+            Preserve the order of rows. If enabled, order of rows in the dataset are
+            guaranteed to be preserved even if use_threads is set to True. This may
+            cause notable performance degradation.
+        max_partitions : int, default 1024
+            Maximum number of partitions any batch may be written into.
+        max_open_files : int, default 1024
+            If greater than 0 then this will limit the maximum number of
+            files that can be left open. If an attempt is made to open
+            too many files then the least recently used file will be closed.
+            If this setting is set too low you may end up fragmenting your
+            data into many small files.
+        max_rows_per_file : int, default 0
+            Maximum number of rows per file. If greater than 0 then this will
+            limit how many rows are placed in any single file. Otherwise there
+            will be no limit and one file will be created in each output
+            directory unless files need to be closed to respect max_open_files
+        min_rows_per_group : int, default 0
+            Minimum number of rows per group. When the value is greater than 0,
+            the dataset writer will batch incoming data and only write the row
+            groups to the disk when sufficient rows have accumulated.
+        max_rows_per_group : int, default 1024 * 1024
+            Maximum number of rows per group. If the value is greater than 0,
+            then the dataset writer may split up large incoming batches into
+            multiple row groups.  If this value is set, then min_rows_per_group
+            should also be set. Otherwise it could end up with very small row
+            groups.
+        file_visitor : function
+            If set, this function will be called with a WrittenFile instance
+            for each file created during the call.  This object will have both
+            a path attribute and a metadata attribute.
+
+            The path attribute will be a string containing the path to
+            the created file.
+
+            The metadata attribute will be the parquet metadata of the file.
+            This metadata will have the file path attribute set and can be used
+            to build a _metadata file.  The metadata attribute will be None if
+            the format is not parquet.
+
+            Example visitor which simple collects the filenames created::
+
+                visited_paths = []
+
+                def file_visitor(written_file):
+                    visited_paths.append(written_file.path)
+        existing_data_behavior : 'error' | 'overwrite_or_ignore' | \
+    'delete_matching'
+            Controls how the dataset will handle data that already exists in
+            the destination.  The default behavior ('error') is to raise an error
+            if any data exists in the destination.
+
+            'overwrite_or_ignore' will ignore any existing data and will
+            overwrite files with the same name as an output file.  Other
+            existing files will be ignored.  This behavior, in combination
+            with a unique basename_template for each write, will allow for
+            an append workflow.
+
+            'delete_matching' is useful when you are writing a partitioned
+            dataset.  The first time each partition directory is encountered
+            the entire directory will be deleted.  This allows you to overwrite
+            old partitions completely.
+        create_dir : bool, default True
+            If False, directories will not be created.  This can be useful for
+            filesystems that do not require directories.
+        """
+        from pyarrow.dataset import write_dataset
+        write_dataset(
+            data=data, 
+            base_dir=base_dir,
+            basename_template=basename_template, format=format,
+            partitioning=partitioning, partitioning_flavor=partitioning_flavor,
+            schema=schema, 
+            filesystem=filesystem,
+            file_options=file_options,
+            use_threads=use_threads,
+            preserve_order=preserve_order,
+            max_partitions=max_partitions,
+            max_open_files=max_open_files,
+            max_rows_per_file=max_rows_per_file, 
+            min_rows_per_group=min_rows_per_group,
+            max_rows_per_group=max_rows_per_group, 
+            file_visitor=file_visitor,
+            existing_data_behavior=existing_data_behavior, 
+            create_dir=create_dir
+            )
+
+    @staticmethod
+    def dataset(source, 
+                schema=None, 
+                format=None, 
+                filesystem=None,
+                partitioning=None, partition_base_dir=None,
+                exclude_invalid_files=None, ignore_prefixes=None) -> Dataset | FileSystemDataset:
+        """
+            Open a dataset.
+
+            Datasets provides functionality to efficiently work with tabular,
+            potentially larger than memory and multi-file dataset.
+
+            - A unified interface for different sources, like Parquet and Feather
+            - Discovery of sources (crawling directories, handle directory-based
+            partitioned datasets, basic schema normalization)
+            - Optimized reading with predicate pushdown (filtering rows), projection
+            (selecting columns), parallel reading or fine-grained managing of tasks.
+
+            Note that this is the high-level API, to have more control over the dataset
+            construction use the low-level API classes (FileSystemDataset,
+            FilesystemDatasetFactory, etc.)
+
+            Parameters
+            ----------
+            source : path, list of paths, dataset, list of datasets, (list of) \
+        RecordBatch or Table, iterable of RecordBatch, RecordBatchReader, or URI
+                Path pointing to a single file:
+                    Open a FileSystemDataset from a single file.
+                Path pointing to a directory:
+                    The directory gets discovered recursively according to a
+                    partitioning scheme if given.
+                List of file paths:
+                    Create a FileSystemDataset from explicitly given files. The files
+                    must be located on the same filesystem given by the filesystem
+                    parameter.
+                    Note that in contrary of construction from a single file, passing
+                    URIs as paths is not allowed.
+                List of datasets:
+                    A nested UnionDataset gets constructed, it allows arbitrary
+                    composition of other datasets.
+                    Note that additional keyword arguments are not allowed.
+                (List of) batches or tables, iterable of batches, or RecordBatchReader:
+                    Create an InMemoryDataset. If an iterable or empty list is given,
+                    a schema must also be given. If an iterable or RecordBatchReader
+                    is given, the resulting dataset can only be scanned once; further
+                    attempts will raise an error.
+            schema : Schema, optional
+                Optionally provide the Schema for the Dataset, in which case it will
+                not be inferred from the source.
+            format : FileFormat or str
+                Currently "parquet", "ipc"/"arrow"/"feather", "csv", "json", and "orc" are
+                supported. For Feather, only version 2 files are supported.
+            filesystem : FileSystem or URI string, default None
+                If a single path is given as source and filesystem is None, then the
+                filesystem will be inferred from the path.
+                If an URI string is passed, then a filesystem object is constructed
+                using the URI's optional path component as a directory prefix. See the
+                examples below.
+                Note that the URIs on Windows must follow 'file:///C:...' or
+                'file:/C:...' patterns.
+            partitioning : Partitioning, PartitioningFactory, str, list of str
+                The partitioning scheme specified with the ``partitioning()``
+                function. A flavor string can be used as shortcut, and with a list of
+                field names a DirectoryPartitioning will be inferred.
+            partition_base_dir : str, optional
+                For the purposes of applying the partitioning, paths will be
+                stripped of the partition_base_dir. Files not matching the
+                partition_base_dir prefix will be skipped for partitioning discovery.
+                The ignored files will still be part of the Dataset, but will not
+                have partition information.
+            exclude_invalid_files : bool, optional (default False)
+                If True, invalid files will be excluded (file format specific check).
+                This will incur IO for each files in a serial and single threaded
+                fashion. Disabling this feature will skip the IO, but unsupported
+                files may be present in the Dataset (resulting in an error at scan
+                time).
+            ignore_prefixes : list, optional
+                Files matching any of these prefixes will be ignored by the
+                discovery process. This is matched to the basename of a path.
+                By default this is ['.', '_'].
+                Note that discovery happens only if a directory is passed as source.
+
+            Returns
+            -------
+            dataset : Dataset
+                Either a FileSystemDataset or a UnionDataset depending on the source
+                parameter.
+
+            Examples
+            --------
+            Creating an example Table:
+
+            >>> import pyarrow as pa
+            >>> import pyarrow.parquet as pq
+            >>> table = pa.table({'year': [2020, 2022, 2021, 2022, 2019, 2021],
+            ...                   'n_legs': [2, 2, 4, 4, 5, 100],
+            ...                   'animal': ["Flamingo", "Parrot", "Dog", "Horse",
+            ...                              "Brittle stars", "Centipede"]})
+            >>> pq.write_table(table, "file.parquet")
+
+            Opening a single file:
+
+            >>> import pyarrow.dataset as ds
+            >>> dataset = ds.dataset("file.parquet", format="parquet")
+            >>> dataset.to_table()
+            pyarrow.Table
+            year: int64
+            n_legs: int64
+            animal: string
+            ----
+            year: [[2020,2022,2021,2022,2019,2021]]
+            n_legs: [[2,2,4,4,5,100]]
+            animal: [["Flamingo","Parrot","Dog","Horse","Brittle stars","Centipede"]]
+
+            Opening a single file with an explicit schema:
+
+            >>> myschema = pa.schema([
+            ...     ('n_legs', pa.int64()),
+            ...     ('animal', pa.string())])
+            >>> dataset = ds.dataset("file.parquet", schema=myschema, format="parquet")
+            >>> dataset.to_table()
+            pyarrow.Table
+            n_legs: int64
+            animal: string
+            ----
+            n_legs: [[2,2,4,4,5,100]]
+            animal: [["Flamingo","Parrot","Dog","Horse","Brittle stars","Centipede"]]
+
+            Opening a dataset for a single directory:
+
+            >>> ds.write_dataset(table, "partitioned_dataset", format="parquet",
+            ...                  partitioning=['year'])
+            >>> dataset = ds.dataset("partitioned_dataset", format="parquet")
+            >>> dataset.to_table()
+            pyarrow.Table
+            n_legs: int64
+            animal: string
+            ----
+            n_legs: [[5],[2],[4,100],[2,4]]
+            animal: [["Brittle stars"],["Flamingo"],...["Parrot","Horse"]]
+
+            For a single directory from a S3 bucket:
+
+            >>> ds.dataset("s3://mybucket/nyc-taxi/",
+            ...            format="parquet") # doctest: +SKIP
+
+            Opening a dataset from a list of relatives local paths:
+
+            >>> dataset = ds.dataset([
+            ...     "partitioned_dataset/2019/part-0.parquet",
+            ...     "partitioned_dataset/2020/part-0.parquet",
+            ...     "partitioned_dataset/2021/part-0.parquet",
+            ... ], format='parquet')
+            >>> dataset.to_table()
+            pyarrow.Table
+            n_legs: int64
+            animal: string
+            ----
+            n_legs: [[5],[2],[4,100]]
+            animal: [["Brittle stars"],["Flamingo"],["Dog","Centipede"]]
+
+            With filesystem provided:
+
+            >>> paths = [
+            ...     'part0/data.parquet',
+            ...     'part1/data.parquet',
+            ...     'part3/data.parquet',
+            ... ]
+            >>> ds.dataset(paths, filesystem='file:///directory/prefix,
+            ...            format='parquet') # doctest: +SKIP
+
+            Which is equivalent with:
+
+            >>> fs = SubTreeFileSystem("/directory/prefix",
+            ...                        LocalFileSystem()) # doctest: +SKIP
+            >>> ds.dataset(paths, filesystem=fs, format='parquet') # doctest: +SKIP
+
+            With a remote filesystem URI:
+
+            >>> paths = [
+            ...     'nested/directory/part0/data.parquet',
+            ...     'nested/directory/part1/data.parquet',
+            ...     'nested/directory/part3/data.parquet',
+            ... ]
+            >>> ds.dataset(paths, filesystem='s3://bucket/',
+            ...            format='parquet') # doctest: +SKIP
+
+            Similarly to the local example, the directory prefix may be included in the
+            filesystem URI:
+
+            >>> ds.dataset(paths, filesystem='s3://bucket/nested/directory',
+            ...         format='parquet') # doctest: +SKIP
+
+            Construction of a nested dataset:
+
+            >>> ds.dataset([
+            ...     dataset("s3://old-taxi-data", format="parquet"),
+            ...     dataset("local/path/to/data", format="ipc")
+            ... ]) # doctest: +SKIP
+            """
+        
+        return dataset(source=source, 
+                schema=schema, 
+                format=format, 
+                filesystem=filesystem,
+                partitioning=partitioning, partition_base_dir=partition_base_dir,
+                exclude_invalid_files=exclude_invalid_files, 
+                ignore_prefixes=ignore_prefixes
+                )
     # -----------------------------------------------------------------------
     # Convenience repr
     # -----------------------------------------------------------------------

@@ -4,7 +4,7 @@ import polars as pl
 import oracledb
 from typing import Any, Iterator, Iterable, TYPE_CHECKING
 
-from server.plugins.PluginModels import ArrowStream
+from server.plugins.PluginModels import ArrowReader
 from .OracleClient import OracleClient
 
 from oracledb import ArrowArray
@@ -133,7 +133,7 @@ class OracleArrowFrame:
         parameters: list | tuple | dict | None = None,
         size: int = 50_000,
         fetch_decimals: bool = True,
-    ) -> pa.RecordBatchReader | ArrowStream:
+    ) -> pa.RecordBatchReader | ArrowReader:
         """Returns a PyArrow RecordBatchReader"""
         raw_iter: Iterator[oracledb.DataFrame] = self.fetch_df_batches(
             statement=statement,
