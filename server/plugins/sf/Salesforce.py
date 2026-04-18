@@ -8,7 +8,7 @@ from server.plugins.sf.engines.SfClient import SfClient
 from server.plugins.sf.engines.SfRestEngine import SfRest
 from server.plugins.sf.engines.SfBulk2Engine import Bulk2
 from server.plugins.sf.services.SfServices import SfService
-from server.plugins.PluginModels import ArrowStream, Entity, Column, Catalog, Records
+from server.plugins.PluginModels import ArrowReader, Entity, Column, Catalog, Records
 from server.plugins.PluginResponse import PluginResponse
 
 import logging
@@ -43,8 +43,8 @@ class Salesforce(Plugin):
         return self.service.bulk2
 
     # plugin specifics
-    def query(self, soql: str, object_name: str | None = None, query_type: Literal['Rest', 'Bulk2'] = 'Rest', return_type: Literal['Records', 'ArrowStream'] = 'Records') -> Records | ArrowStream:
-        """Execute a SOQL query and return results as either Records or ArrowStream.
+    def query(self, soql: str, object_name: str | None = None, query_type: Literal['Rest', 'Bulk2'] = 'Rest', return_type: Literal['Records', 'ArrowReader'] = 'Records') -> Records | ArrowReader:
+        """Execute a SOQL query and return results as either Records or ArrowReader.
         This is only to be used when other existing functionality is insufficient."""
         return self.service.query(soql, object_name, query_type, return_type)
 
@@ -106,18 +106,18 @@ class Salesforce(Plugin):
     def delete_column(self, catalog: Catalog, **kwargs: Any) -> PluginResponse[None]:
         return PluginResponse.not_implemented("Salesforce does not support field deletion via data API")
 
-    # ArrowStream operations
-    def get_data(self, catalog: Catalog, **kwargs: Any) -> PluginResponse[ArrowStream]:
+    # ArrowReader operations
+    def get_data(self, catalog: Catalog, **kwargs: Any) -> PluginResponse[ArrowReader]:
         return self.service.get_data(catalog, **kwargs)
 
-    def create_data(self, catalog: Catalog, data: ArrowStream, **kwargs: Any) -> PluginResponse[ArrowStream]:
+    def create_data(self, catalog: Catalog, data: ArrowReader, **kwargs: Any) -> PluginResponse[ArrowReader]:
         return self.service.create_data(catalog, data, **kwargs)
 
-    def update_data(self, catalog: Catalog, data: ArrowStream, **kwargs: Any) -> PluginResponse[ArrowStream]:
+    def update_data(self, catalog: Catalog, data: ArrowReader, **kwargs: Any) -> PluginResponse[ArrowReader]:
         return self.service.update_data(catalog, data, **kwargs)
 
-    def upsert_data(self, catalog: Catalog, data: ArrowStream, **kwargs: Any) -> PluginResponse[ArrowStream]:
+    def upsert_data(self, catalog: Catalog, data: ArrowReader, **kwargs: Any) -> PluginResponse[ArrowReader]:
         return self.service.upsert_data(catalog, data, **kwargs)
 
-    def delete_data(self, catalog: Catalog, data: ArrowStream, **kwargs: Any) -> PluginResponse[None]:
+    def delete_data(self, catalog: Catalog, data: ArrowReader, **kwargs: Any) -> PluginResponse[None]:
         return self.service.delete_data(catalog, data, **kwargs)

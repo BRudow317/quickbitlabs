@@ -606,18 +606,7 @@ arrow_large_list_view: TypeAlias = pa.LargeListViewType
 
 """
 # python types
-PythonTypes = Literal[
-    "string",
-    "integer",
-    "float",
-    "boolean",
-    "datetime", # datetime.datetime # timezone format
-    "date",     # datetime.date
-    "time",     # datetime.time
-    "byte",
-    "bytearray",
-    "json",     # dict or list
-]
+
 """
 
 """

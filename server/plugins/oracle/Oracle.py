@@ -1,7 +1,7 @@
 from typing import Any
 
 from server.plugins.PluginProtocol import Plugin
-from server.plugins.PluginModels import Catalog, Entity, Column, ArrowStream
+from server.plugins.PluginModels import Catalog, Entity, Column, ArrowReader
 from server.plugins.PluginResponse import PluginResponse
 
 # STRICT BOUNDARY: The Facade ONLY imports Services. No Engines, No Clients.
@@ -23,20 +23,20 @@ class Oracle(Plugin):
 
     # -- Records (Row / Data Level) --
 
-    def create_data(self, catalog: Catalog, data: ArrowStream,  **kwargs: Any) -> PluginResponse[ArrowStream]:
+    def create_data(self, catalog: Catalog, data: ArrowReader,  **kwargs: Any) -> PluginResponse[ArrowReader]:
         try:
             self.service.insert_data(catalog, data, **kwargs)
             return PluginResponse.success(data)
         except Exception as e:
             return PluginResponse.error(str(e))
 
-    def get_data(self, catalog: Catalog, **kwargs: Any) -> PluginResponse[ArrowStream]:
+    def get_data(self, catalog: Catalog, **kwargs: Any) -> PluginResponse[ArrowReader]:
         try:
             return PluginResponse.success(self.service.get_data(catalog=catalog, **kwargs))
         except Exception as e:
             return PluginResponse.error(str(e))
 
-    def update_data(self, catalog: Catalog, data: ArrowStream ,  **kwargs: Any) -> PluginResponse[ArrowStream]:
+    def update_data(self, catalog: Catalog, data: ArrowReader ,  **kwargs: Any) -> PluginResponse[ArrowReader]:
         try:
             result = self.service.update_data(catalog, data, **kwargs)
             if not result.ok:
@@ -45,14 +45,14 @@ class Oracle(Plugin):
         except Exception as e:
             return PluginResponse.error(str(e))
 
-    def upsert_data(self, catalog: Catalog, data: ArrowStream ,  **kwargs: Any) -> PluginResponse[ArrowStream]:
+    def upsert_data(self, catalog: Catalog, data: ArrowReader ,  **kwargs: Any) -> PluginResponse[ArrowReader]:
         try:
             self.service.upsert_data(catalog, data, **kwargs)
             return PluginResponse.success(data)
         except Exception as e:
             return PluginResponse.error(str(e))
 
-    def delete_data(self, catalog: Catalog, data: ArrowStream ,  **kwargs: Any) -> PluginResponse[None]:
+    def delete_data(self, catalog: Catalog, data: ArrowReader ,  **kwargs: Any) -> PluginResponse[None]:
         try:
             return PluginResponse.success(self.service.delete_data(catalog, data, **kwargs))
         except Exception as e:
@@ -152,7 +152,7 @@ class Oracle(Plugin):
     def delete_catalog(self, catalog: Catalog, **kwargs: Any) -> PluginResponse[None]:
         return PluginResponse.not_implemented("Oracle schema deletion not implemented. Dropping schemas is destructive and should be done manually.")
 
-    def query(self, statement: str, binds: dict[str, Any] | None = None, page_size: int | None = None, catalog: Catalog | None = None, **kwargs: Any) -> PluginResponse[ArrowStream]:
+    def query(self, statement: str, binds: dict[str, Any] | None = None, page_size: int | None = None, catalog: Catalog | None = None, **kwargs: Any) -> PluginResponse[ArrowReader]:
         try:
             kwargs['statement'] = statement
             kwargs['binds'] = binds

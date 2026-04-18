@@ -1,7 +1,7 @@
 from typing import Any
 import logging
 
-from server.plugins.PluginModels import Catalog, Entity, Column, ArrowStream
+from server.plugins.PluginModels import Catalog, Entity, Column, ArrowReader, Locator
 from server.plugins.oracle.OracleTypeMap import (
     map_oracle_to_arrow,
     map_oracle_to_python,
@@ -48,7 +48,7 @@ class OracleService:
 
     # READ OPERATIONS
     def _resolve_schema_name(self, catalog: Catalog) -> str:
-        return (catalog.name or catalog.qualified_name or self.client.oracle_user).upper()
+        return (catalog.name or self.client.oracle_user).upper()
 
     def _list_schema_tables(self, schema_name: str) -> list[str]:
         schema = OracleSchema(client=self.client, schema_name=schema_name)
@@ -81,7 +81,7 @@ class OracleService:
         max_length = row["CHAR_LENGTH"]
         return Column(
             name=name,
-            parent_names=[table_name],
+            locator=Locator(plugin='oracle',entity_name=table_name),
             raw_type=raw_type,
             arrow_type_id=map_oracle_to_arrow(raw_type, scale),
             primary_key=name in primary_keys,
@@ -104,13 +104,12 @@ class OracleService:
                 entities.append(
                     Entity(
                         name=table_name,
-                        parent_names=[schema_name],
+                        namespace=schema_name,
                         columns=columns,
                     )
                 )
             catalog.entities = entities
             catalog.name = schema_name
-            catalog.qualified_name = schema_name
             return catalog
 
         for idx, entity in enumerate(catalog.entities):
@@ -139,18 +138,17 @@ class OracleService:
                 entity.columns = list(fetched_by_name.values())
 
             entity.name = table_name
-            entity.parent_names = [schema_name]
+            entity.namespace = schema_name
             catalog.entities[idx] = entity
 
         catalog.name = schema_name
-        catalog.qualified_name = schema_name
         return catalog
 
     def get_data(
         self, 
         catalog: Catalog,
         **kwargs: Any
-    ) -> ArrowStream:
+    ) -> ArrowReader:
         binds: dict[str, Any] = kwargs.get('binds', {})
         query: str | None = kwargs.get('statement', None)
         if query: return self.arrow_frame.arrow_stream(query, parameters=binds)
@@ -163,7 +161,7 @@ class OracleService:
     # WRITE OPERATIONS (Strict Catalog Contracts)
     # ---------------------------------------------------------
 
-    def insert_data(self, catalog: Catalog, data: ArrowStream, **kwargs: Any) -> None:
+    def insert_data(self, catalog: Catalog, data: ArrowReader, **kwargs: Any) -> None:
         """INSERT: Streams data into Oracle via the Catalog envelope."""
         for entity in catalog.entities:
             sql = build_insert_dml(catalog, entity)
@@ -171,7 +169,7 @@ class OracleService:
             self.arrow_frame.execute_many(sql, data, input_sizes)
 
 
-    def update_data(self, catalog: Catalog, stream: ArrowStream, **kwargs) -> PluginResponse[None]:
+    def update_data(self, catalog: Catalog, stream: ArrowReader, **kwargs) -> PluginResponse[None]:
         if not catalog.entities:
             return PluginResponse.error("Catalog must contain at least one entity for update.") 
         try:
@@ -182,14 +180,14 @@ class OracleService:
         except Exception as e:
             return PluginResponse.error(str(e))
 
-    def upsert_data(self, catalog: Catalog, data: ArrowStream,  **kwargs: Any) -> None:
+    def upsert_data(self, catalog: Catalog, data: ArrowReader,  **kwargs: Any) -> None:
         """UPSERT: Uses Oracle MERGE statement."""
         for entity in catalog.entities:
             sql = build_merge_dml(catalog, entity)
             input_sizes = self._build_input_sizes(catalog)
             self.arrow_frame.execute_many(sql, data, input_sizes)
 
-    def delete_data(self, catalog: Catalog, data: ArrowStream,  **kwargs: Any) -> None:
+    def delete_data(self, catalog: Catalog, data: ArrowReader,  **kwargs: Any) -> None:
         """DELETE: Removes data based on Primary Key."""
         for entity in catalog.entities:
             sql, binds = build_delete_dml(catalog, entity)
@@ -223,7 +221,7 @@ class OracleService:
         pk_set = self._fetch_table_primary_keys(schema_name, table_name)
         rows = self._fetch_table_columns(schema_name, table_name)
         columns = [self._column_from_row(table_name, row, pk_set) for row in rows]
-        return Entity(name=table_name, parent_names=[schema_name], columns=columns)
+        return Entity(name=table_name, namespace=schema_name, columns=columns)
 
     def create_entity(self, catalog: Catalog, **kwargs: Any) -> Entity:
         """CREATE TABLE from the first entity in catalog."""

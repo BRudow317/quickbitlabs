@@ -1,6 +1,6 @@
-from typing import Any
+from typing import Any, Literal
 import oracledb
-from server.plugins.PluginModels import PythonTypes, Column, arrow_types, arrow_type_literal
+from server.plugins.PluginModels import Column, ARROW_TYPE, arrow_type_literal
 from typing import Any
 import oracledb
 
@@ -74,40 +74,26 @@ ORACLE_TO_ARROW_LITERALS: dict[str, arrow_type_literal] = {
 }
 
 ORACLE_TO_ARROW = {
-    "DB_TYPE_BINARY_DOUBLE": arrow_types["float64"],
-    "DB_TYPE_BINARY_FLOAT": arrow_types["float32"],
-    "DB_TYPE_BLOB": arrow_types["large_binary"],
-    "DB_TYPE_BOOLEAN": arrow_types["bool"],
-    "DB_TYPE_CHAR": arrow_types["string"],
-    "DB_TYPE_CLOB": arrow_types["large_string"],
-    "DB_TYPE_DATE": arrow_types["timestamp_ns"],
-    "DB_TYPE_LONG": arrow_types["large_string"],
-    "DB_TYPE_LONG_RAW": arrow_types["large_binary"],
-    "DB_TYPE_NCHAR": arrow_types["string"],
-    "DB_TYPE_NCLOB": arrow_types["large_string"],
-    "DB_TYPE_NUMBER": arrow_types["decimal128"],
-    "DB_TYPE_NVARCHAR": arrow_types["string"],
-    "DB_TYPE_RAW": arrow_types["binary"],
-    "DB_TYPE_TIMESTAMP": arrow_types["timestamp_ns"],
-    "DB_TYPE_TIMESTAMP_LTZ": arrow_types["timestamp_ns"],
-    "DB_TYPE_TIMESTAMP_TZ": arrow_types["timestamp_ns"],
-    "DB_TYPE_VARCHAR": arrow_types["string"],
-    "DB_TYPE_VECTOR": arrow_types["float64"],
+    "DB_TYPE_BINARY_DOUBLE": ARROW_TYPE["float64"],
+    "DB_TYPE_BINARY_FLOAT": ARROW_TYPE["float32"],
+    "DB_TYPE_BLOB": ARROW_TYPE["large_binary"],
+    "DB_TYPE_BOOLEAN": ARROW_TYPE["bool"],
+    "DB_TYPE_CHAR": ARROW_TYPE["string"],
+    "DB_TYPE_CLOB": ARROW_TYPE["large_string"],
+    "DB_TYPE_DATE": ARROW_TYPE["timestamp_ns"],
+    "DB_TYPE_LONG": ARROW_TYPE["large_string"],
+    "DB_TYPE_LONG_RAW": ARROW_TYPE["large_binary"],
+    "DB_TYPE_NCHAR": ARROW_TYPE["string"],
+    "DB_TYPE_NCLOB": ARROW_TYPE["large_string"],
+    "DB_TYPE_NUMBER": ARROW_TYPE["decimal128"],
+    "DB_TYPE_NVARCHAR": ARROW_TYPE["string"],
+    "DB_TYPE_RAW": ARROW_TYPE["binary"],
+    "DB_TYPE_TIMESTAMP": ARROW_TYPE["timestamp_ns"],
+    "DB_TYPE_TIMESTAMP_LTZ": ARROW_TYPE["timestamp_ns"],
+    "DB_TYPE_TIMESTAMP_TZ": ARROW_TYPE["timestamp_ns"],
+    "DB_TYPE_VARCHAR": ARROW_TYPE["string"],
+    "DB_TYPE_VECTOR": ARROW_TYPE["float64"],
 }
-
-def map_oracle_to_python(raw_type: str, scale: int | None = None) -> PythonTypes:
-    """Translates an Oracle catalog DATA_TYPE into the universal PythonTypes literal."""
-    raw_upper = raw_type.upper()
-    if raw_upper in ("VARCHAR2", "NVARCHAR2", "CHAR", "NCHAR", "CLOB", "NCLOB", "ROWID", "UROWID"): return "string"
-    if raw_upper == "NUMBER":
-        if scale == 0: return "integer" 
-        else: return "float"
-    if raw_upper in ("FLOAT", "BINARY_FLOAT", "BINARY_DOUBLE"): return "float"
-    if "TIMESTAMP" in raw_upper: return "datetime"
-    if raw_upper == "DATE": return "datetime"
-    if raw_upper in ("BLOB", "RAW", "LONG RAW", "BFILE"): return "byte"
-    if raw_upper == "JSON": return "json"
-    return "string"
 
 def map_python_to_oracle_ddl(column: Column) -> str:
     """Translates a universal FieldModel into an Oracle-specific DDL type string.
@@ -150,3 +136,34 @@ def map_python_to_oracledb_input_size(column: Column) -> Any:
     if ptype == "binary": return oracledb.DB_TYPE_BLOB
     if ptype == "json":return getattr(oracledb, "DB_TYPE_JSON", oracledb.DB_TYPE_CLOB)
     return None
+
+
+# Legacy mapping.
+PythonTypes = Literal[
+    "string",
+    "integer",
+    "float",
+    "boolean",
+    "datetime", # datetime.datetime # timezone format
+    "date",     # datetime.date
+    "time",     # datetime.time
+    "byte",
+    "bytearray",
+    "json",     # dict or list
+]
+def map_oracle_to_python(raw_type: str, scale: int | None = None) -> PythonTypes:
+    raw_upper = raw_type.upper()
+    if raw_upper in ("VARCHAR2", "NVARCHAR2", "CHAR", "NCHAR", "CLOB", "NCLOB", "ROWID", "UROWID"): return "string"
+    if raw_upper == "NUMBER":
+        if scale == 0: return "integer" 
+        else: return "float"
+    if raw_upper in ("FLOAT", "BINARY_FLOAT", "BINARY_DOUBLE"): return "float"
+    if "TIMESTAMP" in raw_upper: return "datetime"
+    if raw_upper == "DATE": return "datetime"
+    if raw_upper in ("BLOB", "RAW", "LONG RAW", "BFILE"): return "byte"
+    if raw_upper == "JSON": return "json"
+    return "string"
+
+"""
+
+"""

@@ -45,7 +45,7 @@ from pyarrow.interchange.column import (
 )
 from pyarrow.interchange.from_dataframe import from_dataframe
 
-from server.plugins.DataFrame import (
+from server.core.DataFrame import (
     Buffer as Buffer_,
     Column as Column_,
     ColumnBuffers,

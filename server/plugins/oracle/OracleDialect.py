@@ -1,6 +1,6 @@
 from typing import Any
 import pyarrow as pa
-from server.plugins.PluginModels import Catalog, Column, OperatorGroup, Operator, Entity
+from server.plugins.PluginModels import Catalog, Column, OperatorGroup, Operation, Entity
 
 def _get_root_entity(catalog: Catalog) -> Entity:
     if len(catalog.entities) == 1: return catalog.entities[0]
@@ -9,7 +9,7 @@ def _get_root_entity(catalog: Catalog) -> Entity:
     if not roots: raise ValueError("Circular or missing joins detected.")
     return roots[0]
 
-def _parse_operator(operator: Operator, binds: dict[str, Any], bind_counter: int) -> tuple[str, int]:
+def _parse_operator(operator: Operation, binds: dict[str, Any], bind_counter: int) -> tuple[str, int]:
     independent = operator.independent
     column_left = getattr(independent, "name", None)
     if not column_left:
@@ -24,7 +24,7 @@ def _parse_operator(operator: Operator, binds: dict[str, Any], bind_counter: int
     sql_op = "=" if op == "==" else op
 
     # --- SCENARIO A: Stream Bind (pa.Field in dependent = bind from Arrow payload) ---
-    # e.g. Operator(independent=status_col, operator="=", dependent=pa.field("status"))
+    # e.g. Operation(independent=status_col, operator="=", dependent=pa.field("status"))
     # → WHERE STATUS = :status
     if isinstance(dependent, pa.Field):
         return f"{column_left} {sql_op} :{getattr(dependent, 'name')}", bind_counter
@@ -46,9 +46,9 @@ def _parse_operator(operator: Operator, binds: dict[str, Any], bind_counter: int
     return f"{column_left} {sql_op} :{bind_name}", bind_counter
 
 def _parse_operator_group(group: OperatorGroup, binds: dict[str, Any], bind_counter: int) -> tuple[str, int]:
-    if not group.operators: return "", bind_counter
+    if not group.operation_group: return "", bind_counter
     clauses = []
-    for item in group.operators:
+    for item in group.operation_group:
         if isinstance(item, OperatorGroup):
             sub_clause, bind_counter = _parse_operator_group(item, binds, bind_counter)
             if sub_clause: clauses.append(f"({sub_clause})")
@@ -80,8 +80,8 @@ def parse_catalog(catalog: Catalog) -> tuple[str, str, str, str, dict[str, Any]]
         
     where_clause, binds = build_filters(catalog.operator_groups)
     sort_clause = ""
-    if catalog.sort_fields:
-        sorts = [f"{s.column.name} {s.direction}" for s in catalog.sort_fields]
+    if catalog.sort_columns:
+        sorts = [f"{s.column.name} {s.direction}" for s in catalog.sort_columns]
         sort_clause += " ORDER BY " + ", ".join(sorts)
     
     limit_clause = f" FETCH FIRST {catalog.limit} ROWS ONLY" if catalog.limit else ""
