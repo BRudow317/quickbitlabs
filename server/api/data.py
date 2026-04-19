@@ -4,7 +4,7 @@ import pyarrow as pa
 from server.core.federation import resolve_catalog_plugins, FederationPlan
 from server.plugins.PluginModels import Catalog, Entity
 # from server.engine.ArrowFrame import ArrowFrame as af
-
+from server.core.federation import resolve_plans, fanout_plan
 if TYPE_CHECKING:
     from server.plugins.PluginRegistry import PLUGIN
     from server.core.federation import PluginPlan
