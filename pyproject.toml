@@ -8,57 +8,28 @@ version = "0.1.0"
 description = "quickbitlabs"
 requires-python = ">=3.11"
 dependencies = [
-    # web framework
+    # web framework 
     "fastapi",
     "uvicorn",
     "gunicorn",
-    "starlette",
-    "python-multipart",
-    # data / ORM
-    "SQLAlchemy",
-    "sqlmodel",
-    "alembic",
-    "pydantic",
-    "pydantic_core",
-    # auth / security
+    # Data
+    pyarrow
+    duckdb
+    pandas
+    polars
+    # Encryption
     "PyJWT",
-    "argon2-cffi",
+    # "argon2-cffi",
     "cryptography",
     # database drivers
     "oracledb",
-    # http
-    "requests",
-    "urllib3",
-    "certifi",
-    "charset-normalizer",
-    "idna",
-    "h11",
-    # async / runtime
-    "anyio",
-    "greenlet",
-    "click",
-    "colorama",
-    # typing
-    "annotated-types",
-    "typing_extensions",
-    "typing-inspection",
-    # misc runtime
-    "more-itertools",
-    "Mako",
-    "MarkupSafe",
-    "cffi",
-    "pycparser",
-    "packaging",
+    # Misc
     "tzdata",
 ]
 
 [project.optional-dependencies]
 dev = [
-    "pytest",
-    "Pygments",
-    "pluggy",
-    "iniconfig",
-    "annotated-doc",
+    "pytest"
 ]
 
 [tool.setuptools]
