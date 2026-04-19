@@ -5,6 +5,42 @@ export type ClientOptions = {
 };
 
 /**
+ * Body_create_data_api_data_insert_put
+ */
+export type BodyCreateDataApiDataInsertPut = {
+    /**
+     * Catalog Json
+     *
+     * The Catalog AST as a JSON string
+     */
+    catalog_json: string;
+    /**
+     * File
+     *
+     * The Arrow IPC Stream binary
+     */
+    file: Blob | File;
+};
+
+/**
+ * Body_delete_data_api_data__delete
+ */
+export type BodyDeleteDataApiDataDelete = {
+    /**
+     * Catalog Json
+     *
+     * The Catalog AST as a JSON string
+     */
+    catalog_json: string;
+    /**
+     * File
+     *
+     * The Arrow IPC Stream binary
+     */
+    file: Blob | File;
+};
+
+/**
  * Body_login
  */
 export type BodyLogin = {
@@ -35,6 +71,231 @@ export type BodyLogin = {
 };
 
 /**
+ * Body_update_data_api_data__patch
+ */
+export type BodyUpdateDataApiDataPatch = {
+    /**
+     * Catalog Json
+     *
+     * The Catalog AST as a JSON string
+     */
+    catalog_json: string;
+    /**
+     * File
+     *
+     * The Arrow IPC Stream binary
+     */
+    file: Blob | File;
+};
+
+/**
+ * Body_upsert_data_api_data__put
+ */
+export type BodyUpsertDataApiDataPut = {
+    /**
+     * Catalog Json
+     *
+     * The Catalog AST as a JSON string
+     */
+    catalog_json: string;
+    /**
+     * File
+     *
+     * The Arrow IPC Stream binary
+     */
+    file: Blob | File;
+};
+
+/**
+ * Catalog
+ */
+export type CatalogInput = {
+    /**
+     * Name
+     */
+    name?: string | null;
+    /**
+     * Entities
+     */
+    entities?: Array<Entity>;
+    /**
+     * Operator Groups
+     */
+    operator_groups?: Array<OperatorGroupInput>;
+    /**
+     * Joins
+     */
+    joins?: Array<Join>;
+    /**
+     * Sort Columns
+     */
+    sort_columns?: Array<Sort>;
+    /**
+     * Limit
+     */
+    limit?: number | null;
+    /**
+     * Properties
+     */
+    properties?: {
+        [key: string]: unknown;
+    };
+};
+
+/**
+ * Catalog
+ */
+export type CatalogOutput = {
+    /**
+     * Name
+     */
+    name?: string | null;
+    /**
+     * Entities
+     */
+    entities?: Array<Entity>;
+    /**
+     * Operator Groups
+     */
+    operator_groups?: Array<OperatorGroupOutput>;
+    /**
+     * Joins
+     */
+    joins?: Array<Join>;
+    /**
+     * Sort Columns
+     */
+    sort_columns?: Array<Sort>;
+    /**
+     * Limit
+     */
+    limit?: number | null;
+    /**
+     * Properties
+     */
+    properties?: {
+        [key: string]: unknown;
+    };
+};
+
+/**
+ * Column
+ */
+export type Column = {
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Alias
+     */
+    alias?: string | null;
+    locator?: Locator | null;
+    /**
+     * Raw Type
+     */
+    raw_type?: string | null;
+    /**
+     * Arrow Type Id
+     */
+    arrow_type_id?: 'null' | 'bool' | 'int8' | 'int16' | 'int32' | 'int64' | 'uint8' | 'uint16' | 'uint32' | 'uint64' | 'float16' | 'float32' | 'float64' | 'string' | 'utf8' | 'large_string' | 'binary' | 'large_binary' | 'date32' | 'date64' | 'timestamp_s' | 'timestamp_ms' | 'timestamp_us' | 'timestamp_ns' | 'time32_s' | 'time32_ms' | 'time64_us' | 'time64_ns' | 'duration_s' | 'decimal128' | 'decimal256' | 'json' | 'uuid' | 'string_view' | 'list' | 'large_list' | 'struct' | 'map' | 'list_view' | 'large_list_view' | 'dictionary' | null;
+    /**
+     * Primary Key
+     */
+    primary_key?: boolean;
+    /**
+     * Is Unique
+     */
+    is_unique?: boolean;
+    /**
+     * Is Nullable
+     */
+    is_nullable?: boolean;
+    /**
+     * Is Read Only
+     */
+    is_read_only?: boolean;
+    /**
+     * Is Compound Key
+     */
+    is_compound_key?: boolean;
+    /**
+     * Is Foreign Key
+     */
+    is_foreign_key?: boolean;
+    /**
+     * Foreign Key Entity
+     */
+    foreign_key_entity?: string | null;
+    /**
+     * Foreign Key Column
+     */
+    foreign_key_column?: string | null;
+    /**
+     * Max Length
+     */
+    max_length?: number | null;
+    /**
+     * Precision
+     */
+    precision?: number | null;
+    /**
+     * Scale
+     */
+    scale?: number | null;
+    /**
+     * Serialized Null Value
+     */
+    serialized_null_value?: string | null;
+    /**
+     * Default Value
+     */
+    default_value?: unknown;
+    /**
+     * Enum Values
+     */
+    enum_values?: Array<unknown>;
+    /**
+     * Timezone
+     */
+    timezone?: string | null;
+    /**
+     * Properties
+     */
+    properties?: {
+        [key: string]: unknown;
+    };
+};
+
+/**
+ * Entity
+ */
+export type Entity = {
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Alias
+     */
+    alias?: string | null;
+    /**
+     * Namespace
+     */
+    namespace?: string | null;
+    /**
+     * Columns
+     */
+    columns?: Array<Column>;
+    /**
+     * Properties
+     */
+    properties?: {
+        [key: string]: unknown;
+    };
+};
+
+/**
  * HTTPValidationError
  */
 export type HttpValidationError = {
@@ -45,59 +306,169 @@ export type HttpValidationError = {
 };
 
 /**
- * Lead
+ * Join
  */
-export type Lead = {
+export type Join = {
+    left_entity: Entity;
+    left_column: Column;
+    right_entity: Entity;
+    right_column: Column;
     /**
-     * First Name
+     * Join Type
      */
-    first_name: string;
-    /**
-     * Last Name
-     */
-    last_name: string;
-    /**
-     * Email
-     */
-    email: string;
-    /**
-     * Status
-     */
-    status?: string;
-    /**
-     * Id
-     */
-    id?: number | null;
-    /**
-     * Created At
-     */
-    created_at?: string;
-    /**
-     * Owner Id
-     */
-    owner_id?: number | null;
+    join_type?: 'INNER' | 'LEFT' | 'OUTER';
 };
 
 /**
- * LeadCreate
+ * Locator
+ *
+ * The strict contract defining the absolute origin of a scalar
  */
-export type LeadCreate = {
+export type Locator = {
     /**
-     * First Name
+     * Plugin
      */
-    first_name: string;
+    plugin?: 'salesforce' | 'oracle' | null;
     /**
-     * Last Name
+     * Environment
      */
-    last_name: string;
+    environment?: string | null;
     /**
-     * Email
+     * Namespace
      */
-    email: string;
+    namespace?: string | null;
+    /**
+     * Entity Name
+     */
+    entity_name?: string | null;
+    /**
+     * Additional Locators
+     */
+    additional_locators?: {
+        [key: string]: unknown;
+    } | null;
+};
+
+/**
+ * MigrationEntityResult
+ */
+export type MigrationEntityResult = {
+    /**
+     * Entity
+     */
+    entity: string;
+    /**
+     * Target
+     */
+    target?: string | null;
     /**
      * Status
      */
-    status?: string;
+    status: string;
+    /**
+     * Message
+     */
+    message?: string | null;
+};
+
+/**
+ * MigrationRequest
+ */
+export type MigrationRequest = {
+    /**
+     * Source Plugin
+     */
+    source_plugin: string;
+    /**
+     * Target Plugin
+     */
+    target_plugin: string;
+    /**
+     * Entities
+     */
+    entities?: Array<string> | null;
+    /**
+     * Source Catalog Name
+     */
+    source_catalog_name?: string | null;
+    /**
+     * Target Catalog Name
+     */
+    target_catalog_name?: string | null;
+};
+
+/**
+ * MigrationResult
+ */
+export type MigrationResult = {
+    /**
+     * Results
+     */
+    results: Array<MigrationEntityResult>;
+    /**
+     * Succeeded
+     */
+    succeeded: number;
+    /**
+     * Failed
+     */
+    failed: number;
+};
+
+/**
+ * Operation
+ *
+ * The single equal sign '=' is an assignment operator, it is not an equality operator.
+ */
+export type Operation = {
+    independent: Column;
+    /**
+     * Operator
+     */
+    operator: '=' | '==' | '!=' | '>' | '<' | '>=' | '<=' | 'IN' | 'LIKE' | 'IS NULL' | 'IS NOT NULL';
+    /**
+     * Dependent
+     */
+    dependent: string | Array<unknown> | Column | null;
+};
+
+/**
+ * OperatorGroup
+ */
+export type OperatorGroupInput = {
+    /**
+     * Condition
+     */
+    condition: 'AND' | 'OR' | 'NOT';
+    /**
+     * Operation Group
+     */
+    operation_group?: Array<Operation | OperatorGroupInput>;
+};
+
+/**
+ * OperatorGroup
+ */
+export type OperatorGroupOutput = {
+    /**
+     * Condition
+     */
+    condition: 'AND' | 'OR' | 'NOT';
+    /**
+     * Operation Group
+     */
+    operation_group?: Array<Operation | OperatorGroupOutput>;
+};
+
+/**
+ * Sort
+ */
+export type Sort = {
+    column: Column;
+    /**
+     * Direction
+     */
+    direction?: 'ASC' | 'DESC';
 };
 
 /**
@@ -122,20 +493,6 @@ export type UserBase = {
      * Username
      */
     username: string;
-};
-
-/**
- * UserCreate
- */
-export type UserCreate = {
-    /**
-     * Username
-     */
-    username: string;
-    /**
-     * Password
-     */
-    password: string;
 };
 
 /**
@@ -191,31 +548,6 @@ export type LoginResponses = {
 
 export type LoginResponse = LoginResponses[keyof LoginResponses];
 
-export type PostUserData = {
-    body: UserCreate;
-    path?: never;
-    query?: never;
-    url: '/api/users/register';
-};
-
-export type PostUserErrors = {
-    /**
-     * Validation Error
-     */
-    422: HttpValidationError;
-};
-
-export type PostUserError = PostUserErrors[keyof PostUserErrors];
-
-export type PostUserResponses = {
-    /**
-     * Successful Response
-     */
-    200: UserBase;
-};
-
-export type PostUserResponse = PostUserResponses[keyof PostUserResponses];
-
 export type GetUserData = {
     body?: never;
     path?: never;
@@ -232,45 +564,541 @@ export type GetUserResponses = {
 
 export type GetUserResponse = GetUserResponses[keyof GetUserResponses];
 
-export type GetLeadsData = {
-    body?: never;
+export type DeleteCatalogApiCatalogDeleteData = {
+    body: CatalogInput;
     path?: never;
     query?: never;
-    url: '/api/leads/';
+    url: '/api/catalog/';
 };
 
-export type GetLeadsResponses = {
-    /**
-     * Response Get Leads
-     *
-     * Successful Response
-     */
-    200: Array<Lead>;
-};
-
-export type GetLeadsResponse = GetLeadsResponses[keyof GetLeadsResponses];
-
-export type CreateLeadData = {
-    body: LeadCreate;
-    path?: never;
-    query?: never;
-    url: '/api/leads/';
-};
-
-export type CreateLeadErrors = {
+export type DeleteCatalogApiCatalogDeleteErrors = {
     /**
      * Validation Error
      */
     422: HttpValidationError;
 };
 
-export type CreateLeadError = CreateLeadErrors[keyof CreateLeadErrors];
+export type DeleteCatalogApiCatalogDeleteError = DeleteCatalogApiCatalogDeleteErrors[keyof DeleteCatalogApiCatalogDeleteErrors];
 
-export type CreateLeadResponses = {
+export type DeleteCatalogApiCatalogDeleteResponses = {
     /**
      * Successful Response
      */
-    200: Lead;
+    200: unknown;
 };
 
-export type CreateLeadResponse = CreateLeadResponses[keyof CreateLeadResponses];
+export type UpdateCatalogApiCatalogPatchData = {
+    body: CatalogInput;
+    path?: never;
+    query?: never;
+    url: '/api/catalog/';
+};
+
+export type UpdateCatalogApiCatalogPatchErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type UpdateCatalogApiCatalogPatchError = UpdateCatalogApiCatalogPatchErrors[keyof UpdateCatalogApiCatalogPatchErrors];
+
+export type UpdateCatalogApiCatalogPatchResponses = {
+    /**
+     * Successful Response
+     */
+    200: unknown;
+};
+
+export type GetCatalogApiCatalogPostData = {
+    body: CatalogInput;
+    path?: never;
+    query?: never;
+    url: '/api/catalog/';
+};
+
+export type GetCatalogApiCatalogPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GetCatalogApiCatalogPostError = GetCatalogApiCatalogPostErrors[keyof GetCatalogApiCatalogPostErrors];
+
+export type GetCatalogApiCatalogPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: unknown;
+};
+
+export type UpsertCatalogApiCatalogPutData = {
+    body: CatalogInput;
+    path?: never;
+    query?: never;
+    url: '/api/catalog/';
+};
+
+export type UpsertCatalogApiCatalogPutErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type UpsertCatalogApiCatalogPutError = UpsertCatalogApiCatalogPutErrors[keyof UpsertCatalogApiCatalogPutErrors];
+
+export type UpsertCatalogApiCatalogPutResponses = {
+    /**
+     * Successful Response
+     */
+    200: unknown;
+};
+
+export type CreateCatalogApiCatalogInsertPutData = {
+    body: CatalogInput;
+    path?: never;
+    query?: never;
+    url: '/api/catalog/insert';
+};
+
+export type CreateCatalogApiCatalogInsertPutErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CreateCatalogApiCatalogInsertPutError = CreateCatalogApiCatalogInsertPutErrors[keyof CreateCatalogApiCatalogInsertPutErrors];
+
+export type CreateCatalogApiCatalogInsertPutResponses = {
+    /**
+     * Successful Response
+     */
+    200: unknown;
+};
+
+export type DeleteEntityApiEntityDeleteData = {
+    body: CatalogInput;
+    path?: never;
+    query?: never;
+    url: '/api/entity/';
+};
+
+export type DeleteEntityApiEntityDeleteErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type DeleteEntityApiEntityDeleteError = DeleteEntityApiEntityDeleteErrors[keyof DeleteEntityApiEntityDeleteErrors];
+
+export type DeleteEntityApiEntityDeleteResponses = {
+    /**
+     * Successful Response
+     */
+    200: unknown;
+};
+
+export type UpdateEntityApiEntityPatchData = {
+    body: CatalogInput;
+    path?: never;
+    query?: never;
+    url: '/api/entity/';
+};
+
+export type UpdateEntityApiEntityPatchErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type UpdateEntityApiEntityPatchError = UpdateEntityApiEntityPatchErrors[keyof UpdateEntityApiEntityPatchErrors];
+
+export type UpdateEntityApiEntityPatchResponses = {
+    /**
+     * Successful Response
+     */
+    200: unknown;
+};
+
+export type GetEntityApiEntityPostData = {
+    body: CatalogInput;
+    path?: never;
+    query?: never;
+    url: '/api/entity/';
+};
+
+export type GetEntityApiEntityPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GetEntityApiEntityPostError = GetEntityApiEntityPostErrors[keyof GetEntityApiEntityPostErrors];
+
+export type GetEntityApiEntityPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: unknown;
+};
+
+export type UpsertEntityApiEntityPutData = {
+    body: CatalogInput;
+    path?: never;
+    query?: never;
+    url: '/api/entity/';
+};
+
+export type UpsertEntityApiEntityPutErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type UpsertEntityApiEntityPutError = UpsertEntityApiEntityPutErrors[keyof UpsertEntityApiEntityPutErrors];
+
+export type UpsertEntityApiEntityPutResponses = {
+    /**
+     * Successful Response
+     */
+    200: unknown;
+};
+
+export type CreateEntityApiEntityInsertPutData = {
+    body: CatalogInput;
+    path?: never;
+    query?: never;
+    url: '/api/entity/insert';
+};
+
+export type CreateEntityApiEntityInsertPutErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CreateEntityApiEntityInsertPutError = CreateEntityApiEntityInsertPutErrors[keyof CreateEntityApiEntityInsertPutErrors];
+
+export type CreateEntityApiEntityInsertPutResponses = {
+    /**
+     * Successful Response
+     */
+    200: unknown;
+};
+
+export type DeleteColumnApiColumnDeleteData = {
+    body: CatalogInput;
+    path?: never;
+    query?: never;
+    url: '/api/column/';
+};
+
+export type DeleteColumnApiColumnDeleteErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type DeleteColumnApiColumnDeleteError = DeleteColumnApiColumnDeleteErrors[keyof DeleteColumnApiColumnDeleteErrors];
+
+export type DeleteColumnApiColumnDeleteResponses = {
+    /**
+     * Successful Response
+     */
+    200: unknown;
+};
+
+export type UpdateColumnApiColumnPatchData = {
+    body: CatalogInput;
+    path?: never;
+    query?: never;
+    url: '/api/column/';
+};
+
+export type UpdateColumnApiColumnPatchErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type UpdateColumnApiColumnPatchError = UpdateColumnApiColumnPatchErrors[keyof UpdateColumnApiColumnPatchErrors];
+
+export type UpdateColumnApiColumnPatchResponses = {
+    /**
+     * Successful Response
+     */
+    200: unknown;
+};
+
+export type GetColumnApiColumnPostData = {
+    body: CatalogInput;
+    path?: never;
+    query?: never;
+    url: '/api/column/';
+};
+
+export type GetColumnApiColumnPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GetColumnApiColumnPostError = GetColumnApiColumnPostErrors[keyof GetColumnApiColumnPostErrors];
+
+export type GetColumnApiColumnPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: unknown;
+};
+
+export type UpsertColumnApiColumnPutData = {
+    body: CatalogInput;
+    path?: never;
+    query?: never;
+    url: '/api/column/';
+};
+
+export type UpsertColumnApiColumnPutErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type UpsertColumnApiColumnPutError = UpsertColumnApiColumnPutErrors[keyof UpsertColumnApiColumnPutErrors];
+
+export type UpsertColumnApiColumnPutResponses = {
+    /**
+     * Successful Response
+     */
+    200: unknown;
+};
+
+export type CreateColumnApiColumnInsertPutData = {
+    body: CatalogInput;
+    path?: never;
+    query?: never;
+    url: '/api/column/insert';
+};
+
+export type CreateColumnApiColumnInsertPutErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CreateColumnApiColumnInsertPutError = CreateColumnApiColumnInsertPutErrors[keyof CreateColumnApiColumnInsertPutErrors];
+
+export type CreateColumnApiColumnInsertPutResponses = {
+    /**
+     * Successful Response
+     */
+    200: unknown;
+};
+
+export type DeleteDataApiDataDeleteData = {
+    body: BodyDeleteDataApiDataDelete;
+    path?: never;
+    query?: never;
+    url: '/api/data/';
+};
+
+export type DeleteDataApiDataDeleteErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type DeleteDataApiDataDeleteError = DeleteDataApiDataDeleteErrors[keyof DeleteDataApiDataDeleteErrors];
+
+export type DeleteDataApiDataDeleteResponses = {
+    /**
+     * Successful Response
+     */
+    204: void;
+};
+
+export type DeleteDataApiDataDeleteResponse = DeleteDataApiDataDeleteResponses[keyof DeleteDataApiDataDeleteResponses];
+
+export type UpdateDataApiDataPatchData = {
+    body: BodyUpdateDataApiDataPatch;
+    path?: never;
+    query?: never;
+    url: '/api/data/';
+};
+
+export type UpdateDataApiDataPatchErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type UpdateDataApiDataPatchError = UpdateDataApiDataPatchErrors[keyof UpdateDataApiDataPatchErrors];
+
+export type UpdateDataApiDataPatchResponses = {
+    /**
+     * Successful Response
+     */
+    200: unknown;
+};
+
+export type GetDataApiDataPostData = {
+    body: CatalogInput;
+    path?: never;
+    query?: never;
+    url: '/api/data/';
+};
+
+export type GetDataApiDataPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GetDataApiDataPostError = GetDataApiDataPostErrors[keyof GetDataApiDataPostErrors];
+
+export type GetDataApiDataPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: unknown;
+};
+
+export type UpsertDataApiDataPutData = {
+    body: BodyUpsertDataApiDataPut;
+    path?: never;
+    query?: never;
+    url: '/api/data/';
+};
+
+export type UpsertDataApiDataPutErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type UpsertDataApiDataPutError = UpsertDataApiDataPutErrors[keyof UpsertDataApiDataPutErrors];
+
+export type UpsertDataApiDataPutResponses = {
+    /**
+     * Successful Response
+     */
+    200: unknown;
+};
+
+export type CreateDataApiDataInsertPutData = {
+    body: BodyCreateDataApiDataInsertPut;
+    path?: never;
+    query?: never;
+    url: '/api/data/insert';
+};
+
+export type CreateDataApiDataInsertPutErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CreateDataApiDataInsertPutError = CreateDataApiDataInsertPutErrors[keyof CreateDataApiDataInsertPutErrors];
+
+export type CreateDataApiDataInsertPutResponses = {
+    /**
+     * Successful Response
+     */
+    200: unknown;
+};
+
+export type GetSessionData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/session/';
+};
+
+export type GetSessionResponses = {
+    /**
+     * Successful Response
+     */
+    200: CatalogOutput;
+};
+
+export type GetSessionResponse = GetSessionResponses[keyof GetSessionResponses];
+
+export type ListSystemsData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/session/systems';
+};
+
+export type ListSystemsResponses = {
+    /**
+     * Response List Systems
+     *
+     * Successful Response
+     */
+    200: Array<string>;
+};
+
+export type ListSystemsResponse = ListSystemsResponses[keyof ListSystemsResponses];
+
+export type ListMigrationPluginsData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/migration/plugins';
+};
+
+export type ListMigrationPluginsResponses = {
+    /**
+     * Response List Migration Plugins
+     *
+     * Successful Response
+     */
+    200: Array<string>;
+};
+
+export type ListMigrationPluginsResponse = ListMigrationPluginsResponses[keyof ListMigrationPluginsResponses];
+
+export type RunMigrationData = {
+    body: MigrationRequest;
+    path?: never;
+    query?: never;
+    url: '/api/migration/run';
+};
+
+export type RunMigrationErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type RunMigrationError = RunMigrationErrors[keyof RunMigrationErrors];
+
+export type RunMigrationResponses = {
+    /**
+     * Successful Response
+     */
+    200: MigrationResult;
+};
+
+export type RunMigrationResponse = RunMigrationResponses[keyof RunMigrationResponses];

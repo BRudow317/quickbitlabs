@@ -6,6 +6,8 @@ import pyarrow as pa
 from pyarrow import ipc
 from fastapi import UploadFile
 
+from server.plugins.PluginProtocol import Plugin
+from typing import TYPE_CHECKING, Any, TypedDict
 if TYPE_CHECKING:
     from pyarrow.ipc import (
         RecordBatchFileWriter, 
@@ -13,8 +15,7 @@ if TYPE_CHECKING:
         RecordBatchFileReader,
         RecordBatchStreamReader,
     )
-    from server.plugins.PluginRegistry import PLUGIN
-    
+    from server.plugins.PluginRegistry import PLUGIN #, get_plugin
 
 # https://arrow.apache.org/docs/python/api.html
 # https://arrow.apache.org/docs/python/api/datatypes.html
@@ -75,15 +76,15 @@ ARROW_TYPE: dict[arrow_type_literal, pa.DataType] = {
     "decimal256": pa.decimal256(76, 18),
 
     # Complex Types
-    "json": pa.json_(),
-    "uuid": pa.uuid(),
-    "list": pa.list_(),
-    "large_list": pa.large_list(),
-    "list_view": pa.list_view(),
-    "large_list_view": pa.large_list_view(),
-    "dictionary": pa.dictionary(),
-    "struct": pa.struct(),
-    "map": pa.map_(),
+    # "json": pa.json_(),
+    # "uuid": pa.uuid(),
+    # "list": pa.list_(),
+    # "large_list": pa.large_list(),
+    # "list_view": pa.list_view(),
+    # "large_list_view": pa.large_list_view(),
+    # "dictionary": pa.dictionary(),
+    # "struct": pa.struct(),
+    # "map": pa.map_(),
 }
 
 class Locator(BaseModel):
@@ -183,19 +184,34 @@ class OperatorGroup(BaseModel):
     condition: Literal["AND", "OR", "NOT"]
     operation_group: list[Operation | OperatorGroup] = Field(default_factory=list)
 
+class PluginPlan(TypedDict):
+    plugin: Plugin
+    catalog: Catalog
+
+class FederationPlan(TypedDict):
+    plans: dict[str, PluginPlan] # per-system pushdown
+    cross_system_ops: list[OperatorGroup] # post-join filters for DuckDB
+    output_catalog: Catalog # master catalog = final result shape
+
+def _collect_plugins_from_group(group: OperatorGroup) -> set[str]:
+    """Recursively collect all plugin names referenced in an OperatorGroup tree."""
+    plugins: set[str] = set()
+    for op in group.operation_group:
+        if isinstance(op, OperatorGroup):
+            plugins |= _collect_plugins_from_group(op)
+        elif op.independent.locator and op.independent.locator.plugin:
+            plugins.add(op.independent.locator.plugin)
+    return plugins
+
 class Catalog(BaseModel):
     name: str | None = None
+    source_type: PLUGIN | Literal["federation", "frontend"] | None = None
     entities: list[Entity] = Field(default_factory=list)
     operator_groups: list[OperatorGroup] = Field(default_factory=list)
     joins: list[Join] = Field(default_factory=list)
     sort_columns: list[Sort] = Field(default_factory=list)
     limit: int | None = None
     properties: dict[str, Any] = Field(default_factory=dict)
-
-    @property
-    def entity_map(self) -> dict[str, Entity]:
-        return {e.name: e for e in self.entities}
-    
     
     @property
     def arrow_schema(self) -> pa.Schema:        
@@ -298,7 +314,52 @@ class Catalog(BaseModel):
             for batch in stream:
                 writer.write_batch(batch)
         return sink.getvalue().to_pybytes()
-    
+
+    @property
+    def federate(self) -> list[Catalog]:
+        """
+        Divides a federated master Catalog into system-specific child Catalogs.
+        Each child carries only its own entities, predicates, and sorts.
+        Cross-system operator groups remain on the master for DuckDB to resolve.
+        Returns a single-item list if all entities share one system.
+        """
+        if not self.entities:
+            raise ValueError("Catalog must contain at least one entity to federate.")
+
+        # 1. Group entities by plugin
+        system_entity_map: dict[str, list[Entity]] = {}
+        for entity in self.entities:
+            locator = entity.locator
+            if not locator or not locator.plugin:
+                raise ValueError(f"Entity '{entity.name}' is missing a plugin locator.")
+            system_entity_map.setdefault(locator.plugin, []).append(entity)
+
+        # 2. Classify operator groups
+        single_system_ops: dict[str, list[OperatorGroup]] = {}
+        for group in self.operator_groups:
+            systems = _collect_plugins_from_group(group)
+            if len(systems) == 1:
+                single_system_ops.setdefault(systems.pop(), []).append(group)
+            # cross-system groups intentionally left on master catalog
+
+        # 3. Build child catalogs
+        children: list[Catalog] = []
+        for system_name, entities in system_entity_map.items():
+            child = self.model_copy(update={
+                "source_type": system_name,
+                "entities": entities,
+                "joins": [],        # DuckDB handles joins
+                "sort_columns": [
+                    s for s in self.sort_columns
+                    if s.column.locator and s.column.locator.plugin == system_name
+                ],
+                "operator_groups": single_system_ops.get(system_name, []),
+                "limit": None,      # applied post-federation only
+            })
+            children.append(child)
+
+        return children
+
     @staticmethod
     def ipc_new_stream(sink, schema, *, options=None) -> RecordBatchStreamWriter:
         return ipc.new_stream(

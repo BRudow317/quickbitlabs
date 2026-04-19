@@ -20,6 +20,7 @@
     "@tanstack/react-form": "^1.28.4",
     "@tanstack/react-query": "^5.90.21",
     "@tanstack/react-table": "^8.21.3",
+    "apache-arrow": "^18.0.0",
     "axios": "^1.13.6",
     "clsx": "^2.1.1",
     "lucide-react": "^0.577.0",

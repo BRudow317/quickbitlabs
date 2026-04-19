@@ -3,7 +3,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
     PROJECT_NAME: str = os.getenv("PROJECT_NAME", "server")
-    DATABASE_URL: str = os.getenv("DATABASE_URL", "sqlite:///./database/pyscript.db")
+    
     JWT_SECRET: str = os.getenv("JWT_SECRET", "CHANGE_ME_FOR_PRODUCTION")
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30

@@ -28,7 +28,7 @@ export function HomePage() {
           <Card size="3">
             <Flex direction="column" gap="3" align="center">
               <Heading>Welcome back, {user.username}!</Heading>
-              <Button onClick={() => navigate('/table')}>Go to Leads Table</Button>
+              <Button onClick={() => navigate('/datamart')}>Go to Query</Button>
             </Flex>
           </Card>
         </Section>
@@ -48,7 +48,7 @@ export function HomePage() {
     const result = await login({ username, password });
 
     if (result.success) {
-      navigate('/table'); // Redirect on success
+      navigate('/datamart');
     } else {
       setError(result.error || 'Login failed');
     }

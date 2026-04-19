@@ -1,17 +1,28 @@
 Q:/quickbitlabs/server/
 ├── api/
+│   ├── __init__.py
 │   ├── auth.py
+│   ├── catalog.py
+│   ├── column.py
+│   ├── data.py
+│   ├── entity.py
 │   ├── leads.py
+│   ├── migration.py
+│   ├── session.py
 │   └── users.py
 ├── configs/
 │   ├── __init__.py
 │   ├── db.py
 │   └── settings.py
 ├── core/
+│   ├── __init__.py
+│   ├── ArrowFrame.py
+│   ├── DataFrame.py
+│   ├── federation.py
 │   ├── jwt.py
 │   └── security.py
-├── engine/
 ├── models/
+│   ├── __init__.py
 │   ├── AuthModels.py
 │   ├── lead.py
 │   └── user.py
@@ -19,7 +30,6 @@ Q:/quickbitlabs/server/
 │   ├── oracle/
 │   │   ├── tests/
 │   │   ├── __init__.py
-│   │   ├── arrow_array.py
 │   │   ├── LICENSE
 │   │   ├── Oracle.py
 │   │   ├── OracleArrowFrame.py
@@ -28,8 +38,7 @@ Q:/quickbitlabs/server/
 │   │   ├── OracleEngine.py
 │   │   ├── OracleServices.py
 │   │   ├── OracleTools.py
-│   │   ├── OracleTypeMap.py
-│   │   └── README.md
+│   │   └── OracleTypeMap.py
 │   ├── sf/
 │   │   ├── engines/
 │   │   │   ├── SfAuth.py
@@ -52,25 +61,19 @@ Q:/quickbitlabs/server/
 │   │   │   └── csv_utils.py
 │   │   ├── __init__.py
 │   │   ├── LICENSE
-│   │   ├── ReadMe Sf Plugin.md
 │   │   ├── repl.py
 │   │   └── Salesforce.py
-│   ├── utils/
-│   │   ├── filter_null_bytes.py
-│   │   └── install_package.py
-│   ├── ArrowFrame.py
-│   ├── CsvFrame.py
-│   ├── DataFrame.py
 │   ├── LICENSE
-│   ├── ParquetFrame.py
 │   ├── PluginModels.py
 │   ├── PluginProtocol.py
 │   ├── PluginRegistry.py
-│   ├── PluginResponse.py
-│   └── PolarsFrame.py
+│   └── PluginResponse.py
 ├── services/
 │   ├── __init__.py
-│   └── FullMigration.py
+│   ├── FullMigration.py
+│   ├── new_session.py
+│   ├── SfToSfMigration.py
+│   └── sync_systems.py
 ├── __init__.py
 ├── ProjectTree.md
 ├── README.md

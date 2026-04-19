@@ -1,20 +1,33 @@
 from sqlmodel import create_engine, Session, SQLModel
+from sqlalchemy.pool import NullPool, QueuePool
+from sqlalchemy import event
 from configs.settings import settings
+from server.plugins.oracle.OracleClient import OracleClient
+import logging
 
-# sqlite:///./database/pyscript.db
-# check_same_thread=False is mandatory for SQLite + FastAPI
+logger = logging.getLogger(__name__)
+
+# Singleton OracleClient instance (manages environment variables & connection lifecycle)
+oracle_client = OracleClient()
+
+# SQLAlchemy engine using OracleClient as the connection source
+# Uses a custom connection creator that delegates to OracleClient
 engine = create_engine(
-    settings.DATABASE_URL, 
-    echo=settings.DEBUG, 
-    connect_args={"check_same_thread": False} if "sqlite" in settings.DATABASE_URL else {}
+    "oracle+oracledb://",  # Minimal URL; actual connection handled by creator
+    echo=settings.DEBUG,
+    creator=lambda: oracle_client.get_con(),  # Delegate all connections to OracleClient
+    poolclass=NullPool,  # OracleClient handles its own connection lifecycle
 )
 
 def init_db():
+    """Initialize database: create all tables from SQLModel models."""
     # Important: Import models here so SQLModel knows about them
     from models.user import User
     from models.lead import Lead
+    # Note: PluginModels are not SQL-backed; they're in-memory Pydantic models
     SQLModel.metadata.create_all(engine)
 
 def get_session():
+    """Dependency for FastAPI endpoints to get a database session."""
     with Session(engine) as session:
         yield session

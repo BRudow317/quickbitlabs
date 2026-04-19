@@ -9,7 +9,10 @@ if TYPE_CHECKING:
 import logging
 logger = logging.getLogger(__name__)
 
-PLUGIN = Literal['salesforce', 'oracle']
+PLUGIN = Literal[
+    'salesforce', 
+    'oracle',
+    ]
 
 # Maps plugin facade name -> (module_path, class_name)
 PLUGIN_REGISTRY: dict[PLUGIN, tuple[str, str]] = {

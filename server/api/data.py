@@ -1,162 +1,132 @@
-from fastapi import APIRouter, HTTPException, Response, UploadFile, File, Form, Body, Query
-from typing import Annotated, cast, TYPE_CHECKING
+from fastapi import APIRouter, HTTPException, Response, UploadFile, File, Form, Body
+from typing import Annotated, cast
 import pyarrow as pa
-from server.core.federation import resolve_catalog_plugins, FederationPlan
-from server.plugins.PluginModels import Catalog, Entity
-# from server.engine.ArrowFrame import ArrowFrame as af
-from server.core.federation import resolve_plans, fanout_plan
-if TYPE_CHECKING:
-    from server.plugins.PluginRegistry import PLUGIN
-    from server.core.federation import PluginPlan
-    from server.plugins.PluginModels import ArrowReader
+from server.plugins.PluginModels import Catalog, ArrowReader
+from server.plugins.PluginRegistry import get_plugin, PLUGIN
 
 router = APIRouter(prefix="/api/data", tags=["Federated Data Execution"])
 
+
+def _single_child(catalog: Catalog):
+    """Guard for write operations — data writes require exactly one target system."""
+    children: list[Catalog] = catalog.federate
+    if not children:
+        raise HTTPException(status_code=400, detail="Could not resolve any plugins from the provided Catalog.")
+    if len(children) != 1:
+        raise HTTPException(status_code=400, detail="Write operations require a single target system.")
+    child = children[0]
+    if not child.source_type:
+        raise HTTPException(status_code=500, detail="Child catalog is missing source_type.")
+    return child, get_plugin(cast(PLUGIN, child.source_type))
+
+
 # ---------------------------------------
-# READ (Mapping to get_data)
+# READ
 # ---------------------------------------
 @router.post("/", summary="Fetch data via Catalog AST")
 def get_data(catalog: Catalog = Body(...)):
-    """
-    Retrieves a data request from a catalog.
-    Accepts: application/json (Catalog)
-    Returns: application/vnd.apache.arrow.stream (Binary PyArrow Stream)
-    """
-    federation: FederationPlan = resolve_catalog_plugins(catalog)
-    plans: dict[str, PluginPlan] = federation["plans"]
+    children: list[Catalog] = catalog.federate
 
-    if not plans:
+    if not children:
         raise HTTPException(status_code=400, detail="Could not resolve any plugins from the provided Catalog.")
 
     # ---------------------------------------------------------
     # PATH A: Single System (Bypass DuckDB for speed)
     # ---------------------------------------------------------
-    if len(plans) == 1:
-        plan: PluginPlan = next(iter(plans.values()))
-        resp = plan["plugin"].get_data(plan["catalog"])
+    if len(children) == 1:
+        child = children[0]
+        if not child.source_type:
+            raise HTTPException(status_code=500, detail="Child catalog is missing source_type.")
+        plugin = get_plugin(cast(PLUGIN, child.source_type))
+        resp = plugin.get_data(child)
         if not resp.ok:
             raise HTTPException(status_code=500, detail=resp.message)
-
-        arrow_bytes = Catalog.serialize_arrow_stream(resp.data)
-        return Response(content=arrow_bytes, media_type="application/vnd.apache.arrow.stream")
+        return Response(
+            content=Catalog.serialize_arrow_stream(resp.data),
+            media_type="application/vnd.apache.arrow.stream"
+        )
 
     # ---------------------------------------------------------
     # PATH B: Multi-System (Federated DuckDB Join)
     # ---------------------------------------------------------
-    streams: dict[str, pa.RecordBatchReader] = {}
-    for system_name, plan in plans.items():
-        resp = plan["plugin"].get_data(plan["catalog"])
+    streams: dict[str, ArrowReader] = {}
+    for child in children:
+        if not child.source_type:
+            raise HTTPException(status_code=500, detail="Child catalog is missing source_type.")
+        plugin = get_plugin(cast(PLUGIN, child.source_type))
+        resp = plugin.get_data(child)
         if not resp.ok:
-            raise HTTPException(status_code=500, detail=f"Plugin '{system_name}' failed: {resp.message}")
-        streams[system_name] = resp.data
+            raise HTTPException(status_code=500, detail=f"Plugin '{child.source_type}' failed: {resp.message}")
+        streams[child.source_type] = resp.data
 
-    # federated_stream = duckdb_orchestrator(federation, streams)
-    # arrow_bytes = Catalog.serialize_arrow_stream(federated_stream)
-    # return Response(content=arrow_bytes, media_type="application/vnd.apache.arrow.stream")
+    # federated_stream = duckdb_orchestrator(catalog, streams)
+    # return Response(content=Catalog.serialize_arrow_stream(federated_stream), ...)
     raise HTTPException(status_code=501, detail="Federated joins are not yet implemented.")
 
+
+# ---------------------------------------
+# INSERT
+# ---------------------------------------
 @router.put("/insert", summary="Insert new data")
 def create_data(
     catalog_json: Annotated[str, Form(description="The Catalog AST as a JSON string")],
     file: Annotated[UploadFile, File(description="The Arrow IPC Stream binary")]
 ):
-    """
-    Accepts a multipart form containing the routing instructions (catalog) and the data to insert.
-    Catalog defines intent and routing. File contains the Arrow IPC stream to write.
-    """
-    catalog = Catalog.model_validate_json(catalog_json)
-    federation: FederationPlan = resolve_catalog_plugins(catalog)
-    plans: dict[str, PluginPlan] = federation["plans"]
-
-    if not plans:
-        raise HTTPException(status_code=400, detail="Could not resolve any plugins from the provided Catalog.")
-    if len(plans) != 1:
-        raise HTTPException(status_code=400, detail="Write operations require a single target system.")
-
-    plan: PluginPlan = next(iter(plans.values()))
+    child, plugin = _single_child(Catalog.model_validate_json(catalog_json))
     arrow_reader: ArrowReader = Catalog.deserialize_arrow_stream(file)
 
-    resp = plan["plugin"].create_data(plan["catalog"], arrow_reader)
+    resp = plugin.create_data(child, arrow_reader)
     if not resp.ok:
         raise HTTPException(status_code=500, detail=resp.message)
-
-    return Response(
-        content=Catalog.serialize_arrow_stream(resp.data),
-        media_type="application/vnd.apache.arrow.stream"
-    )
-def _resolve_single_system_plan(catalog: Catalog) -> PluginPlan:
-    """Shared guard for write operations that require exactly one target system."""
-    federation: FederationPlan = resolve_catalog_plugins(catalog)
-    plans: dict[str, PluginPlan] = federation["plans"]
-
-    if not plans:
-        raise HTTPException(status_code=400, detail="Could not resolve any plugins from the provided Catalog.")
-    if len(plans) != 1:
-        raise HTTPException(status_code=400, detail="Write operations require a single target system.")
-
-    return next(iter(plans.values()))
+    return Response(content=Catalog.serialize_arrow_stream(resp.data), media_type="application/vnd.apache.arrow.stream")
 
 
 # ---------------------------------------
-# UPDATE (Mapping to update_data / PATCH)
-# ---------------------------------------
-@router.patch("/", summary="Update existing data")
-def update_data(
-    catalog_json: Annotated[str, Form(description="The Catalog AST as a JSON string")],
-    file: Annotated[UploadFile, File(description="The Arrow IPC Stream binary")]
-):
-    catalog = Catalog.model_validate_json(catalog_json)
-    plan: PluginPlan = _resolve_single_system_plan(catalog)
-    arrow_reader: ArrowReader = Catalog.deserialize_arrow_stream(file)
-
-    resp = plan["plugin"].update_data(plan["catalog"], arrow_reader)
-    if not resp.ok:
-        raise HTTPException(status_code=500, detail=resp.message)
-
-    return Response(
-        content=Catalog.serialize_arrow_stream(resp.data),
-        media_type="application/vnd.apache.arrow.stream"
-    )
-
-
-# ---------------------------------------
-# UPSERT (Mapping to upsert_data)
-# TODO: resolve route conflict with update_data - consider /upsert path or separate router
+# UPSERT
 # ---------------------------------------
 @router.put("/", summary="Upsert data")
 def upsert_data(
     catalog_json: Annotated[str, Form(description="The Catalog AST as a JSON string")],
     file: Annotated[UploadFile, File(description="The Arrow IPC Stream binary")]
 ):
-    catalog = Catalog.model_validate_json(catalog_json)
-    plan: PluginPlan = _resolve_single_system_plan(catalog)
+    child, plugin = _single_child(Catalog.model_validate_json(catalog_json))
     arrow_reader: ArrowReader = Catalog.deserialize_arrow_stream(file)
 
-    resp = plan["plugin"].upsert_data(plan["catalog"], arrow_reader)
+    resp = plugin.upsert_data(child, arrow_reader)
     if not resp.ok:
         raise HTTPException(status_code=500, detail=resp.message)
-
-    return Response(
-        content=Catalog.serialize_arrow_stream(resp.data),
-        media_type="application/vnd.apache.arrow.stream"
-    )
+    return Response(content=Catalog.serialize_arrow_stream(resp.data), media_type="application/vnd.apache.arrow.stream")
 
 
 # ---------------------------------------
-# DELETE (Mapping to delete_data)
+# UPDATE
+# ---------------------------------------
+@router.patch("/", summary="Update existing data")
+def update_data(
+    catalog_json: Annotated[str, Form(description="The Catalog AST as a JSON string")],
+    file: Annotated[UploadFile, File(description="The Arrow IPC Stream binary")]
+):
+    child, plugin = _single_child(Catalog.model_validate_json(catalog_json))
+    arrow_reader: ArrowReader = Catalog.deserialize_arrow_stream(file)
+
+    resp = plugin.update_data(child, arrow_reader)
+    if not resp.ok:
+        raise HTTPException(status_code=500, detail=resp.message)
+    return Response(content=Catalog.serialize_arrow_stream(resp.data), media_type="application/vnd.apache.arrow.stream")
+
+
+# ---------------------------------------
+# DELETE
 # ---------------------------------------
 @router.delete("/", summary="Delete data", status_code=204)
 def delete_data(
     catalog_json: Annotated[str, Form(description="The Catalog AST as a JSON string")],
     file: Annotated[UploadFile, File(description="The Arrow IPC Stream binary")]
 ):
-    """Deletes data matching the catalog predicates. Returns 204 No Content on success."""
-    catalog = Catalog.model_validate_json(catalog_json)
-    plan: PluginPlan = _resolve_single_system_plan(catalog)
+    child, plugin = _single_child(Catalog.model_validate_json(catalog_json))
     arrow_reader: ArrowReader = Catalog.deserialize_arrow_stream(file)
 
-    resp = plan["plugin"].delete_data(plan["catalog"], arrow_reader)
+    resp = plugin.delete_data(child, arrow_reader)
     if not resp.ok:
         raise HTTPException(status_code=500, detail=resp.message)
-
     return Response(status_code=204)

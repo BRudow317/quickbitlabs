@@ -1,7 +1,7 @@
 {
   "folders": [
     {"path": ".", "default": true},
-    {"path": "Q/.secrets"},
+    {"path": "Q:/.secrets"},
     {"path": "Q:/scripts"},
     {"path": "C:\\Users\\rmedi\\OneDrive\\Documents\\PowerShell"},
     {"path": "Q:/db"},
