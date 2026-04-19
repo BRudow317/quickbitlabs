@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "quickbitlabs"
 version = "0.1.0"
-description = "olympus"
+description = "quickbitlabs"
 requires-python = ">=3.11"
 dependencies = [
     # web framework

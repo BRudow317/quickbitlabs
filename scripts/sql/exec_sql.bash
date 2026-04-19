@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+
 set -euo pipefail
 
 read -r -p "Enter SQL file name (e.g., script.sql): " SQLFILE

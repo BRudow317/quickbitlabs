@@ -12,15 +12,15 @@ import pyarrow as pa
 
 from server.plugins.PluginRegistry import get_plugin
 from server.plugins.PluginProtocol import Plugin
-from server.plugins.PluginModels import ArrowStream, Catalog, Entity, Column
+from server.plugins.PluginModels import ArrowReader, Catalog, Entity, Column
 from server.plugins.PluginResponse import PluginResponse
 
 import logging
 logger = logging.getLogger(__name__)
 
 
-def _rename_stream(stream: ArrowStream, name_map: dict[str, str]) -> ArrowStream:
-    """Rename columns in an ArrowStream according to a name mapping.
+def _rename_stream(stream: ArrowReader, name_map: dict[str, str]) -> ArrowReader:
+    """Rename columns in an ArrowReader according to a name mapping.
     Keys not in the map are kept as-is."""
     schema = stream.schema
     if not schema:
@@ -124,7 +124,7 @@ class FullMigration:
                     continue  # skip unmappable columns (compound types)
 
                 oracle_col = to_oracle_snake(col.name)
-                # get_data ArrowStream uses bare column names ("Name", not "Account_Name")
+                # get_data ArrowReader uses bare column names ("Name", not "Account_Name")
                 name_map[col.name] = oracle_col
 
                 target_columns.append(col.model_copy(update={
@@ -183,7 +183,7 @@ class FullMigration:
                     results.append({"entity": name, "status": "error", "message": msg})
                     continue
 
-                stream: ArrowStream = resp.data
+                stream: ArrowReader = resp.data
 
                 # Rename stream columns: "Account_Id" -> "ID"
                 name_map = self._column_maps.get(name, {})

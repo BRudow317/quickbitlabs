@@ -8,9 +8,9 @@ QuickBitLabs is a data integration platform designed to solve the **N x M integr
 
 The core vision is intended to be a system agnostic data & metadata engine built to bridge relationally complex systems like Salesforce and Oracle. This includes self discovery of metadata, data federation, agnostic querying, and orm style metadata management. 
 
-- ### ArrowStream:
+- ### ArrowReader:
   - typed from pyarrow.RecordBatchReader
-  - A lazy-loaded, memory-efficient stream of data batches. It is the "Package" that carries the actual data payload. The ArrowStream is designed to be consumed in a streaming fashion, allowing for efficient processing of large datasets without loading everything into memory at once.
+  - A lazy-loaded, memory-efficient stream of data batches. It is the "Package" that carries the actual data payload. The ArrowReader is designed to be consumed in a streaming fashion, allowing for efficient processing of large datasets without loading everything into memory at once.
 
 - ### Catalog: 
   - A Pydantic metadata model. It defines the "Intent" (Request) and the "Reality" (Result). It is decoupled from the live data stream to ensure serializability. The Catalog is the "Envelope" that carries metadata and context, while the ArrowFrame is the "Package" that carries the actual data. This separation allows for maximum flexibility and system-agnosticism.
@@ -28,7 +28,7 @@ The core vision is intended to be a system agnostic data & metadata engine built
 
 ## Legacy Types:
 ### Records:
-  - An older format represented as `Iterable[dict]`. It is less efficient and more memory-intensive than the ArrowStream. The Records format is being phased out in favor of the ArrowStream for all data operations. However I'm keeping it and it's type mappings to native python around for now.
+  - An older format represented as `Iterable[dict]`. It is less efficient and more memory-intensive than the ArrowReader. The Records format is being phased out in favor of the ArrowReader for all data operations. However I'm keeping it and it's type mappings to native python around for now.
 
 ## Key Project Files
 
@@ -101,7 +101,7 @@ Previously data transmission occured between plugins through the use of a shared
 
 Current implementations include:
 - `Records` (Iterable[dict]): The deprecated universal boundary for data transmission.
-- `ArrowStream` (Iterator[pa.RecordBatch]): A more efficient boundary for large data transfers, especially from databases or APIs that can natively produce Arrow RecordBatches. This allows for zero-copy data transmission and efficient in-memory processing.
+- `ArrowReader` (Iterator[pa.RecordBatch]): A more efficient boundary for large data transfers, especially from databases or APIs that can natively produce Arrow RecordBatches. This allows for zero-copy data transmission and efficient in-memory processing.
 
 ## The Plugin Ecosystem (The Secret Sauce)
 

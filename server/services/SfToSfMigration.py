@@ -10,7 +10,7 @@ from typing import Any
 
 from server.plugins.PluginRegistry import get_plugin
 from server.plugins.PluginProtocol import Plugin
-from server.plugins.PluginModels import ArrowStream, Catalog, Entity, Column
+from server.plugins.PluginModels import ArrowReader, Catalog, Entity, Column
 from server.plugins.PluginResponse import PluginResponse
 
 import logging
@@ -195,7 +195,7 @@ class SfToSfMigration:
 
             try:
                 src_sub = self.source_catalog.model_copy(update={"entities": [src_entity]})
-                resp: PluginResponse[ArrowStream] = self.source.get_data(src_sub)
+                resp: PluginResponse[ArrowReader] = self.source.get_data(src_sub)
                 if not resp.ok or resp.data is None:
                     msg = f"get_data failed for {name}: [{resp.code}] {resp.message}"
                     logger.error(f"    {msg}")

@@ -51,7 +51,6 @@ ledger_cols = [
 
 ledger_df = pd.DataFrame(array_data, columns=ledger_cols)
 
-
 # Join customers to their cars
 master_df = pd.merge(customers_df, cars_df, left_on='id', right_on='owner_id')
 
