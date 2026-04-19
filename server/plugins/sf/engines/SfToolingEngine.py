@@ -2,8 +2,8 @@ from __future__ import annotations
 import base64, json
 from datetime import datetime
 from pathlib import Path
-from typing import Any, AsyncIterator
-from urllib.parse import quote_plus
+from typing import Any
+# from urllib.parse import quote_plus
 import httpx
 from server.plugins.sf.models.SfExceptions import SfException
 from server.plugins.sf.models.SfModels import SKIP_SUFFIXES, SKIP_NAMES, SF_BASE_URL, API_VERSION

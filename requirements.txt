@@ -1,11 +1,17 @@
 annotated-doc==0.0.4
 annotated-types==0.7.0
 anyio==4.13.0
+certifi==2026.2.25
 cffi==2.0.0
+click==8.3.2
+colorama==0.4.6
 cryptography==46.0.7
 duckdb==1.5.2
 fastapi==0.136.0
 gunicorn==25.3.0
+h11==0.16.0
+httpcore==1.0.9
+httpx==0.28.1
 idna==3.11
 oracledb==3.4.2
 packaging==26.1
@@ -19,3 +25,4 @@ starlette==1.0.0
 typing-inspection==0.4.2
 typing_extensions==4.15.0
 tzdata==2026.1
+uvicorn==0.44.0

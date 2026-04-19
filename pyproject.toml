@@ -13,13 +13,13 @@ dependencies = [
     "uvicorn",
     "gunicorn",
     # Data
-    pyarrow
-    duckdb
-    pandas
-    polars
+    "pyarrow",
+    "duckdb",
+    "pandas",
+    "polars",
     # Encryption
     "PyJWT",
-    # "argon2-cffi",
+    "argon2-cffi",
     "cryptography",
     # database drivers
     "oracledb",
@@ -28,9 +28,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = [
-    "pytest"
-]
+dev = ["pytest"]
 
 [tool.setuptools]
 packages = ["quickbitlabs"]
