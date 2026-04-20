@@ -163,7 +163,3 @@ def map_oracle_to_python(raw_type: str, scale: int | None = None) -> PythonTypes
     if raw_upper in ("BLOB", "RAW", "LONG RAW", "BFILE"): return "byte"
     if raw_upper == "JSON": return "json"
     return "string"
-
-"""
-
-"""
