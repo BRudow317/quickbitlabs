@@ -127,7 +127,7 @@ class OracleArrowFrame:
     def __init__(self, client: OracleClient):
         self._client: OracleClient = client
        
-    def arrow_stream(
+    def arrow_reader(
         self,
         statement: str,
         parameters: list | tuple | dict | None = None,

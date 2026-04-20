@@ -1,5 +1,5 @@
 """
-CatalogPublisher service: AST -> Oracle Metadata Registry.
+CatalogPublisher service: AST -> Oracle Metadata Registry via Plugin Protocol.
 
 python Q:/scripts/boot.py -v -l ./.logs --env homelab --config Q:/.secrets/.env --exec ./publish.py
 """
@@ -7,178 +7,97 @@ from __future__ import annotations
 
 import logging
 import uuid
-from typing import Any, Literal
+import json
+from typing import Any, cast
 
-import oracledb
-
-from server.plugins.PluginModels import Catalog
+from server.plugins.PluginModels import Catalog, Entity, Column, Locator
+from server.plugins.PluginRegistry import get_plugin, PLUGIN
 
 logger = logging.getLogger(__name__)
 
 class CatalogPublisher:
-    """
-    Orchestrates the registration and update of a Catalog AST into the 
-    Oracle Unified Registry database.
+    """Orchestrates registering a 1:1 mapped Catalog AST into the central registry."""
     
-    Input:
-    ---
-        - catalog: The Pydantic Catalog object to register.
-        - name: The canonical name of the catalog (e.g., 'Q3 Risk Summary').
-        - namespace: The grouping folder (e.g., 'salesforce', 'actuary_marts').
-        - scope: Authorization level ('SYSTEM', 'TEAM', 'USER').
-        - is_materialized: Boolean flag indicating if this relies on a physical Oracle view.
-        - oracle_view_name: The name of the Oracle MV (Required if is_materialized=True).
-        - owner_user_id: The UUID of the user who owns this (if USER scope).
-        - owner_team_id: The UUID of the team who owns this (if TEAM scope).
-        - db_kwargs: Dictionary containing Oracle connection credentials.
-    """
-    catalog: Catalog
-    name: str
-    namespace: str
-    scope: Literal["SYSTEM", "TEAM", "USER"]
-    is_materialized: int
-    view_name: str | None
-    owner_user_id: str | None
-    owner_team_id: str | None
-    db_kwargs: dict[str, Any]
-
     def __init__(
         self,
-        catalog: Catalog,
-        name: str,
-        namespace: str,
-        scope: Literal["SYSTEM", "TEAM", "USER"] = "SYSTEM",
-        is_materialized: bool = False,
-        view_name: str | None = None,
-        owner_user_id: str | None = None,
-        owner_team_id: str | None = None,
-        db_kwargs: dict[str, Any] | None = None
+        target_catalog: Catalog,
+        registry_plugin_name: str = "oracle" # The plugin that houses the registry
     ):
-        self.catalog = catalog
-        self.name = name
-        self.namespace = namespace
-        self.scope = scope
-        self.is_materialized = 1 if is_materialized else 0
-        self.view_name = view_name
-        self.owner_user_id = owner_user_id
-        self.owner_team_id = owner_team_id
-        self.db_kwargs = db_kwargs or {}
-
-    # ------------------------------------------------------------------
-    # Step 1: Validation
-    # ------------------------------------------------------------------
-    def validate(self) -> None:
-        """Ensure the metadata payload conforms to database constraints."""
-        if self.is_materialized and not self.view_name:
-            raise ValueError("view_name must be provided if is_materialized is True.")
+        self.target_catalog = target_catalog
+        
+        # Ensure the catalog has an ID before we serialize it
+        if not self.target_catalog.catalog_id:
+            self.target_catalog.catalog_id = str(uuid.uuid4())
             
-        if self.scope == "USER" and not self.owner_user_id:
-            raise ValueError("owner_user_id is required for USER scope catalogs.")
-            
-        if self.scope == "TEAM" and not self.owner_team_id:
-            raise ValueError("owner_team_id is required for TEAM scope catalogs.")
-            
-        # Ensure the catalog can cleanly dump to JSON without null bloat
-        try:
-            self._json_payload = self.catalog.model_dump_json(exclude_none=True)
-        except Exception as e:
-            raise RuntimeError(f"Failed to serialize Catalog to JSON: {e}")
-
-    # ------------------------------------------------------------------
-    # Step 2: Database Connection
-    # ------------------------------------------------------------------
-    def _get_connection(self) -> oracledb.Connection:
-        """Instantiate the Oracle connection using provided kwargs."""
-        return oracledb.connect(
-            user=self.db_kwargs.get("user"),
-            password=self.db_kwargs.get("password"),
-            dsn=self.db_kwargs.get("dsn")
+        self.registry_plugin = get_plugin(cast(PLUGIN, registry_plugin_name))
+        
+        # 1. Map the Registry Table exactly 1:1 with your Catalog Model
+        self.registry_catalog = Catalog(
+            name="system_registry_upsert",
+            entities=[
+                Entity(
+                    name="catalog_registry",
+                    columns=[
+                        # Scalars
+                        Column(name="catalog_id", arrow_type_id="string", primary_key=True),
+                        Column(name="name", arrow_type_id="string"),
+                        Column(name="alias", arrow_type_id="string", is_nullable=True),
+                        Column(name="namespace", arrow_type_id="string", is_nullable=True),
+                        Column(name="scope", arrow_type_id="string"),
+                        Column(name="source_type", arrow_type_id="string", is_nullable=True),
+                        Column(name="owner_user_id", arrow_type_id="string", is_nullable=True),
+                        Column(name="team_id", arrow_type_id="string", is_nullable=True),
+                        Column(name="limit", arrow_type_id="int64", is_nullable=True),
+                        
+                        # Complex Arrays/Dicts mapped to CLOBs (large_string)
+                        Column(name="entities", arrow_type_id="large_string"),
+                        Column(name="operator_groups", arrow_type_id="large_string"),
+                        Column(name="joins", arrow_type_id="large_string"),
+                        Column(name="sort_columns", arrow_type_id="large_string"),
+                        Column(name="properties", arrow_type_id="large_string"),
+                    ]
+                )
+            ]
         )
+        
+        locator = Locator(plugin=cast(PLUGIN, registry_plugin_name))
+        for col in self.registry_catalog.entities[0].columns:
+            col.locator = locator
 
-    # ------------------------------------------------------------------
-    # Step 3: Registry Upsert
-    # ------------------------------------------------------------------
-    def upsert_registry(self) -> str:
-        """MERGE the catalog JSON into the Oracle registry."""
-        logger.info(f"Step 2: Upserting '{self.namespace}.{self.name}' to Oracle Registry...")
-        
-        sql = """
-        MERGE INTO catalog_registry trg
-        USING (
-            SELECT :catalog_id AS catalog_id,
-                   :name AS name,
-                   :namespace AS namespace,
-                   :scope AS scope,
-                   :owner_user_id AS owner_user_id,
-                   :owner_team_id AS owner_team_id,
-                   :catalog_json AS catalog_json,
-                   :is_materialized AS is_materialized,
-                   :view_name AS view_name
-            FROM dual
-        ) src
-        ON (trg.name = src.name AND trg.namespace = src.namespace)
-        WHEN MATCHED THEN
-            UPDATE SET 
-                scope = src.scope,
-                owner_user_id = src.owner_user_id,
-                owner_team_id = src.owner_team_id,
-                catalog_json = src.catalog_json,
-                is_materialized = src.is_materialized,
-                view_name = src.view_name,
-                updated_at = CURRENT_TIMESTAMP
-        WHEN NOT MATCHED THEN
-            INSERT (catalog_id, name, namespace, scope, owner_user_id, owner_team_id, catalog_json, is_materialized, view_name)
-            VALUES (src.catalog_id, src.name, src.namespace, src.scope, src.owner_user_id, src.owner_team_id, src.catalog_json, src.is_materialized, src.view_name)
-        """
-        
-        # Pre-generate a UUID in case this is a new insert
-        catalog_id = str(uuid.uuid4())
-        
-        binds = {
-            "catalog_id": catalog_id,
-            "name": self.name,
-            "namespace": self.namespace,
-            "scope": self.scope,
-            "owner_user_id": self.owner_user_id,
-            "owner_team_id": self.owner_team_id,
-            "catalog_json": self._json_payload,
-            "is_materialized": self.is_materialized,
-            "view_name": self.view_name
-        }
-
-        try:
-            with self._get_connection() as conn:
-                with conn.cursor() as cursor:
-                    # oracledb handles mapping the Python string to the Oracle CLOB natively
-                    cursor.execute(sql, binds)
-                    conn.commit()
-                    
-            logger.info(f"    Success: Catalog registered securely.")
-            return catalog_id
+    def publish(self) -> str:
+        """Converts the target_catalog to Arrow and routes it through upsert_data."""
+        # 1. Unroll the Pydantic model directly into the payload 
+        # We serialize the lists into JSON strings for the database CLOBs
+        payload = [{
+            "catalog_id": self.target_catalog.catalog_id,
+            "name": self.target_catalog.name,
+            "alias": self.target_catalog.alias,
+            "namespace": self.target_catalog.namespace, 
+            "scope": self.target_catalog.scope,
+            "source_type": self.target_catalog.source_type,
+            "owner_user_id": self.target_catalog.owner_user_id,
+            "team_id": self.target_catalog.team_id,
+            "limit": self.target_catalog.limit,
             
-        except oracledb.DatabaseError as e:
-            error_obj, = e.args
-            logger.error(f"Oracle Database Error [{error_obj.code}]: {error_obj.message}")
-            raise RuntimeError(f"Registry Upsert Failed: {error_obj.message}")
-
-def dummy_job() -> None:
-    """Entry point for the bootloader."""
-    # Example: Registering a team's materialized view
-    dummy_catalog = Catalog(name="Risk_View", entities=[])
-    
-    publisher = CatalogPublisher(
-        catalog=dummy_catalog,
-        name="Q3 Actuary Risk Summary",
-        namespace="actuary_marts",
-        scope="TEAM",
-        owner_team_id="team-2001",
-        is_materialized=True,
-        view_name="MV_Q3_RISK_SUMMARY",
-        db_kwargs={"user": "admin", "password": "pwd", "dsn": "localhost:1521/XEPDB1"}
-    )
-    
-    publisher.validate()
-    publisher.upsert_registry()
-
-if __name__ == "__main__":
-    dummy_job()
+            # Serialize nested arrays
+            "entities": json.dumps([e.model_dump(mode='json', exclude_none=True) for e in self.target_catalog.entities]),
+            "operator_groups": json.dumps([g.model_dump(mode='json', exclude_none=True) for g in self.target_catalog.operator_groups]),
+            "joins": json.dumps([j.model_dump(mode='json', exclude_none=True) for j in self.target_catalog.joins]),
+            "sort_columns": json.dumps([s.model_dump(mode='json', exclude_none=True) for s in self.target_catalog.sort_columns]),
+            "properties": json.dumps(self.target_catalog.properties) if self.target_catalog.properties else "{}"
+        }]
+        
+        # 2. Let the framework bridge the types to Arrow
+        arrow_stream = self.registry_catalog.arrow_reader(data=payload)
+        
+        # 3. Pass to the Oracle Plugin 
+        resp = self.registry_plugin.upsert_data(
+            catalog=self.registry_catalog, 
+            data=arrow_stream
+        )
+        
+        if not resp.ok:
+            raise RuntimeError(f"Failed to publish catalog [{resp.code}]: {resp.message}")
+        if not resp.data or "catalog_id" not in resp.data:
+            raise RuntimeError(f"Invalid response from registry plugin: {resp.data}")
+        return resp.data["catalog_id"]

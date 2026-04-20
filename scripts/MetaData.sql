@@ -5,11 +5,12 @@ CREATE TABLE users (
     user_id VARCHAR2(36) PRIMARY KEY,
     username VARCHAR2(255) NOT NULL,
     email VARCHAR2(255) UNIQUE NOT NULL,
+    password_hash VARCHAR2(510) NOT NULL,
     is_admin NUMBER(1) DEFAULT 0 CHECK (is_admin IN (0, 1))
 );
 
-INSERT INTO users (user_id, username, email, is_admin) 
-VALUES ('usr-1001', 'jdoe', 'jane.doe@company.com', 1);
+INSERT INTO users (user_id, username, email, password_hash, is_admin) 
+VALUES ('usr-1001', 'jdoe', 'jane.doe@company.com', 'hashed_password', 1);
 
 -- ==============================================================================
 -- 2. TEAMS TABLE
@@ -41,35 +42,46 @@ VALUES ('usr-1001', 'team-2001', 'MANAGER');
 CREATE TABLE catalog_registry (
     catalog_id VARCHAR2(36) PRIMARY KEY,
     name VARCHAR2(255) NOT NULL,
+    alias VARCHAR2(255),
     namespace VARCHAR2(255),
     scope VARCHAR2(50) CHECK (scope IN ('SYSTEM', 'TEAM', 'USER')),
+    source_type VARCHAR2(50), 
     
     -- Ownership constraints
     owner_user_id VARCHAR2(36) REFERENCES users(user_id) ON DELETE SET NULL,
-    owner_team_id VARCHAR2(36) REFERENCES teams(team_id) ON DELETE SET NULL,
+    team_id VARCHAR2(36) REFERENCES teams(team_id) ON DELETE SET NULL,
     
-    -- The AST Payload (Enforces valid JSON in Oracle 12c+)
-    catalog_json CLOB CONSTRAINT check_valid_json CHECK (catalog_json IS JSON),
+    -- Scalars
+    "LIMIT" NUMBER,
     
-    -- Materialization Flags
-    is_materialized NUMBER(1) DEFAULT 0 CHECK (is_materialized IN (0, 1)),
-    oracle_view_name VARCHAR2(255),
+    -- Complex Pydantic Lists/Dicts mapped to native JSON CLOBs
+    entities CLOB CONSTRAINT check_entities_json CHECK (entities IS JSON),
+    operator_groups CLOB CONSTRAINT check_ops_json CHECK (operator_groups IS JSON),
+    joins CLOB CONSTRAINT check_joins_json CHECK (joins IS JSON),
+    sort_columns CLOB CONSTRAINT check_sorts_json CHECK (sort_columns IS JSON),
+    properties CLOB CONSTRAINT check_props_json CHECK (properties IS JSON),
     
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
 INSERT INTO catalog_registry (
-    catalog_id, name, namespace, scope, owner_team_id, catalog_json, is_materialized, oracle_view_name
+    catalog_id, name, alias, namespace, scope, source_type, team_id, 
+    "LIMIT", entities, operator_groups, joins, sort_columns, properties
 ) VALUES (
     'cat-3001', 
     'Q3 Actuary Risk Summary', 
+    'Risk_Summary_V1',
     'actuary_marts', 
     'TEAM', 
-    'team-2001', 
-    '{"name": "Q3 Actuary Risk Summary", "entities": [{"name": "risk_data", "locator": {"plugin": "oracle"}}]}', 
-    1, 
-    'MV_Q3_RISK_SUMMARY'
+    'federation',
+    'team-2001',
+    5000,
+    '[{"name": "risk_data", "columns": [{"name": "id", "locator": {"plugin": "oracle"}}]}]',
+    '[]',
+    '[]',
+    '[]',
+    '{}'
 );
 
 -- ==============================================================================

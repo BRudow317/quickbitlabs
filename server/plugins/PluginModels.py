@@ -184,15 +184,6 @@ class OperatorGroup(BaseModel):
     condition: Literal["AND", "OR", "NOT"]
     operation_group: list[Operation | OperatorGroup] = Field(default_factory=list)
 
-class PluginPlan(TypedDict):
-    plugin: Plugin
-    catalog: Catalog
-
-class FederationPlan(TypedDict):
-    plans: dict[str, PluginPlan] # per-system pushdown
-    cross_system_ops: list[OperatorGroup] # post-join filters for DuckDB
-    output_catalog: Catalog # master catalog = final result shape
-
 def _collect_plugins_from_group(group: OperatorGroup) -> set[str]:
     """Recursively collect all plugin names referenced in an OperatorGroup tree."""
     plugins: set[str] = set()
@@ -204,13 +195,19 @@ def _collect_plugins_from_group(group: OperatorGroup) -> set[str]:
     return plugins
 
 class Catalog(BaseModel):
+    catalog_id: str | None = None
     name: str | None = None
-    source_type: PLUGIN | Literal["federation", "frontend"] | None = None
+    alias: str | None = None
+    namespace: str | None = None
+    scope: Literal["SYSTEM", "TEAM", "USER"] = "USER"
+    source_type: PLUGIN | Literal["federation"] | None = None
     entities: list[Entity] = Field(default_factory=list)
     operator_groups: list[OperatorGroup] = Field(default_factory=list)
     joins: list[Join] = Field(default_factory=list)
     sort_columns: list[Sort] = Field(default_factory=list)
     limit: int | None = None
+    owner_user_id: str | None = None
+    team_id: str | None = None
     properties: dict[str, Any] = Field(default_factory=dict)
     
     @property
@@ -233,7 +230,7 @@ class Catalog(BaseModel):
                     arrow_type = pa.decimal128(38, arrow_type.scale)
                     
                 final_nullable = column.is_nullable or (entity.name in nullable_entities)
-                arrow_fields.append(pa.field(f"{entity.name}_{column.name}", arrow_type, nullable=final_nullable))
+                arrow_fields.append(pa.field(f"{column.name}", arrow_type, nullable=final_nullable))
 
         schema = pa.schema(arrow_fields, metadata={
             b"catalog": self.model_dump_json().encode()

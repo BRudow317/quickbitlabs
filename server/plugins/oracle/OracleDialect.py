@@ -1,189 +1,615 @@
+from __future__ import annotations
+
 from typing import Any
 import pyarrow as pa
-from server.plugins.PluginModels import Catalog, Column, OperatorGroup, Operation, Entity
+
+from server.plugins.PluginModels import (
+    Catalog, Column, Entity, Operation, OperatorGroup,
+)
+
+
+# ---------------------------------------------------------------------------
+# Entity resolution
+# ---------------------------------------------------------------------------
 
 def _get_root_entity(catalog: Catalog) -> Entity:
-    if len(catalog.entities) == 1: return catalog.entities[0]
-    right_entities = {j.right_entity.name for j in catalog.joins}
-    roots = [e for e in catalog.entities if e.name not in right_entities] or []
-    if not roots: raise ValueError("Circular or missing joins detected.")
+    """Return the join-topology root: the entity never on a join's right side.
+
+    For single-entity catalogs this is always the one entity.
+    Used for SELECT (FROM table) and as a fallback when no assignment ops exist.
+    """
+    if len(catalog.entities) == 1:
+        return catalog.entities[0]
+    right_names = {j.right_entity.name for j in catalog.joins}
+    roots = [e for e in catalog.entities if e.name not in right_names]
+    if not roots:
+        raise ValueError("Circular or missing joins detected in Catalog.")
     return roots[0]
 
-def _parse_operator(operator: Operation, binds: dict[str, Any], bind_counter: int) -> tuple[str, int]:
-    independent = operator.independent
-    column_left = getattr(independent, "name", None)
-    if not column_left:
-        raise ValueError(f"Invalid operator: Left-hand side must be a Column. Got {type(independent).__name__}")
-    
-    op = operator.operator
-    dependent: str | pa.Field | Column | None = operator.dependent
 
-    if op == "IS NULL": return f"{column_left} IS NULL", bind_counter
-    if op == "IS NOT NULL": return f"{column_left} IS NOT NULL", bind_counter
+# ---------------------------------------------------------------------------
+# Assignment helpers — split operator_groups on "=" vs comparison operators
+# ---------------------------------------------------------------------------
 
-    sql_op = "=" if op == "==" else op
-
-    # --- SCENARIO A: Stream Bind (pa.Field in dependent = bind from Arrow payload) ---
-    # e.g. Operation(independent=status_col, operator="=", dependent=pa.field("status"))
-    # → WHERE STATUS = :status
-    if isinstance(dependent, pa.Field):
-        return f"{column_left} {sql_op} :{getattr(dependent, 'name')}", bind_counter
-
-    # --- SCENARIO C: Static String Literal ---
-    if sql_op == "IN":
-        if not isinstance(dependent, list) or not dependent: return "1=0", bind_counter
-        in_binds = []
-        for list_val in dependent:
-            bind_name = f"bind_{bind_counter}"
-            in_binds.append(f":{bind_name}")
-            binds[bind_name] = list_val
-            bind_counter += 1
-        return f"{column_left} IN ({', '.join(in_binds)})", bind_counter
-
-    bind_name = f"bind_{bind_counter}"
-    binds[bind_name] = dependent
-    bind_counter += 1
-    return f"{column_left} {sql_op} :{bind_name}", bind_counter
-
-def _parse_operator_group(group: OperatorGroup, binds: dict[str, Any], bind_counter: int) -> tuple[str, int]:
-    if not group.operation_group: return "", bind_counter
-    clauses = []
+def _collect_assignments_from_group(
+    group: OperatorGroup, result: list[Operation]
+) -> None:
     for item in group.operation_group:
         if isinstance(item, OperatorGroup):
-            sub_clause, bind_counter = _parse_operator_group(item, binds, bind_counter)
-            if sub_clause: clauses.append(f"({sub_clause})")
+            _collect_assignments_from_group(item, result)
+        elif item.operator == "=":
+            result.append(item)
+
+
+def _collect_assignments(groups: list[OperatorGroup]) -> list[Operation]:
+    """Collect all Operation(operator='=') assignment nodes from operator_groups."""
+    result: list[Operation] = []
+    for group in groups:
+        _collect_assignments_from_group(group, result)
+    return result
+
+
+def _strip_assignments_from_group(group: OperatorGroup) -> OperatorGroup | None:
+    new_ops: list[Operation | OperatorGroup] = []
+    for item in group.operation_group:
+        if isinstance(item, OperatorGroup):
+            stripped = _strip_assignments_from_group(item)
+            if stripped is not None:
+                new_ops.append(stripped)
+        elif item.operator != "=":
+            new_ops.append(item)
+    if not new_ops:
+        return None
+    return OperatorGroup(condition=group.condition, operation_group=new_ops)
+
+
+def _strip_assignments(groups: list[OperatorGroup]) -> list[OperatorGroup]:
+    """Return operator_groups with all '=' assignment operations removed."""
+    result: list[OperatorGroup] = []
+    for group in groups:
+        stripped = _strip_assignments_from_group(group)
+        if stripped is not None:
+            result.append(stripped)
+    return result
+
+
+def _get_target_entity(catalog: Catalog) -> Entity:
+    """Return the DML write-target entity.
+
+    For multi-entity (join) catalogs, the write target is the entity whose
+    column appears as 'independent' in an Operation(operator='=') assignment
+    within operator_groups.  A join catalog may carry read-only entities
+    purely for filtering — e.g. EMPLOYEES joined to filter by department
+    while the actual write target is PAYCHECKS.
+
+    Falls back to _get_root_entity (join-topology left side) only when no
+    assignment operations are present in the catalog.
+    """
+    if len(catalog.entities) == 1:
+        return catalog.entities[0]
+
+    assignments = _collect_assignments(catalog.operator_groups)
+    if assignments:
+        target_names = {
+            op.independent.locator.entity_name.upper()
+            for op in assignments
+            if op.independent.locator and op.independent.locator.entity_name
+        }
+        for entity in catalog.entities:
+            if entity.name.upper() in target_names:
+                return entity
+
+    return _get_root_entity(catalog)
+
+
+# ---------------------------------------------------------------------------
+# WHERE clause builder (recursive OperatorGroup → SQL fragment)
+# ---------------------------------------------------------------------------
+
+def _bind_name(col: str, binds: dict[str, Any]) -> str:
+    """Return a unique bind variable name based on the column name.
+
+    Uses the column name directly; appends _2, _3 … only if the name is
+    already taken (same column appearing more than once in one predicate).
+    """
+    if col not in binds:
+        return col
+    n = 2
+    while f"{col}_{n}" in binds:
+        n += 1
+    return f"{col}_{n}"
+
+
+def _parse_operation(op: Operation, binds: dict[str, Any]) -> str:
+    """Translate a single Operation into a SQL predicate fragment.
+
+    Operator mapping:
+      "="                        → raises (assignment belongs in SET, not WHERE)
+      "IS NULL" / "IS NOT NULL"  → SQL directly, no bind
+      "=="                       → Oracle "="
+      "IN" with list             → IN (:col, :col_2, …)
+      pa.Field dependent         → stream bind (:field_name), no static bind added
+      Column dependent           → column reference, no bind
+      anything else              → static bind (:col)
+    """
+    col = op.independent.name
+    operator = op.operator
+    dependent = op.dependent
+
+    if operator == "=":
+        raise ValueError(
+            f"Assignment operator '=' on column '{col}' is not valid in a WHERE clause. "
+            f"Strip assignments with _strip_assignments() before calling _build_where(), "
+            f"or use '==' for equality comparison."
+        )
+
+    if operator == "IS NULL":
+        return f"{col} IS NULL"
+    if operator == "IS NOT NULL":
+        return f"{col} IS NOT NULL"
+
+    sql_op = "=" if operator == "==" else operator
+
+    if isinstance(dependent, pa.Field):
+        return f"{col} {sql_op} :{getattr(dependent, 'name')}"
+
+    if isinstance(dependent, Column):
+        return f"{col} {sql_op} {dependent.qualified_name}"
+
+    if sql_op == "IN":
+        if not isinstance(dependent, list) or not dependent:
+            return "1=0"
+        placeholders: list[str] = []
+        for val in dependent:
+            name = _bind_name(col, binds)
+            placeholders.append(f":{name}")
+            binds[name] = val
+        return f"{col} IN ({', '.join(placeholders)})"
+
+    name = _bind_name(col, binds)
+    binds[name] = dependent
+    return f"{col} {sql_op} :{name}"
+
+
+def _parse_operator_group(group: OperatorGroup, binds: dict[str, Any]) -> str:
+    """Recursively translate an OperatorGroup into a SQL fragment."""
+    if not group.operation_group:
+        return ""
+
+    clauses: list[str] = []
+    for item in group.operation_group:
+        if isinstance(item, OperatorGroup):
+            clause = _parse_operator_group(item, binds)
+            if clause:
+                clauses.append(f"({clause})")
         else:
-            cond_clause, bind_counter = _parse_operator(item, binds, bind_counter)
-            clauses.append(cond_clause)
+            clauses.append(_parse_operation(item, binds))
 
-    if group.condition == "NOT": combined = f" NOT ({clauses[0]})" if clauses else ""
-    else: combined = f" {group.condition} ".join(clauses)
-    return combined, bind_counter
+    if group.condition == "NOT":
+        return f"NOT ({clauses[0]})" if clauses else ""
+    return f" {group.condition} ".join(clauses)
 
-def build_filters(operator_groups: list[OperatorGroup]) -> tuple[str, dict[str, Any]]:
-    if not operator_groups: return "", {}
+
+def _build_where(operator_groups: list[OperatorGroup]) -> tuple[str, dict[str, Any]]:
+    """Convert a list of OperatorGroups into a WHERE clause string + bind dict.
+
+    Returns ("", {}) when the list is empty.
+    Multiple top-level groups are joined with AND.
+    """
+    if not operator_groups:
+        return "", {}
+
     binds: dict[str, Any] = {}
-    bind_counter = 0
-    clauses = []
+    clauses: list[str] = []
+
     for group in operator_groups:
-        clause, bind_counter = _parse_operator_group(group, binds, bind_counter)
-        if clause: clauses.append(f"({clause})")
-    if not clauses: return "", {}
+        clause = _parse_operator_group(group, binds)
+        if clause:
+            clauses.append(f"({clause})")
+
+    if not clauses:
+        return "", {}
+
     return " WHERE " + " AND ".join(clauses), binds
 
-def parse_catalog(catalog: Catalog) -> tuple[str, str, str, str, dict[str, Any]]:
-    if not catalog.entities: raise ValueError("Catalog must have at least one entity.")
-    join_clause = ""
-    if catalog.joins:
-        joins = [f"{j.join_type} JOIN {j.right_entity.name} ON {j.left_column.name} = {j.right_column.name}" for j in catalog.joins]
-        join_clause = " " + " ".join(joins)
-        
-    where_clause, binds = build_filters(catalog.operator_groups)
-    sort_clause = ""
-    if catalog.sort_columns:
-        sorts = [f"{s.column.name} {s.direction}" for s in catalog.sort_columns]
-        sort_clause += " ORDER BY " + ", ".join(sorts)
-    
-    limit_clause = f" FETCH FIRST {catalog.limit} ROWS ONLY" if catalog.limit else ""
-    return join_clause, where_clause, sort_clause, limit_clause, binds
+
+# ---------------------------------------------------------------------------
+# SELECT
+# ---------------------------------------------------------------------------
 
 def build_select(catalog: Catalog) -> tuple[str, dict[str, Any]]:
-    join_clause, where_clause, sort_clause, limit_clause, binds = parse_catalog(catalog)
-    select_cols = [c.name for e in catalog.entities for c in e.columns]
-    cols_str = ", ".join(select_cols)
-    return f"SELECT {cols_str} FROM {_get_root_entity(catalog).name}{join_clause}{where_clause}{sort_clause}{limit_clause}", binds
+    """Build a full SELECT statement from a Catalog.
 
-def build_insert_dml(catalog: Catalog, entity: Entity) -> str:
+    Returns (sql, binds).
+
+    Column list: uses Column.qualified_name (entity_name.col_name) so that
+    multi-entity JOINs produce unambiguous references.  Falls back to "*"
+    when no columns are declared.
+
+    Table name: uses Entity.qualified_name (namespace.name) for schema
+    qualification when namespace is set.
+
+    Oracle pagination: FETCH FIRST N ROWS ONLY (not ROWNUM / LIMIT).
+    """
+    if not catalog.entities:
+        raise ValueError("Catalog must have at least one entity to build SELECT.")
+
+    root = _get_root_entity(catalog)
+
+    # FROM + JOINs
+    join_parts: list[str] = []
+    for j in catalog.joins:
+        join_parts.append(
+            f"{j.join_type} JOIN {j.right_entity.qualified_name} "
+            f"ON {j.left_column.qualified_name} = {j.right_column.qualified_name}"
+        )
+    join_clause = (" " + " ".join(join_parts)) if join_parts else ""
+
+    # Column list
+    col_names = [c.qualified_name for e in catalog.entities for c in e.columns]
+    cols_str = ", ".join(col_names) if col_names else "*"
+
+    # WHERE
+    where_clause, binds = _build_where(catalog.operator_groups)
+
+    # ORDER BY
+    sort_parts: list[str] = []
+    for s in catalog.sort_columns:
+        sort_parts.append(f"{s.column.qualified_name} {s.direction}")
+    sort_clause = (" ORDER BY " + ", ".join(sort_parts)) if sort_parts else ""
+
+    # LIMIT (Oracle)
+    limit_clause = f" FETCH FIRST {catalog.limit} ROWS ONLY" if catalog.limit else ""
+
+    sql = (
+        f"SELECT {cols_str} "
+        f"FROM {root.qualified_name}"
+        f"{join_clause}"
+        f"{where_clause}"
+        f"{sort_clause}"
+        f"{limit_clause}"
+    )
+    return sql, binds
+
+
+# ---------------------------------------------------------------------------
+# INSERT
+# ---------------------------------------------------------------------------
+
+def build_insert_dml(catalog: Catalog, entity: Entity) -> tuple[str, dict[str, Any]]:
+    """INSERT INTO schema.table (col, …) VALUES (:col, …)
+
+    Column/value list is driven by Operation(operator='=') assignments in
+    catalog.operator_groups — the same mechanism as build_update_dml's SET clause.
+    Falls back to all entity.columns as stream binds when no assignments exist.
+    """
+    assignments = _collect_assignments(catalog.operator_groups)
+
+    if assignments:
+        col_parts: list[str] = []
+        val_parts: list[str] = []
+        binds: dict[str, Any] = {}
+        for op in assignments:
+            col = op.independent.name
+            dep = op.dependent
+            col_parts.append(col)
+            if isinstance(dep, pa.Field):
+                val_parts.append(f":{getattr(dep, 'name')}")
+            elif isinstance(dep, Column):
+                val_parts.append(dep.qualified_name)
+            else:
+                name = _bind_name(col, binds)
+                binds[name] = dep
+                val_parts.append(f":{name}")
+        sql = (
+            f"INSERT INTO {entity.qualified_name} "
+            f"({', '.join(col_parts)}) VALUES ({', '.join(val_parts)})"
+        )
+        return sql, binds
+
     cols = [c.name for c in entity.columns]
-    binds = ", ".join([f":{c.name}" for c in entity.columns])
-    return f"INSERT INTO {entity.name} ({', '.join(cols)}) VALUES ({binds})"
+    sql = (
+        f"INSERT INTO {entity.qualified_name} "
+        f"({', '.join(cols)}) VALUES ({', '.join(f':{c}' for c in cols)})"
+    )
+    return sql, {}
 
-def build_delete_dml(catalog: Catalog, entity: Entity) -> tuple[str, dict[str, Any]]:
-    _, where_clause, _, _, binds = parse_catalog(catalog)
-    return f"DELETE FROM {entity.name}{where_clause}", binds
+
+# ---------------------------------------------------------------------------
+# UPDATE
+# ---------------------------------------------------------------------------
 
 def build_update_dml(catalog: Catalog, entity: Entity) -> tuple[str, dict[str, Any]]:
-    _, where_clause, _, _, binds = parse_catalog(catalog)
+    """UPDATE schema.table SET … WHERE …
+
+    SET clause: built from Operation(operator='=') assignments in
+    catalog.operator_groups.  The independent column is what gets written;
+    the dependent is the value — pa.Field for a stream bind, Column for a
+    column reference, None for NULL, or a static scalar for a literal.
+
+    If no assignment operations are present, falls back to streaming all
+    entity.columns (:col_name bind per column from the Arrow stream).
+
+    WHERE clause: built from all non-'=' operations in operator_groups.
+    Requires at least one filter to prevent unbounded full-table updates.
+    """
+    assignments = _collect_assignments(catalog.operator_groups)
+    filter_groups = _strip_assignments(catalog.operator_groups)
+
+    where_clause, where_binds = _build_where(filter_groups)
     if not where_clause:
-        raise ValueError(f"Cannot update {entity.name}: No Operator conditions defined in catalog.")
-    set_str = ", ".join([f"{c.name} = :{c.name}" for c in entity.columns])
-    return f"UPDATE {entity.name} SET {set_str}{where_clause}", binds
+        raise ValueError(
+            f"UPDATE on '{entity.name}' requires at least one filter "
+            f"in catalog.operator_groups to prevent full-table overwrites."
+        )
 
-def build_merge_dml(catalog: Catalog, entity: Entity) -> str:
-    pk_cols = entity.primary_key_columns
-    if not pk_cols:
-        raise ValueError(f"Cannot merge: Entity {entity.name} has no primary keys.")
-    update_cols = [c for c in entity.columns if c not in pk_cols]
-    on_clause = " AND ".join([f"tgt.{c.name} = src.{c.name}" for c in pk_cols])
-    set_clause = ", ".join([f"tgt.{c.name} = src.{c.name}" for c in update_cols])
-    insert_cols = ", ".join([c.name for c in entity.columns])
-    values_cols = ", ".join([f"src.{c.name}" for c in entity.columns])
-    bind_selects = ", ".join([f":{c.name} AS {c.name}" for c in entity.columns])
-    return f"MERGE INTO {entity.name} tgt USING (SELECT {bind_selects} FROM DUAL) src ON ({on_clause}) WHEN MATCHED THEN UPDATE SET {set_clause} WHEN NOT MATCHED THEN INSERT ({insert_cols}) VALUES ({values_cols})"       
+    if assignments:
+        set_parts: list[str] = []
+        set_binds: dict[str, Any] = {}
+        for op in assignments:
+            col = op.independent.name
+            dep = op.dependent
+            if isinstance(dep, pa.Field):
+                set_parts.append(f"{col} = :{getattr(dep, 'name')}")
+            elif isinstance(dep, Column):
+                set_parts.append(f"{col} = {dep.qualified_name}")
+            else:
+                # Covers None (→ NULL via bind) and any static scalar
+                name = _bind_name(col, set_binds)
+                set_binds[name] = dep
+                set_parts.append(f"{col} = :{name}")
+        all_binds = {**where_binds, **set_binds}
+        set_str = ", ".join(set_parts)
+    else:
+        set_str = ", ".join(f"{c.name} = :{c.name}" for c in entity.columns)
+        all_binds = where_binds
+
+    return f"UPDATE {entity.qualified_name} SET {set_str}{where_clause}", all_binds
 
 
+# ---------------------------------------------------------------------------
+# MERGE ON clause helpers (catalog.operator_groups → tgt.x = src.y)
+# ---------------------------------------------------------------------------
+
+def _build_merge_operation(
+    op: Operation,
+    binds: dict[str, Any],
+) -> tuple[str, str]:
+    """Translate one Operation into a MERGE ON predicate.
+
+    Returns (clause_str, independent_col_name).
+
+    Dependent mapping:
+      pa.Field → src.field_name  (value from the Arrow stream row)
+      Column   → src.col_name   (another catalog column, also from stream)
+      static   → :col           (named static bind)
+    """
+    col = op.independent.name
+    operator = op.operator
+    dependent = op.dependent
+    sql_op = "=" if operator == "==" else operator
+
+    if operator == "IS NULL":
+        return f"tgt.{col} IS NULL", col
+    if operator == "IS NOT NULL":
+        return f"tgt.{col} IS NOT NULL", col
+
+    if isinstance(dependent, pa.Field):
+        return f"tgt.{col} {sql_op} src.{getattr(dependent, 'name')}", col
+
+    if isinstance(dependent, Column):
+        return f"tgt.{col} {sql_op} src.{dependent.name}", col
+
+    name = _bind_name(col, binds)
+    binds[name] = dependent
+    return f"tgt.{col} {sql_op} :{name}", col
+
+
+def _build_merge_group(
+    group: OperatorGroup,
+    binds: dict[str, Any],
+) -> tuple[str, set[str]]:
+    """Recursively translate an OperatorGroup for MERGE ON context.
+
+    Returns (clause_str, on_col_names).
+    """
+    clauses: list[str] = []
+    on_cols: set[str] = set()
+
+    for item in group.operation_group:
+        if isinstance(item, OperatorGroup):
+            clause, cols = _build_merge_group(item, binds)
+            on_cols |= cols
+            if clause:
+                clauses.append(f"({clause})")
+        else:
+            clause, col = _build_merge_operation(item, binds)
+            on_cols.add(col)
+            clauses.append(clause)
+
+    if group.condition == "NOT":
+        combined = f"NOT ({clauses[0]})" if clauses else ""
+    else:
+        combined = f" {group.condition} ".join(clauses)
+
+    return combined, on_cols
+
+
+def _build_merge_on(
+    operator_groups: list[OperatorGroup],
+) -> tuple[str, dict[str, Any], set[str]]:
+    """Convert catalog.operator_groups into a MERGE ON clause.
+
+    Returns (on_sql, binds, on_col_names).
+    on_col_names: independent column names in the ON clause, excluded from
+    WHEN MATCHED UPDATE SET so we don't clobber the match key.
+    """
+    binds: dict[str, Any] = {}
+    clauses: list[str] = []
+    on_cols: set[str] = set()
+
+    for group in operator_groups:
+        clause, cols = _build_merge_group(group, binds)
+        on_cols |= cols
+        if clause:
+            clauses.append(f"({clause})")
+
+    return " AND ".join(clauses), binds, on_cols
+
+
+# ---------------------------------------------------------------------------
+# MERGE (upsert)
+# ---------------------------------------------------------------------------
+
+def build_merge_dml(catalog: Catalog, entity: Entity) -> tuple[str, dict[str, Any]]:
+    """MERGE INTO schema.table tgt USING (SELECT :col AS col … FROM DUAL) src …
+
+    The ON clause is derived from catalog.operator_groups — no primary-key
+    metadata is required.  Use pa.Field as the dependent in an Operation to
+    reference a stream column on the src side, e.g.:
+
+        Operation(independent=id_col, operator="==", dependent=pa.field("ID"))
+        → ON (tgt.ID = src.ID)
+
+    Columns not referenced in the ON clause are SET in WHEN MATCHED.
+    Static binds (non-pa.Field dependents in operator_groups) are merged
+    with each stream row by execute_many.
+    """
+    if not catalog.operator_groups:
+        raise ValueError(
+            f"MERGE on '{entity.name}' requires catalog.operator_groups "
+            f"to define the ON clause match condition."
+        )
+
+    on_sql, binds, on_col_names = _build_merge_on(catalog.operator_groups)
+
+    non_match = [c for c in entity.columns if c.name not in on_col_names]
+    bind_selects = ", ".join(f":{c.name} AS {c.name}" for c in entity.columns)
+    insert_cols = ", ".join(c.name for c in entity.columns)
+    src_vals = ", ".join(f"src.{c.name}" for c in entity.columns)
+
+    matched_part = (
+        "WHEN MATCHED THEN UPDATE SET "
+        + ", ".join(f"tgt.{c.name} = src.{c.name}" for c in non_match)
+        if non_match else ""
+    )
+
+    sql = (
+        f"MERGE INTO {entity.qualified_name} tgt "
+        f"USING (SELECT {bind_selects} FROM DUAL) src "
+        f"ON ({on_sql}) "
+        + (f"{matched_part} " if matched_part else "")
+        + f"WHEN NOT MATCHED THEN INSERT ({insert_cols}) VALUES ({src_vals})"
+    )
+    return sql, binds
+
+
+# ---------------------------------------------------------------------------
+# DELETE
+# ---------------------------------------------------------------------------
+
+def build_delete_dml(catalog: Catalog, entity: Entity) -> tuple[str, dict[str, Any]]:
+    """DELETE FROM schema.table [WHERE …]
+
+    With operator_groups: static predicates → execute once; binds returned.
+    Without operator_groups: stream-based → WHERE uses entity column binds
+    (:col_name per column, values come from Arrow stream rows).  The caller
+    controls which columns are in the entity — include only the key/filter
+    columns needed (e.g. just ID for a key-based stream delete).
+    """
+    where_clause, binds = _build_where(catalog.operator_groups)
+    if where_clause:
+        return f"DELETE FROM {entity.qualified_name}{where_clause}", binds
+
+    if entity.columns:
+        predicates = " AND ".join(f"{c.name} = :{c.name}" for c in entity.columns)
+        return f"DELETE FROM {entity.qualified_name} WHERE {predicates}", {}
+
+    return f"DELETE FROM {entity.qualified_name}", {}
+
+
+# ---------------------------------------------------------------------------
+# Copy-Swap rebuild SELECT (for ALTER TABLE via Copy-Swap DDL strategy)
+# ---------------------------------------------------------------------------
 
 def build_rebuild_select(entity: Entity, existing_names: set[str]) -> str:
-    """
-    Constructs the SELECT part of an INSERT INTO ... SELECT for table rebuilds.
-    Explicitly CASTs columns to their target DDL types, with special handling for:
-    - LOBs: No CAST supported (select directly).
-    - Dates/Timestamps: No CAST for existing columns (avoid NLS format errors).
-    - Booleans: CASE expression for string-to-number conversion.
+    """Build the SELECT expression list for a Copy-Swap table rebuild.
+
+    Used in:   INSERT INTO schema.TABLE_TMP (cols) SELECT <this> FROM schema.TABLE
+
+    Rules:
+    - Existing columns: CAST to target DDL type (with special handling for LOBs,
+      timestamps, and booleans which cannot be CAST in the normal sense).
+    - New columns: fill with a type-safe default or NULL.
     """
     from server.plugins.oracle.OracleTypeMap import map_arrow_to_oracle_ddl
-    expressions = []
+
+    parts: list[str] = []
     for col in entity.columns:
         ddl_type = map_arrow_to_oracle_ddl(col).upper()
-        col_upper = col.name.upper()
         is_lob = "CLOB" in ddl_type or "BLOB" in ddl_type
-        is_date = "DATE" in ddl_type or "TIMESTAMP" in ddl_type
+        is_temporal = "DATE" in ddl_type or "TIMESTAMP" in ddl_type
+        col_exists = col.name.upper() in existing_names
+        atype = col.arrow_type_id or ""
 
-        if col_upper in existing_names:
-            # Existing column
-            if is_lob or is_date:
-                # Oracle handles LOB and Date/Time internal moves best without CAST.
-                expressions.append(f"{col.name} AS {col.name}")
+        if col_exists:
+            if is_lob or is_temporal:
+                # Oracle handles LOB and temporal internal moves without CAST
+                parts.append(f"{col.name} AS {col.name}")
+            elif atype == "bool":
+                # Salesforce string booleans → Oracle NUMBER(1,0)
+                expr = (
+                    f"CASE WHEN {col.name} IN ('true', '1', 'Y') THEN 1 "
+                    f"WHEN {col.name} IN ('false', '0', 'N') THEN 0 "
+                    f"ELSE NULL END"
+                )
+                parts.append(f"CAST({expr} AS {ddl_type}) AS {col.name}")
             else:
-                atype = col.arrow_type_id or ""
-                if atype == "bool":
-                    expr = (f"CASE WHEN {col.name} IN ('true', '1', 'Y') THEN 1 "
-                            f"WHEN {col.name} IN ('false', '0', 'N') THEN 0 "
-                            f"ELSE NULL END")
-                    expressions.append(f"CAST({expr} AS {ddl_type}) AS {col.name}")
-                else:
-                    expressions.append(f"CAST({col.name} AS {ddl_type}) AS {col.name}")
+                parts.append(f"CAST({col.name} AS {ddl_type}) AS {col.name}")
         else:
-            # New column
+            # New column — provide a type-correct default
             if is_lob:
                 if col.default_value is not None:
-                    expressions.append(f"TO_CLOB('{col.default_value}') AS {col.name}")
+                    parts.append(f"TO_CLOB('{col.default_value}') AS {col.name}")
                 elif not col.is_nullable:
-                    expressions.append(f"EMPTY_CLOB() AS {col.name}")
+                    parts.append(f"EMPTY_CLOB() AS {col.name}")
                 else:
-                    expressions.append(f"NULL AS {col.name}")
-            elif is_date:
+                    parts.append(f"NULL AS {col.name}")
+
+            elif is_temporal:
                 if col.default_value is not None:
-                    # Use explicit format mask for default dates
-                    expressions.append(f"TO_TIMESTAMP('{col.default_value}', 'YYYY-MM-DD HH24:MI:SS') AS {col.name}")
+                    parts.append(
+                        f"TO_TIMESTAMP('{col.default_value}', "
+                        f"'YYYY-MM-DD HH24:MI:SS') AS {col.name}"
+                    )
                 elif not col.is_nullable:
-                    expressions.append(f"TO_TIMESTAMP('1970-01-01 00:00:00', 'YYYY-MM-DD HH24:MI:SS') AS {col.name}")
+                    parts.append(
+                        f"TO_TIMESTAMP('1970-01-01 00:00:00', "
+                        f"'YYYY-MM-DD HH24:MI:SS') AS {col.name}"
+                    )
                 else:
-                    # Explicit CAST(NULL AS ...) for dates is safer for type inference
-                    expressions.append(f"CAST(NULL AS {ddl_type}) AS {col.name}")
+                    parts.append(f"CAST(NULL AS {ddl_type}) AS {col.name}")
+
             else:
                 if col.default_value is not None:
-                    val = f"'{col.default_value}'" if isinstance(col.default_value, str) else str(col.default_value)
-                    expressions.append(f"CAST({val} AS {ddl_type}) AS {col.name}")
+                    val = (
+                        f"'{col.default_value}'"
+                        if isinstance(col.default_value, str)
+                        else str(col.default_value)
+                    )
+                    parts.append(f"CAST({val} AS {ddl_type}) AS {col.name}")
                 elif not col.is_nullable:
-                    atype = col.arrow_type_id or ""
-                    if atype in ("string", "utf8", "large_string"): dummy = "' '"
-                    elif any(atype.startswith(t) for t in ("int", "uint", "float", "decimal")) or atype == "bool": dummy = "0"
-                    else: dummy = "NULL"
-                    expressions.append(f"CAST({dummy} AS {ddl_type}) AS {col.name}")
+                    if atype in ("string", "utf8", "large_string"):
+                        dummy = "' '"
+                    elif any(
+                        atype.startswith(t)
+                        for t in ("int", "uint", "float", "decimal")
+                    ) or atype == "bool":
+                        dummy = "0"
+                    else:
+                        dummy = "NULL"
+                    parts.append(f"CAST({dummy} AS {ddl_type}) AS {col.name}")
                 else:
-                    expressions.append(f"CAST(NULL AS {ddl_type}) AS {col.name}")
+                    parts.append(f"CAST(NULL AS {ddl_type}) AS {col.name}")
 
-    return ", ".join(expressions)
-
-
+    return ", ".join(parts)
