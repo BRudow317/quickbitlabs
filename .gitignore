@@ -23,7 +23,7 @@ dist-ssr
 # Local stuff
 __pycache__
 .trash
-.bin
+.bin 
 .venv
 .pytest_cache
 pyrightconfig.json
