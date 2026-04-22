@@ -11,7 +11,6 @@ from server.plugins.oracle.OracleClient import OracleClient
 
 logger = logging.getLogger(__name__)
 
-
 class CatalogRegistryService:
     """
     Persists named Catalog snapshots to Oracle's CATALOG_REGISTRY table.
