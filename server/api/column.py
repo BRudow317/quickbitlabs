@@ -1,25 +1,25 @@
 from fastapi import APIRouter, Body
 from server.plugins.PluginModels import Catalog
-from server.core.federation import resolve_plans, fanout_plan
+from server.core.federation import fanout
 
 router = APIRouter(prefix="/api/column", tags=["Column Discovery, and DDL"])
 
 @router.post("/", summary="Fetch catalog metadata")
 def get_column(catalog: Catalog = Body(...)):
-    return fanout_plan(resolve_plans(catalog), "get_column")
+    return fanout(catalog, "get_column")
 
 @router.put("/insert", summary="Create")
 def create_column(catalog: Catalog = Body(...)):
-    return fanout_plan(resolve_plans(catalog), "create_column")
+    return fanout(catalog, "create_column")
 
 @router.put("/", summary="Upsert")
 def upsert_column(catalog: Catalog = Body(...)):
-    return fanout_plan(resolve_plans(catalog), "upsert_column")
+    return fanout(catalog, "upsert_column")
 
 @router.patch("/", summary="Update")
 def update_column(catalog: Catalog = Body(...)):
-    return fanout_plan(resolve_plans(catalog), "update_column")
+    return fanout(catalog, "update_column")
 
 @router.delete("/", summary="Delete columns")
 def delete_column(catalog: Catalog = Body(...)):
-    return fanout_plan(resolve_plans(catalog), "delete_column")
+    return fanout(catalog, "delete_column")

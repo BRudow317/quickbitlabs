@@ -25,11 +25,11 @@ if TYPE_CHECKING:
 import logging
 logger = logging.getLogger(__name__)
 
-# Records at or below this threshold are fetched via REST; above it, Bulk V2 is used.
-# REST pages at 2000 records per call with no job-creation overhead, so this is
-# conservative by design. Raise it (e.g. to 2000) if small-table bulk overhead
-# becomes noticeable.
-BULK_THRESHOLD: int = 200
+# REST pages at 2 000 records per call with no job-creation overhead.
+# Bulk V2 carries ~5-15 s of job-creation + polling latency, so it only wins on
+# genuinely large result sets. 50 000 records ≈ 25 REST pages — well within REST's
+# sweet spot. Raise if you observe REST pagination becoming a bottleneck.
+BULK_V2_THRESHOLD: int = 50_000
 
 class SfService:
     """Salesforce service layer. Owns all describe -> PluginModels mapping,
@@ -166,14 +166,14 @@ class SfService:
 
     def get_record_count(self, object_name: str) -> int:
         """Return the total record count for an SObject via a lightweight REST COUNT() query.
-        Falls back to BULK_THRESHOLD + 1 on any error so the caller defaults to Bulk V2.
+        Falls back to BULK_V2_THRESHOLD + 1 on any error so the caller defaults to Bulk V2.
         """
         try:
             result = self.rest.query(build_count_soql(object_name))
             return result.get("totalSize", 0)
         except Exception:
             logger.warning(f"Could not get record count for '{object_name}'; defaulting to Bulk V2.")
-            return BULK_THRESHOLD + 1
+            return BULK_V2_THRESHOLD + 1
 
     def _verify_entity_nullables(self, entity: Entity) -> Entity:
         """Cross-check columns marked non-nullable by SF describe against live data.
@@ -210,12 +210,34 @@ class SfService:
                 object_name = entity.name or ""
                 sub_catalog = catalog.model_copy(update={"entities": [entity]})
                 soql: str = kwargs.get("soql", None) or build_soql(sub_catalog, entity)
-                if explicit_query_type is not None:
+                # --- Route: base64 fields always force REST (Bulk V2 CSV can't carry blobs)
+                has_blob = any(c.raw_type == "base64" for c in entity.columns if c.raw_type)
+                if has_blob:
+                    use_bulk = False
+                    logger.info(f"{object_name}: base64 fields — forcing REST")
+
+                # --- Route: explicit caller override bypasses count check
+                elif explicit_query_type is not None:
                     use_bulk = explicit_query_type.lower() == "bulk2"
+
+                # --- Route: count-based decision
                 else:
                     count = self.get_record_count(object_name)
-                    use_bulk = count > BULK_THRESHOLD
-                    logger.info(f"{object_name}: {count} records -> {'Bulk V2' if use_bulk else 'REST'}")
+                    if count == 0:
+                        # Empty object — skip the data call entirely and preserve the schema
+                        logger.info(f"{object_name}: 0 records — skipping data call")
+                        empty_schema = pa.schema([
+                            pa.field(c.name, c.arrow_type or pa.string(), nullable=True)
+                            for c in entity.columns
+                            if c.arrow_type is not None
+                        ])
+                        streams.append(pa.RecordBatchReader.from_batches(empty_schema, iter([])))
+                        continue
+                    use_bulk = count > BULK_V2_THRESHOLD
+                    logger.info(
+                        f"{object_name}: {count:,} records → {'Bulk V2' if use_bulk else 'REST'}"
+                    )
+
                 if use_bulk:
                     streams.append(self.arrow_frame.bulk_to_arrow_stream(
                         object_name, soql, sub_catalog, include_deleted=include_deleted,

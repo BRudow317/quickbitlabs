@@ -21,6 +21,8 @@ dependencies = [
     "PyJWT",
     "argon2-cffi",
     "cryptography",
+    # Excel
+    "openpyxl",
     # database drivers
     "oracledb",
     # Misc

@@ -3,7 +3,8 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 from server.plugins.PluginRegistry import list_plugins
-from server.services.FullMigration import FullMigration
+from server.plugins.PluginModels import Catalog
+from server.services.CatalogMigration import CatalogMigration
 
 router = APIRouter()
 
@@ -37,14 +38,25 @@ def list_migration_plugins() -> list[str]:
 @router.post("/run", operation_id="run_migration", response_model=MigrationResult)
 def run_migration(request: MigrationRequest) -> MigrationResult:
     try:
-        migration = FullMigration(
+        migration = CatalogMigration(
             source_plugin=request.source_plugin,
             target_plugin=request.target_plugin,
-            entities=request.entities,
-            source_catalog_name=request.source_catalog_name,
-            target_catalog_name=request.target_catalog_name,
+            source_catalog=Catalog(name=request.source_catalog_name),
+            target_catalog=Catalog(name=request.target_catalog_name),
         )
-        raw_results = migration.run_all()
+
+        migration.get_catalog()
+
+        if request.entities:
+            entity_filter = {name.upper() for name in request.entities}
+            migration.source_catalog.entities = [
+                entity
+                for entity in migration.source_catalog.entities
+                if (entity.name or "").upper() in entity_filter
+            ]
+
+        migration.upsert_catalog()
+        raw_results = migration.upsert_data()
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

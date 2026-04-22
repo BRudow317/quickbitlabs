@@ -5,9 +5,8 @@ from collections.abc import Iterator, Iterable
 import pyarrow as pa
 from pyarrow import ipc
 from fastapi import UploadFile
+from server.plugins.PluginRegistry import PLUGIN
 
-from server.plugins.PluginProtocol import Plugin
-from typing import TYPE_CHECKING, Any, TypedDict
 if TYPE_CHECKING:
     from pyarrow.ipc import (
         RecordBatchFileWriter, 
@@ -15,7 +14,6 @@ if TYPE_CHECKING:
         RecordBatchFileReader,
         RecordBatchStreamReader,
     )
-    from server.plugins.PluginRegistry import PLUGIN #, get_plugin
 
 # https://arrow.apache.org/docs/python/api.html
 # https://arrow.apache.org/docs/python/api/datatypes.html
@@ -315,42 +313,62 @@ class Catalog(BaseModel):
     @property
     def federate(self) -> list[Catalog]:
         """
-        Divides a federated master Catalog into system-specific child Catalogs.
-        Each child carries only its own entities, predicates, and sorts.
-        Cross-system operator groups remain on the master for DuckDB to resolve.
-        Returns a single-item list if all entities share one system.
+        Divides a federated master Catalog into cluster-specific child Catalogs.
+        Each child carries only entities connected by internal joins within one system.
+        Cross-system joins and operator groups remain on the master for DuckDB to resolve.
         """
         if not self.entities:
-            raise ValueError("Catalog must contain at least one entity to federate.")
+            return []
 
-        # 1. Group entities by plugin
-        system_entity_map: dict[str, list[Entity]] = {}
-        for entity in self.entities:
-            locator = entity.locator
-            if not locator or not locator.plugin:
-                raise ValueError(f"Entity '{entity.name}' is missing a plugin locator.")
-            system_entity_map.setdefault(locator.plugin, []).append(entity)
+        # 1. Build internal adjacency list (only joins within the same plugin)
+        internal_adj: dict[str, set[str]] = {e.name: set() for e in self.entities}
+        for j in self.joins:
+            if (j.left_entity.locator and j.right_entity.locator and 
+                j.left_entity.locator.plugin == j.right_entity.locator.plugin):
+                internal_adj[j.left_entity.name].add(j.right_entity.name)
+                internal_adj[j.right_entity.name].add(j.left_entity.name)
 
-        # 2. Classify operator groups
-        single_system_ops: dict[str, list[OperatorGroup]] = {}
-        for group in self.operator_groups:
-            systems = _collect_plugins_from_group(group)
-            if len(systems) == 1:
-                single_system_ops.setdefault(systems.pop(), []).append(group)
-            # cross-system groups intentionally left on master catalog
-
-        # 3. Build child catalogs
+        # 2. Find connected clusters within each plugin
+        visited = set()
         children: list[Catalog] = []
-        for system_name, entities in system_entity_map.items():
+        
+        for root_entity in self.entities:
+            if root_entity.name in visited:
+                continue
+            
+            cluster_entities: list[Entity] = []
+            stack = [root_entity.name]
+            visited.add(root_entity.name)
+            
+            plugin_name = root_entity.locator.plugin if root_entity.locator else None
+            
+            while stack:
+                curr_name = stack.pop()
+                curr_entity = next(e for e in self.entities if e.name == curr_name)
+                cluster_entities.append(curr_entity)
+                for neighbor_name in internal_adj[curr_name]:
+                    if neighbor_name not in visited:
+                        visited.add(neighbor_name)
+                        stack.append(neighbor_name)
+            
+            # 3. Build child catalog for this cluster
             child = self.model_copy(update={
-                "source_type": system_name,
-                "entities": entities,
-                "joins": [],        # DuckDB handles joins
+                "source_type": plugin_name,
+                "entities": cluster_entities,
+                "joins": [
+                    j for j in self.joins
+                    if j.left_entity.name in [e.name for e in cluster_entities]
+                    and j.right_entity.name in [e.name for e in cluster_entities]
+                ],
                 "sort_columns": [
                     s for s in self.sort_columns
-                    if s.column.locator and s.column.locator.plugin == system_name
+                    if s.column.locator and s.column.locator.entity_name in [e.name for e in cluster_entities]
                 ],
-                "operator_groups": single_system_ops.get(system_name, []),
+                "operator_groups": [
+                    g for g in self.operator_groups
+                    if _collect_plugins_from_group(g) == {plugin_name}
+                    # TODO: refine to only include groups referencing columns in this cluster
+                ],
                 "limit": None,      # applied post-federation only
             })
             children.append(child)

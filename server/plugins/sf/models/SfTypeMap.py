@@ -163,6 +163,14 @@ def _to_datetime(v: str) -> datetime.datetime:
     return datetime.datetime.fromisoformat(v)
 
 
+def _to_time(v: str) -> datetime.time:
+    # Salesforce time fields use ISO-8601 with a trailing 'Z' (e.g. '00:00:00.000Z')
+    # which datetime.time.fromisoformat() rejects. Strip it before parsing.
+    if isinstance(v, str) and v.endswith('Z'):
+        v = v[:-1]
+    return datetime.time.fromisoformat(v)
+
+
 _SF_CONVERTERS: dict[str, Any] = {
     'int':      int,
     'integer':  int,
@@ -172,7 +180,7 @@ _SF_CONVERTERS: dict[str, Any] = {
     'boolean':  _to_bool,
     'date':     datetime.date.fromisoformat,
     'datetime': _to_datetime,
-    'time':     datetime.time.fromisoformat,
+    'time':     _to_time,
 }
 
 

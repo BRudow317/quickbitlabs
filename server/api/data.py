@@ -3,6 +3,7 @@ from typing import Annotated, cast
 import pyarrow as pa
 from server.plugins.PluginModels import Catalog, ArrowReader
 from server.plugins.PluginRegistry import get_plugin, PLUGIN
+from server.core.federation import duckdb_orchestrator
 
 router = APIRouter(prefix="/api/data", tags=["Federated Data Execution"])
 
@@ -49,7 +50,7 @@ def get_data(catalog: Catalog = Body(...)):
     # ---------------------------------------------------------
     # PATH B: Multi-System (Federated DuckDB Join)
     # ---------------------------------------------------------
-    streams: dict[str, ArrowReader] = {}
+    children_streams: list[tuple[Catalog, ArrowReader]] = []
     for child in children:
         if not child.source_type:
             raise HTTPException(status_code=500, detail="Child catalog is missing source_type.")
@@ -57,11 +58,13 @@ def get_data(catalog: Catalog = Body(...)):
         resp = plugin.get_data(child)
         if not resp.ok:
             raise HTTPException(status_code=500, detail=f"Plugin '{child.source_type}' failed: {resp.message}")
-        streams[child.source_type] = resp.data
+        children_streams.append((child, resp.data))
 
-    # federated_stream = duckdb_orchestrator(catalog, streams)
-    # return Response(content=Catalog.serialize_arrow_stream(federated_stream), ...)
-    raise HTTPException(status_code=501, detail="Federated joins are not yet implemented.")
+    federated_stream = duckdb_orchestrator(catalog, children_streams)
+    return Response(
+        content=Catalog.serialize_arrow_stream(federated_stream),
+        media_type="application/vnd.apache.arrow.stream"
+    )
 
 
 # ---------------------------------------

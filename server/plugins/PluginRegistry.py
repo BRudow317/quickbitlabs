@@ -10,14 +10,18 @@ import logging
 logger = logging.getLogger(__name__)
 
 PLUGIN = Literal[
-    'salesforce', 
+    'salesforce',
     'oracle',
+    'reader',
+    'excel',
     ]
 
 # Maps plugin facade name -> (module_path, class_name)
 PLUGIN_REGISTRY: dict[PLUGIN, tuple[str, str]] = {
-    'salesforce': ('server.plugins.sf.Salesforce', 'Salesforce'),
-    'oracle':     ('server.plugins.oracle.Oracle', 'Oracle'),
+    'salesforce': ('server.plugins.sf.Salesforce',       'Salesforce'),
+    'oracle':     ('server.plugins.oracle.Oracle',       'Oracle'),
+    'reader':     ('server.plugins.readers.Reader',      'Reader'),
+    'excel':      ('server.plugins.excel.Excel',         'Excel'),
 }
 
 _expected_keys = set(get_args(PLUGIN))

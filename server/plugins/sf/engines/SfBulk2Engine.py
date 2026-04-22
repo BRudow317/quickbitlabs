@@ -102,16 +102,39 @@ class Bulk2SObject:
     def _csv_bytes_to_arrow_from_schema(data: bytes, schema: pa.Schema) -> pa.Table:
         """Parse raw CSV bytes into an Arrow table using an explicit schema."""
         if not data.strip(): return pa.table({}, schema=schema)
-        buf = io.BytesIO(data)
-        return pa_csv.read_csv(
-            buf,
-            convert_options=pa_csv.ConvertOptions(
-                column_types={
-                    schema.field(i).name: schema.field(i).type
-                    for i in range(len(schema))
-                }
-            ),
+
+        # Salesforce Bulk V2 CSV emits time fields as 'HH:MM:SS.sssZ'.
+        # PyArrow's CSV reader rejects the trailing Z for time64 columns.
+        # Parse those fields as strings first, then strip Z and cast afterward.
+        time64_cols = {
+            schema.field(i).name: schema.field(i).type
+            for i in range(len(schema))
+            if pa.types.is_time(schema.field(i).type)
+        }
+        csv_types = {
+            schema.field(i).name: (pa.string() if schema.field(i).name in time64_cols else schema.field(i).type)
+            for i in range(len(schema))
+        }
+
+        table = pa_csv.read_csv(
+            io.BytesIO(data),
+            convert_options=pa_csv.ConvertOptions(column_types=csv_types),
         )
+
+        if not time64_cols:
+            return table
+
+        cols: dict[str, pa.Array] = {}
+        for name in table.schema.names:
+            col = table.column(name)
+            if name in time64_cols:
+                py_times = [
+                    None if v is None else datetime.time.fromisoformat(v.rstrip('Z'))
+                    for v in col.to_pylist()
+                ]
+                col = pa.array(py_times, type=time64_cols[name])
+            cols[name] = col
+        return pa.table(cols, schema=schema)
     @staticmethod
     def csv_bytes_to_arrow(data: bytes, schema: pa.Schema | None = None) -> pa.Table:
         """Parse raw CSV bytes with type inference, used for unknown result shapes."""

@@ -1,8 +1,10 @@
 from __future__ import annotations
 
-from typing import Any, Protocol, runtime_checkable
-from .PluginModels import Catalog, Entity, Column, ArrowReader
+from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
 from .PluginResponse import PluginResponse
+
+if TYPE_CHECKING:
+    from .PluginModels import ArrowReader, Catalog, Column, Entity
 
 @runtime_checkable
 class Plugin(Protocol):

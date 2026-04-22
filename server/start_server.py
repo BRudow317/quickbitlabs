@@ -20,6 +20,7 @@ from configs.settings import settings
 from api import auth, users
 from api import catalog, entity, column, data
 from api import session, migration
+from api import registry
 
 from fastapi.routing import APIRoute
 def custom_generate_unique_id(route: APIRoute) -> str:
@@ -51,6 +52,9 @@ def create_app() -> FastAPI:
 
     # Session metadata (loaded from parquet cache written by sync_systems.py)
     app.include_router(session.router)
+
+    # User-saved Catalog views (persisted to Oracle CATALOG_REGISTRY)
+    app.include_router(registry.router, prefix="/api/registry", tags=["registry"])
 
     # Migration management
     app.include_router(migration.router, prefix="/api/migration", tags=["migration"])

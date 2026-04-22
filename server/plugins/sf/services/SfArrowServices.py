@@ -58,30 +58,38 @@ class SfArrowFrame:
             if c.arrow_type is not None
         ])
 
+        entity_name = catalog.entities[0].name or soql[:40]
+
         def _batches() -> Iterator[pa.RecordBatch]:
-            buf: dict[str, list] = {name: [] for name in schema.names}
-            count = 0
-            result = self._rest.query(soql, include_deleted=include_deleted)
-            while True:
-                for r in result.get("records", []):
-                    for name in schema.names:
-                        buf[name].append(sf_to_python(field_types.get(name, "anyType"), r.get(name)))
-                    count += 1
-                    if count == chunk_size:
-                        yield pa.record_batch(
-                            [pa.array(buf[f], type=schema.field(f).type) for f in schema.names],
-                            schema=schema,
-                        )
-                        buf = {name: [] for name in schema.names}
-                        count = 0
-                if result.get("done", True):
-                    break
-                result = self._rest.query_more(result["nextRecordsUrl"], identifier_is_url=True)
-            if count > 0:
-                yield pa.record_batch(
-                    [pa.array(buf[f], type=schema.field(f).type) for f in schema.names],
-                    schema=schema,
-                )
+            try:
+                buf: dict[str, list] = {name: [] for name in schema.names}
+                count = 0
+                result = self._rest.query(soql, include_deleted=include_deleted)
+                while True:
+                    for r in result.get("records", []):
+                        for name in schema.names:
+                            buf[name].append(sf_to_python(field_types.get(name, "anyType"), r.get(name)))
+                        count += 1
+                        if count == chunk_size:
+                            yield pa.record_batch(
+                                [pa.array(buf[f], type=schema.field(f).type) for f in schema.names],
+                                schema=schema,
+                            )
+                            buf = {name: [] for name in schema.names}
+                            count = 0
+                    if result.get("done", True):
+                        break
+                    result = self._rest.query_more(result["nextRecordsUrl"], identifier_is_url=True)
+                if count > 0:
+                    yield pa.record_batch(
+                        [pa.array(buf[f], type=schema.field(f).type) for f in schema.names],
+                        schema=schema,
+                    )
+            except Exception as exc:
+                if "INSUFFICIENT_ACCESS" in str(exc):
+                    logger.warning(f"{entity_name}: INSUFFICIENT_ACCESS — skipping (no data returned)")
+                    return
+                raise
 
         return pa.RecordBatchReader.from_batches(schema, _batches())
 
@@ -111,8 +119,14 @@ class SfArrowFrame:
         )
 
         def _batches() -> Iterator[pa.RecordBatch]:
-            for csv_bytes in page_iter:
-                yield sf_obj.csv_bytes_to_arrow(csv_bytes, schema=schema)
+            try:
+                for csv_bytes in page_iter:
+                    yield sf_obj.csv_bytes_to_arrow(csv_bytes, schema=schema)
+            except Exception as exc:
+                if "INSUFFICIENT_ACCESS" in str(exc):
+                    logger.warning(f"{object_name}: INSUFFICIENT_ACCESS — skipping (no data returned)")
+                    return
+                raise
 
         return pa.RecordBatchReader.from_batches(schema, _batches())
 

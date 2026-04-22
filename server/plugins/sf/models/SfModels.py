@@ -105,6 +105,8 @@ SKIP_NAMES = {
     'AsyncApexJob', 'CronTrigger', 'CronJobDetail',
     # Content (binary blobs - break bulk migrations)
     'ContentVersion', 'ContentDocument', 'ContentDocumentLink',
+    # Restricted query syntax — require specific WHERE filters; can't be queried freely
+    'ContentFolderItem', 'IdeaComment',
     # Metadata / Definitions
     'EntityDefinition', 'FieldDefinition', 'FieldPermissions',
     # Auth / Sessions

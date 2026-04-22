@@ -1,5 +1,4 @@
 from __future__ import annotations
-import os
 from datetime import timedelta
 from typing import Annotated
 
@@ -24,9 +23,9 @@ def login(form_data: Annotated[OAuth2PasswordRequestForm, Depends()]):
         con = oracledb.connect(
             user=form_data.username,
             password=form_data.password,
-            host=os.getenv("ORACLE_HOST", ""),
-            port=int(os.getenv("ORACLE_PORT", "1521")),
-            service_name=os.getenv("ORACLE_SERVICE", ""),
+            host=settings.ORACLE_HOST,
+            port=settings.ORACLE_PORT,
+            service_name=settings.ORACLE_SERVICE,
         )
         con.close()
     except oracledb.Error:

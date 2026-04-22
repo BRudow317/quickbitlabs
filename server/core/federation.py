@@ -1,11 +1,35 @@
-from __future__ import annotations
+import duckdb
 from fastapi.responses import JSONResponse
 from typing import Any, cast, TYPE_CHECKING
-from server.plugins.PluginModels import Catalog
+from server.plugins.PluginModels import Catalog, ArrowReader
 from server.plugins.PluginRegistry import get_plugin, PLUGIN
+from server.core.DuckDBDialect import build_duckdb_select
 
 if TYPE_CHECKING:
     from server.plugins.PluginProtocol import Plugin
+
+def duckdb_orchestrator(catalog: Catalog, children_streams: list[tuple[Catalog, ArrowReader]]) -> ArrowReader:
+    """
+    Executes a federated join across multiple plugin streams using DuckDB.
+    1. Registers each child stream as a unique temporary table.
+    2. Creates views for each entity to map 'Entity.Column' names back to 'Column'.
+    3. Builds and executes the master SQL query.
+    """
+    con = duckdb.connect()
+    
+    # 1. Register streams and create views
+    for i, (child, reader) in enumerate(children_streams):
+        stream_name = f"stream_{i}"
+        con.register(stream_name, reader)
+        
+        for entity in child.entities:
+            # Map the qualified names (e.g. "Table.Column") from the plugin stream back to simple names
+            cols = [f'"{entity.name}.{c.name}" AS "{c.name}"' for c in entity.columns]
+            con.execute(f'CREATE VIEW "{entity.name}" AS SELECT {", ".join(cols)} FROM {stream_name}')
+        
+    # 2. Build and execute master query
+    sql, binds = build_duckdb_select(catalog)
+    return con.execute(sql, binds).fetch_record_batch_reader()
 
 def execute_federation(master_catalog: Catalog) -> dict[str, tuple[Plugin, Catalog]]:
     """
