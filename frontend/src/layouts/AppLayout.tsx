@@ -44,6 +44,11 @@ export function AppLayout(): React.JSX.Element {
                   Migration
                 </Text>
               </Link>
+              <Link to="/import" style={{ textDecoration: 'none' }}>
+                <Text size="2" color="gray" style={{ cursor: 'pointer' }}>
+                  Import
+                </Text>
+              </Link>
             </Flex>
           </Flex>
           <Flex align="center" gap="3">

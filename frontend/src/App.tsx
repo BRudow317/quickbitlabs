@@ -3,6 +3,7 @@ import { normalizeBasename } from '@/utils/normalizeBasename';
 import { HomePage } from '@/pages/HomePage';
 import { DataMartPage } from '@/pages/DataMartPage';
 import { MigrationPage } from '@/pages/MigrationPage';
+import { ImportPage } from '@/pages/ImportPage';
 import { Layout } from '@/layouts/Layout';
 import { AppLayout } from '@/layouts/AppLayout';
 import { ThemeProvider } from '@/context/ThemeContext';
@@ -46,6 +47,7 @@ export function App() {
                     <Route element={<AppLayout />}>
                       <Route path="/datamart" element={<DataMartPage />} />
                       <Route path="/migration" element={<MigrationPage />} />
+                      <Route path="/import" element={<ImportPage />} />
                     </Route>
 
                     <Route path="*" element={<Navigate to="/" replace />} />
