@@ -126,6 +126,25 @@ export const Body_update_data_api_data__patchSchema = {
     title: 'Body_update_data_api_data__patch'
 } as const;
 
+export const Body_upload_fileSchema = {
+    properties: {
+        file: {
+            type: 'string',
+            contentMediaType: 'application/octet-stream',
+            title: 'File'
+        },
+        registry_key: {
+            type: 'string',
+            title: 'Registry Key'
+        }
+    },
+    type: 'object',
+    required: [
+        'file'
+    ],
+    title: 'Body_upload_file'
+} as const;
+
 export const Body_upsert_data_api_data__putSchema = {
     properties: {
         catalog_json: {
@@ -150,6 +169,17 @@ export const Body_upsert_data_api_data__putSchema = {
 
 export const Catalog_InputSchema = {
     properties: {
+        catalog_id: {
+            anyOf: [
+                {
+                    type: 'string'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Catalog Id'
+        },
         name: {
             anyOf: [
                 {
@@ -160,6 +190,59 @@ export const Catalog_InputSchema = {
                 }
             ],
             title: 'Name'
+        },
+        alias: {
+            anyOf: [
+                {
+                    type: 'string'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Alias'
+        },
+        namespace: {
+            anyOf: [
+                {
+                    type: 'string'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Namespace'
+        },
+        scope: {
+            type: 'string',
+            enum: [
+                'SYSTEM',
+                'TEAM',
+                'USER'
+            ],
+            title: 'Scope',
+            default: 'USER'
+        },
+        source_type: {
+            anyOf: [
+                {
+                    type: 'string',
+                    enum: [
+                        'salesforce',
+                        'oracle',
+                        'reader',
+                        'excel'
+                    ]
+                },
+                {
+                    type: 'string',
+                    const: 'federation'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Source Type'
         },
         entities: {
             items: {
@@ -200,6 +283,28 @@ export const Catalog_InputSchema = {
             ],
             title: 'Limit'
         },
+        owner_user_id: {
+            anyOf: [
+                {
+                    type: 'string'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Owner User Id'
+        },
+        team_id: {
+            anyOf: [
+                {
+                    type: 'string'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Team Id'
+        },
         properties: {
             additionalProperties: true,
             type: 'object',
@@ -212,6 +317,17 @@ export const Catalog_InputSchema = {
 
 export const Catalog_OutputSchema = {
     properties: {
+        catalog_id: {
+            anyOf: [
+                {
+                    type: 'string'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Catalog Id'
+        },
         name: {
             anyOf: [
                 {
@@ -222,6 +338,59 @@ export const Catalog_OutputSchema = {
                 }
             ],
             title: 'Name'
+        },
+        alias: {
+            anyOf: [
+                {
+                    type: 'string'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Alias'
+        },
+        namespace: {
+            anyOf: [
+                {
+                    type: 'string'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Namespace'
+        },
+        scope: {
+            type: 'string',
+            enum: [
+                'SYSTEM',
+                'TEAM',
+                'USER'
+            ],
+            title: 'Scope',
+            default: 'USER'
+        },
+        source_type: {
+            anyOf: [
+                {
+                    type: 'string',
+                    enum: [
+                        'salesforce',
+                        'oracle',
+                        'reader',
+                        'excel'
+                    ]
+                },
+                {
+                    type: 'string',
+                    const: 'federation'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Source Type'
         },
         entities: {
             items: {
@@ -261,6 +430,28 @@ export const Catalog_OutputSchema = {
                 }
             ],
             title: 'Limit'
+        },
+        owner_user_id: {
+            anyOf: [
+                {
+                    type: 'string'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Owner User Id'
+        },
+        team_id: {
+            anyOf: [
+                {
+                    type: 'string'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Team Id'
         },
         properties: {
             additionalProperties: true,
@@ -597,7 +788,9 @@ export const LocatorSchema = {
                     type: 'string',
                     enum: [
                         'salesforce',
-                        'oracle'
+                        'oracle',
+                        'reader',
+                        'excel'
                     ]
                 },
                 {

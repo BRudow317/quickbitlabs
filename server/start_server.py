@@ -21,6 +21,7 @@ from api import auth, users
 from api import catalog, entity, column, data
 from api import session, migration
 from api import registry
+from api import files
 
 from fastapi.routing import APIRoute
 def custom_generate_unique_id(route: APIRoute) -> str:
@@ -55,6 +56,9 @@ def create_app() -> FastAPI:
 
     # User-saved Catalog views (persisted to Oracle CATALOG_REGISTRY)
     app.include_router(registry.router, prefix="/api/registry", tags=["registry"])
+
+    # File uploads (csv / parquet / feather / xlsx → encrypted Parquet + registry)
+    app.include_router(files.router, prefix="/api/files", tags=["files"])
 
     # Migration management
     app.include_router(migration.router, prefix="/api/migration", tags=["migration"])

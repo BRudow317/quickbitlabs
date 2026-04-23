@@ -2,7 +2,7 @@
 
 import { type Client, formDataBodySerializer, type Options as Options2, type TDataShape, urlSearchParamsBodySerializer } from './client';
 import { client } from './client.gen';
-import type { CreateCatalogApiCatalogInsertPutData, CreateCatalogApiCatalogInsertPutErrors, CreateCatalogApiCatalogInsertPutResponses, CreateColumnApiColumnInsertPutData, CreateColumnApiColumnInsertPutErrors, CreateColumnApiColumnInsertPutResponses, CreateDataApiDataInsertPutData, CreateDataApiDataInsertPutErrors, CreateDataApiDataInsertPutResponses, CreateEntityApiEntityInsertPutData, CreateEntityApiEntityInsertPutErrors, CreateEntityApiEntityInsertPutResponses, DeleteCatalogApiCatalogDeleteData, DeleteCatalogApiCatalogDeleteErrors, DeleteCatalogApiCatalogDeleteResponses, DeleteColumnApiColumnDeleteData, DeleteColumnApiColumnDeleteErrors, DeleteColumnApiColumnDeleteResponses, DeleteDataApiDataDeleteData, DeleteDataApiDataDeleteErrors, DeleteDataApiDataDeleteResponses, DeleteEntityApiEntityDeleteData, DeleteEntityApiEntityDeleteErrors, DeleteEntityApiEntityDeleteResponses, GetCatalogApiCatalogPostData, GetCatalogApiCatalogPostErrors, GetCatalogApiCatalogPostResponses, GetColumnApiColumnPostData, GetColumnApiColumnPostErrors, GetColumnApiColumnPostResponses, GetDataApiDataPostData, GetDataApiDataPostErrors, GetDataApiDataPostResponses, GetEntityApiEntityPostData, GetEntityApiEntityPostErrors, GetEntityApiEntityPostResponses, GetSessionData, GetSessionResponses, GetUserData, GetUserResponses, ListMigrationPluginsData, ListMigrationPluginsResponses, ListSystemsData, ListSystemsResponses, LoginData, LoginErrors, LoginResponses, RunMigrationData, RunMigrationErrors, RunMigrationResponses, UpdateCatalogApiCatalogPatchData, UpdateCatalogApiCatalogPatchErrors, UpdateCatalogApiCatalogPatchResponses, UpdateColumnApiColumnPatchData, UpdateColumnApiColumnPatchErrors, UpdateColumnApiColumnPatchResponses, UpdateDataApiDataPatchData, UpdateDataApiDataPatchErrors, UpdateDataApiDataPatchResponses, UpdateEntityApiEntityPatchData, UpdateEntityApiEntityPatchErrors, UpdateEntityApiEntityPatchResponses, UpsertCatalogApiCatalogPutData, UpsertCatalogApiCatalogPutErrors, UpsertCatalogApiCatalogPutResponses, UpsertColumnApiColumnPutData, UpsertColumnApiColumnPutErrors, UpsertColumnApiColumnPutResponses, UpsertDataApiDataPutData, UpsertDataApiDataPutErrors, UpsertDataApiDataPutResponses, UpsertEntityApiEntityPutData, UpsertEntityApiEntityPutErrors, UpsertEntityApiEntityPutResponses } from './types.gen';
+import type { CreateCatalogApiCatalogInsertPutData, CreateCatalogApiCatalogInsertPutErrors, CreateCatalogApiCatalogInsertPutResponses, CreateColumnApiColumnInsertPutData, CreateColumnApiColumnInsertPutErrors, CreateColumnApiColumnInsertPutResponses, CreateDataApiDataInsertPutData, CreateDataApiDataInsertPutErrors, CreateDataApiDataInsertPutResponses, CreateEntityApiEntityInsertPutData, CreateEntityApiEntityInsertPutErrors, CreateEntityApiEntityInsertPutResponses, DeleteCatalogApiCatalogDeleteData, DeleteCatalogApiCatalogDeleteErrors, DeleteCatalogApiCatalogDeleteResponses, DeleteColumnApiColumnDeleteData, DeleteColumnApiColumnDeleteErrors, DeleteColumnApiColumnDeleteResponses, DeleteDataApiDataDeleteData, DeleteDataApiDataDeleteErrors, DeleteDataApiDataDeleteResponses, DeleteEntityApiEntityDeleteData, DeleteEntityApiEntityDeleteErrors, DeleteEntityApiEntityDeleteResponses, DeleteRegistryEntryData, DeleteRegistryEntryErrors, DeleteRegistryEntryResponses, GetCatalogApiCatalogPostData, GetCatalogApiCatalogPostErrors, GetCatalogApiCatalogPostResponses, GetColumnApiColumnPostData, GetColumnApiColumnPostErrors, GetColumnApiColumnPostResponses, GetDataApiDataPostData, GetDataApiDataPostErrors, GetDataApiDataPostResponses, GetEntityApiEntityPostData, GetEntityApiEntityPostErrors, GetEntityApiEntityPostResponses, GetRegistryEntryData, GetRegistryEntryErrors, GetRegistryEntryResponses, GetSessionData, GetSessionResponses, GetUserData, GetUserResponses, ListMigrationPluginsData, ListMigrationPluginsResponses, ListRegistryData, ListRegistryResponses, ListSystemsData, ListSystemsResponses, LoginData, LoginErrors, LoginResponses, LogoutData, LogoutResponses, RunMigrationData, RunMigrationErrors, RunMigrationResponses, SaveRegistryEntryData, SaveRegistryEntryErrors, SaveRegistryEntryResponses, UpdateCatalogApiCatalogPatchData, UpdateCatalogApiCatalogPatchErrors, UpdateCatalogApiCatalogPatchResponses, UpdateColumnApiColumnPatchData, UpdateColumnApiColumnPatchErrors, UpdateColumnApiColumnPatchResponses, UpdateDataApiDataPatchData, UpdateDataApiDataPatchErrors, UpdateDataApiDataPatchResponses, UpdateEntityApiEntityPatchData, UpdateEntityApiEntityPatchErrors, UpdateEntityApiEntityPatchResponses, UploadFileData, UploadFileErrors, UploadFileResponses, UpsertCatalogApiCatalogPutData, UpsertCatalogApiCatalogPutErrors, UpsertCatalogApiCatalogPutResponses, UpsertColumnApiColumnPutData, UpsertColumnApiColumnPutErrors, UpsertColumnApiColumnPutResponses, UpsertDataApiDataPutData, UpsertDataApiDataPutErrors, UpsertDataApiDataPutResponses, UpsertEntityApiEntityPutData, UpsertEntityApiEntityPutErrors, UpsertEntityApiEntityPutResponses } from './types.gen';
 
 export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends boolean = boolean> = Options2<TData, ThrowOnError> & {
     /**
@@ -21,7 +21,12 @@ export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends 
 /**
  * Login
  *
- * Authenticate by opening an Oracle connection with the supplied credentials.
+ * Authenticate against Oracle using the supplied credentials.
+ *
+ * Rate-limited: too many failures from the same username or IP within the
+ * configured window will return 429 before the DB is even contacted.
+ * Every attempt — success or failure — is logged to USER_SIGN_IN.
+ * Successful logins create a USER_SESSION row.
  */
 export const login = <ThrowOnError extends boolean = false>(options: Options<LoginData, ThrowOnError>) => (options.client ?? client).post<LoginResponses, LoginErrors, ThrowOnError>({
     ...urlSearchParamsBodySerializer,
@@ -32,6 +37,17 @@ export const login = <ThrowOnError extends boolean = false>(options: Options<Log
         'Content-Type': 'application/x-www-form-urlencoded',
         ...options.headers
     }
+});
+
+/**
+ * Logout
+ *
+ * Invalidate the current session token server-side.
+ */
+export const logout = <ThrowOnError extends boolean = false>(options?: Options<LogoutData, ThrowOnError>) => (options?.client ?? client).post<LogoutResponses, unknown, ThrowOnError>({
+    security: [{ scheme: 'bearer', type: 'http' }],
+    url: '/api/auth/logout',
+    ...options
 });
 
 /**
@@ -241,8 +257,6 @@ export const createColumnApiColumnInsertPut = <ThrowOnError extends boolean = fa
 
 /**
  * Delete data
- *
- * Deletes data matching the catalog predicates. Returns 204 No Content on success.
  */
 export const deleteDataApiDataDelete = <ThrowOnError extends boolean = false>(options: Options<DeleteDataApiDataDeleteData, ThrowOnError>) => (options.client ?? client).delete<DeleteDataApiDataDeleteResponses, DeleteDataApiDataDeleteErrors, ThrowOnError>({
     ...formDataBodySerializer,
@@ -270,10 +284,6 @@ export const updateDataApiDataPatch = <ThrowOnError extends boolean = false>(opt
 
 /**
  * Fetch data via Catalog AST
- *
- * Retrieves a data request from a catalog.
- * Accepts: application/json (Catalog)
- * Returns: application/vnd.apache.arrow.stream (Binary PyArrow Stream)
  */
 export const getDataApiDataPost = <ThrowOnError extends boolean = false>(options: Options<GetDataApiDataPostData, ThrowOnError>) => (options.client ?? client).post<GetDataApiDataPostResponses, GetDataApiDataPostErrors, ThrowOnError>({
     responseType: 'json',
@@ -301,9 +311,6 @@ export const upsertDataApiDataPut = <ThrowOnError extends boolean = false>(optio
 
 /**
  * Insert new data
- *
- * Accepts a multipart form containing the routing instructions (catalog) and the data to insert.
- * Catalog defines intent and routing. File contains the Arrow IPC stream to write.
  */
 export const createDataApiDataInsertPut = <ThrowOnError extends boolean = false>(options: Options<CreateDataApiDataInsertPutData, ThrowOnError>) => (options.client ?? client).put<CreateDataApiDataInsertPutResponses, CreateDataApiDataInsertPutErrors, ThrowOnError>({
     ...formDataBodySerializer,
@@ -338,6 +345,77 @@ export const listSystems = <ThrowOnError extends boolean = false>(options?: Opti
     security: [{ scheme: 'bearer', type: 'http' }],
     url: '/api/session/systems',
     ...options
+});
+
+/**
+ * List Registry
+ *
+ * Return lightweight metadata for all catalogs saved by the current user.
+ */
+export const listRegistry = <ThrowOnError extends boolean = false>(options?: Options<ListRegistryData, ThrowOnError>) => (options?.client ?? client).get<ListRegistryResponses, unknown, ThrowOnError>({
+    responseType: 'json',
+    security: [{ scheme: 'bearer', type: 'http' }],
+    url: '/api/registry/',
+    ...options
+});
+
+/**
+ * Delete Registry Entry
+ *
+ * Delete a saved Catalog by key.
+ */
+export const deleteRegistryEntry = <ThrowOnError extends boolean = false>(options: Options<DeleteRegistryEntryData, ThrowOnError>) => (options.client ?? client).delete<DeleteRegistryEntryResponses, DeleteRegistryEntryErrors, ThrowOnError>({
+    security: [{ scheme: 'bearer', type: 'http' }],
+    url: '/api/registry/{registry_key}',
+    ...options
+});
+
+/**
+ * Get Registry Entry
+ *
+ * Retrieve a saved Catalog by key.
+ */
+export const getRegistryEntry = <ThrowOnError extends boolean = false>(options: Options<GetRegistryEntryData, ThrowOnError>) => (options.client ?? client).get<GetRegistryEntryResponses, GetRegistryEntryErrors, ThrowOnError>({
+    responseType: 'json',
+    security: [{ scheme: 'bearer', type: 'http' }],
+    url: '/api/registry/{registry_key}',
+    ...options
+});
+
+/**
+ * Save Registry Entry
+ *
+ * Save (create or overwrite) a named Catalog for the current user.
+ */
+export const saveRegistryEntry = <ThrowOnError extends boolean = false>(options: Options<SaveRegistryEntryData, ThrowOnError>) => (options.client ?? client).put<SaveRegistryEntryResponses, SaveRegistryEntryErrors, ThrowOnError>({
+    security: [{ scheme: 'bearer', type: 'http' }],
+    url: '/api/registry/{registry_key}',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
+
+/**
+ * Upload a file and save it to the catalog registry
+ *
+ * Process an uploaded file (csv / parquet / feather / arrow / xlsx), persist
+ * each entity as encrypted Parquet, and save the resulting Catalog under
+ * *registry_key* (defaults to the filename stem).
+ *
+ * Returns the saved registry_key, the Catalog, and the full updated registry list.
+ */
+export const uploadFile = <ThrowOnError extends boolean = false>(options: Options<UploadFileData, ThrowOnError>) => (options.client ?? client).post<UploadFileResponses, UploadFileErrors, ThrowOnError>({
+    ...formDataBodySerializer,
+    responseType: 'json',
+    security: [{ scheme: 'bearer', type: 'http' }],
+    url: '/api/files/upload',
+    ...options,
+    headers: {
+        'Content-Type': null,
+        ...options.headers
+    }
 });
 
 /**

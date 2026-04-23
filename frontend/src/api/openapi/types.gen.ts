@@ -89,6 +89,20 @@ export type BodyUpdateDataApiDataPatch = {
 };
 
 /**
+ * Body_upload_file
+ */
+export type BodyUploadFile = {
+    /**
+     * File
+     */
+    file: Blob | File;
+    /**
+     * Registry Key
+     */
+    registry_key?: string;
+};
+
+/**
  * Body_upsert_data_api_data__put
  */
 export type BodyUpsertDataApiDataPut = {
@@ -111,9 +125,29 @@ export type BodyUpsertDataApiDataPut = {
  */
 export type CatalogInput = {
     /**
+     * Catalog Id
+     */
+    catalog_id?: string | null;
+    /**
      * Name
      */
     name?: string | null;
+    /**
+     * Alias
+     */
+    alias?: string | null;
+    /**
+     * Namespace
+     */
+    namespace?: string | null;
+    /**
+     * Scope
+     */
+    scope?: 'SYSTEM' | 'TEAM' | 'USER';
+    /**
+     * Source Type
+     */
+    source_type?: 'salesforce' | 'oracle' | 'reader' | 'excel' | 'federation' | null;
     /**
      * Entities
      */
@@ -135,6 +169,14 @@ export type CatalogInput = {
      */
     limit?: number | null;
     /**
+     * Owner User Id
+     */
+    owner_user_id?: string | null;
+    /**
+     * Team Id
+     */
+    team_id?: string | null;
+    /**
      * Properties
      */
     properties?: {
@@ -147,9 +189,29 @@ export type CatalogInput = {
  */
 export type CatalogOutput = {
     /**
+     * Catalog Id
+     */
+    catalog_id?: string | null;
+    /**
      * Name
      */
     name?: string | null;
+    /**
+     * Alias
+     */
+    alias?: string | null;
+    /**
+     * Namespace
+     */
+    namespace?: string | null;
+    /**
+     * Scope
+     */
+    scope?: 'SYSTEM' | 'TEAM' | 'USER';
+    /**
+     * Source Type
+     */
+    source_type?: 'salesforce' | 'oracle' | 'reader' | 'excel' | 'federation' | null;
     /**
      * Entities
      */
@@ -170,6 +232,14 @@ export type CatalogOutput = {
      * Limit
      */
     limit?: number | null;
+    /**
+     * Owner User Id
+     */
+    owner_user_id?: string | null;
+    /**
+     * Team Id
+     */
+    team_id?: string | null;
     /**
      * Properties
      */
@@ -328,7 +398,7 @@ export type Locator = {
     /**
      * Plugin
      */
-    plugin?: 'salesforce' | 'oracle' | null;
+    plugin?: 'salesforce' | 'oracle' | 'reader' | 'excel' | null;
     /**
      * Environment
      */
@@ -547,6 +617,22 @@ export type LoginResponses = {
 };
 
 export type LoginResponse = LoginResponses[keyof LoginResponses];
+
+export type LogoutData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/auth/logout';
+};
+
+export type LogoutResponses = {
+    /**
+     * Successful Response
+     */
+    204: void;
+};
+
+export type LogoutResponse = LogoutResponses[keyof LogoutResponses];
 
 export type GetUserData = {
     body?: never;
@@ -1059,6 +1145,145 @@ export type ListSystemsResponses = {
 };
 
 export type ListSystemsResponse = ListSystemsResponses[keyof ListSystemsResponses];
+
+export type ListRegistryData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/registry/';
+};
+
+export type ListRegistryResponses = {
+    /**
+     * Response List Registry
+     *
+     * Successful Response
+     */
+    200: Array<{
+        [key: string]: unknown;
+    }>;
+};
+
+export type ListRegistryResponse = ListRegistryResponses[keyof ListRegistryResponses];
+
+export type DeleteRegistryEntryData = {
+    body?: never;
+    path: {
+        /**
+         * Registry Key
+         */
+        registry_key: string;
+    };
+    query?: never;
+    url: '/api/registry/{registry_key}';
+};
+
+export type DeleteRegistryEntryErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type DeleteRegistryEntryError = DeleteRegistryEntryErrors[keyof DeleteRegistryEntryErrors];
+
+export type DeleteRegistryEntryResponses = {
+    /**
+     * Successful Response
+     */
+    204: void;
+};
+
+export type DeleteRegistryEntryResponse = DeleteRegistryEntryResponses[keyof DeleteRegistryEntryResponses];
+
+export type GetRegistryEntryData = {
+    body?: never;
+    path: {
+        /**
+         * Registry Key
+         */
+        registry_key: string;
+    };
+    query?: never;
+    url: '/api/registry/{registry_key}';
+};
+
+export type GetRegistryEntryErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GetRegistryEntryError = GetRegistryEntryErrors[keyof GetRegistryEntryErrors];
+
+export type GetRegistryEntryResponses = {
+    /**
+     * Successful Response
+     */
+    200: CatalogOutput;
+};
+
+export type GetRegistryEntryResponse = GetRegistryEntryResponses[keyof GetRegistryEntryResponses];
+
+export type SaveRegistryEntryData = {
+    body: CatalogInput;
+    path: {
+        /**
+         * Registry Key
+         */
+        registry_key: string;
+    };
+    query?: never;
+    url: '/api/registry/{registry_key}';
+};
+
+export type SaveRegistryEntryErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type SaveRegistryEntryError = SaveRegistryEntryErrors[keyof SaveRegistryEntryErrors];
+
+export type SaveRegistryEntryResponses = {
+    /**
+     * Successful Response
+     */
+    204: void;
+};
+
+export type SaveRegistryEntryResponse = SaveRegistryEntryResponses[keyof SaveRegistryEntryResponses];
+
+export type UploadFileData = {
+    body: BodyUploadFile;
+    path?: never;
+    query?: never;
+    url: '/api/files/upload';
+};
+
+export type UploadFileErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type UploadFileError = UploadFileErrors[keyof UploadFileErrors];
+
+export type UploadFileResponses = {
+    /**
+     * Response Upload File
+     *
+     * Successful Response
+     */
+    201: {
+        [key: string]: unknown;
+    };
+};
+
+export type UploadFileResponse = UploadFileResponses[keyof UploadFileResponses];
 
 export type ListMigrationPluginsData = {
     body?: never;
