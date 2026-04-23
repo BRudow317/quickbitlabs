@@ -1,14 +1,9 @@
-/**
- * 
- * export { createLead, getLeads, getUser, login, type Options, postUser } from './sdk.gen';
-export type { BodyLogin, ClientOptions, CreateLeadData, CreateLeadError, CreateLeadErrors, CreateLeadResponse, CreateLeadResponses, GetLeadsData, GetLeadsResponse, GetLeadsResponses, GetUserData, GetUserError, GetUserErrors, GetUserResponses, HttpValidationError, Lead, LoginData, LoginError, LoginErrors, LoginResponses, PostUserData, PostUserError, PostUserErrors, PostUserResponses, User, ValidationError 
- */
 import { 
   login, 
   getUser, 
   type LoginData, 
   //type LoginResponses, // The union of possible success responses
-  type UserBase,
+  type UserOut,
   type Token
 } from '@/api/openapi';
 import { client } from '@/api/openapi/client.gen';
@@ -34,9 +29,9 @@ export const authenticate = async (credentials: LoginData['body']): Promise<Toke
 
 /**
  * Fetch User
- * Returns a 'UserBase' model
+ * Returns a 'UserOut' model
  */
-export const fetchCurrentUser = async (): Promise<UserBase> => {
+export const fetchCurrentUser = async (): Promise<UserOut> => {
   const { data, error } = await getUser();
 
   if (error || !data) {

@@ -28,7 +28,7 @@ export function DataMartPage() {
     queryFn: getSession,
   });
 
-  const allEntities = session?.entities ?? [];
+  const allEntities = useMemo(() => session?.entities ?? [], [session]);
 
   const filteredEntities = useMemo(
     () =>

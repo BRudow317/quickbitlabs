@@ -19,11 +19,11 @@ export default defineConfig({
         strategy: "flat", // Groups into class
 
         //containerName: "openapi", // The name of the generated SDK object
-        methodNameBuilder: (operation: any) => {
+        methodNameBuilder: (operation: { id?: string; name?: string }) => {
           const baseName = operation.id || operation.name || "operation";
           return baseName.toLowerCase().replace(/\s+/g, "_");
         },
-      } as any,
+      } as unknown,
     },
   ],
 });

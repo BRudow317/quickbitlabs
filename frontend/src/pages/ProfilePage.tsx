@@ -7,6 +7,24 @@ import { useAuth } from '@/auth/AuthContext';
 import { client } from '@/api/openapi/client.gen';
 import { CheckCircle } from 'lucide-react';
 
+const getErrorMessage = (err: unknown): string => {
+  if (
+    typeof err === 'object' &&
+    err !== null &&
+    'response' in err &&
+    typeof (err as { response?: unknown }).response === 'object' &&
+    (err as { response?: unknown }).response !== null
+  ) {
+    const response = (err as { response: { data?: { detail?: unknown } } }).response;
+    const detail = response.data?.detail;
+    if (typeof detail === 'string' && detail.length > 0) {
+      return detail;
+    }
+  }
+
+  return 'Failed to update profile';
+};
+
 export function ProfilePage() {
   const { user } = useAuth();
   const [email, setEmail]     = useState(user?.email ?? '');
@@ -22,8 +40,8 @@ export function ProfilePage() {
     try {
       await client.instance.patch('/api/users/', { email });
       setSaved(true);
-    } catch (err: any) {
-      setError(err?.response?.data?.detail ?? 'Failed to update profile');
+    } catch (err: unknown) {
+      setError(getErrorMessage(err));
     } finally {
       setSaving(false);
     }

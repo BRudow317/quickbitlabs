@@ -15,6 +15,13 @@ type AuthContextType = {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
+const getErrorMessage = (error: unknown, fallback: string): string => {
+  if (error instanceof Error && error.message) {
+    return error.message;
+  }
+  return fallback;
+};
+
 export const useAuth = () => {
   const context = useContext(AuthContext);
   if (!context) throw new Error("useAuth must be used within an AuthProvider");
@@ -54,8 +61,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const profile = await getUser({});
       setUser(profile.data || null);
       return { success: true };
-    } catch (error: any) {
-      return { success: false, error: error.message || 'Login failed' };
+    } catch (error: unknown) {
+      return { success: false, error: getErrorMessage(error, 'Login failed') };
     }
   };
 
@@ -64,8 +71,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const { error } = await registerApi({ body: data });
       if (error) throw new Error("Registration failed");
       return await login({ username: data.username, password: data.password });
-    } catch (error: any) {
-      return { success: false, error: error.message || 'Registration failed' };
+    } catch (error: unknown) {
+      return { success: false, error: getErrorMessage(error, 'Registration failed') };
     }
   };
 

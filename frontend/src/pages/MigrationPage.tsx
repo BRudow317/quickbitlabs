@@ -17,6 +17,28 @@ import { useMutation, useQuery } from '@tanstack/react-query';
 import { listSystems } from '@/api/sessionApi';
 import { runMigration, type MigrationResult } from '@/api/migrationApi';
 
+const getErrorMessage = (err: unknown): string => {
+  if (
+    typeof err === 'object' &&
+    err !== null &&
+    'response' in err &&
+    typeof (err as { response?: unknown }).response === 'object' &&
+    (err as { response?: unknown }).response !== null
+  ) {
+    const response = (err as { response: { data?: { detail?: unknown } } }).response;
+    const detail = response.data?.detail;
+    if (typeof detail === 'string' && detail.length > 0) {
+      return detail;
+    }
+  }
+
+  if (err instanceof Error && err.message) {
+    return err.message;
+  }
+
+  return 'Migration failed';
+};
+
 export function MigrationPage() {
   const [sourcePlugin, setSourcePlugin] = useState('');
   const [targetPlugin, setTargetPlugin] = useState('');
@@ -47,8 +69,8 @@ export function MigrationPage() {
       setResults(data);
       setMigrationError(null);
     },
-    onError: (err: any) => {
-      setMigrationError(err?.response?.data?.detail || err.message || 'Migration failed');
+    onError: (err: unknown) => {
+      setMigrationError(getErrorMessage(err));
       setResults(null);
     },
   });
@@ -120,7 +142,7 @@ export function MigrationPage() {
                 </Text>
               </Text>
               <TextArea
-                placeholder={'Account\nContact\nLead'}
+                placeholder={'Account\nContact\nOpportunity'}
                 value={entitiesInput}
                 onChange={(e) => setEntitiesInput(e.target.value)}
                 style={{ height: 100 }}

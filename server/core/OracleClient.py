@@ -66,8 +66,12 @@ class OracleClient:
             raise
     
     def connect(self) -> oracledb.Connection:
-        if self._current_connection is not None and self._current_connection.is_healthy(): return self._current_connection
+        if self._current_connection is not None and self._current_connection.is_healthy(): 
+            return self._current_connection
+        
         self._connect()
+        if self._current_connection is None:
+            raise RuntimeError(f"Failed to establish Oracle connection: {self.__repr__()}")
         return self._current_connection
     
     def __call__(self):
@@ -250,7 +254,7 @@ class OracleClient:
         self.call_timeout = value
 
     def cancel(self) -> None:
-        self.cancel()
+        self.connect().cancel()
 
     def dbop(self, value: str) -> None:
         self.dbop(value)
@@ -263,15 +267,15 @@ class OracleClient:
     
     def ping(self) -> None:
         """Throws an exception if the connection is not healthy. Otherwise, returns None."""
-        self.ping()
+        self.connect().ping()
 
     def commit(self) -> None:
         """Commits the current transaction."""
-        self.commit()
+        self.connect().commit()
 
     def rollback(self) -> None:
         """Rolls back the current transaction."""
-        self.rollback()
+        self.connect().rollback()
     
     def shutdown(self, mode: int = 0) -> None:
         """Shuts down the database."""

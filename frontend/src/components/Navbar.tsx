@@ -86,7 +86,7 @@ export function Navbar() {
                 </Flex>
               </Link>
 
-              <TabNav.Root variant="surface">
+              <TabNav.Root>
                 {NAV_ITEMS.map(({ path, label, Icon }) =>
                   isAuthenticated ? (
                     <TabNav.Link key={path} asChild active={location.pathname === path}>
