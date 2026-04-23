@@ -1,5 +1,5 @@
 """
-python Q:/scripts/boot.py -v -l ./.logs --env homelab --config ../.secrets/.env --exec ./main.py
+python Q:/scripts/boot.py -v -l ./.logs --env homelab --config Q:/.secrets/.env --exec ./main.py
 """
 from __future__ import annotations
 import sys

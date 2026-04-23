@@ -1,5 +1,5 @@
 """
-python ../master/master.py --config Q:/quickbitlabs/.env -l Q:/quickbitlabs/logs -v --exec python Q:/quickbitlabs/server/start_server.py
+
 """
 from __future__ import annotations
 import sys
@@ -27,10 +27,20 @@ from fastapi.routing import APIRoute
 def custom_generate_unique_id(route: APIRoute) -> str:
     return route.name
 
+from contextlib import asynccontextmanager
+from configs.db import oracle_client
+from server.db.setup_tables import create_tables
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    create_tables(oracle_client)
+    yield
+
 def create_app() -> FastAPI:
     app = FastAPI(
         title=settings.PROJECT_NAME,
         generate_unique_id_callback=custom_generate_unique_id,
+        lifespan=lifespan,
     )
 
     app.add_middleware(

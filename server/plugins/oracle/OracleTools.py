@@ -12,45 +12,143 @@ _TIMESTAMP_FMTS = ['%Y-%m-%dT%H:%M:%S.%fZ', '%Y-%m-%dT%H:%M:%S', '%Y-%m-%d %H:%M
 _TZ_OFFSET_RE = re.compile(r'[+-]\d{2}:\d{2}$')
 
 
-_ORACLE_RESERVED = frozenset({
-"ACCESS","ADD","ALL","ALTER","AND","ANY","AS","ASC","AUDIT","BETWEEN","BY","CHAR","CHECK","CLUSTER","COLUMN",
-"COMMENT","COMPRESS","CONNECT","CREATE","CURRENT","DATE","DECIMAL","DEFAULT","DELETE","DESC","DISTINCT","DROP","ELSE",
-"EXCLUSIVE","EXISTS","FILE","FLOAT","FOR","FROM","GRANT","GROUP","HAVING","IDENTIFIED","IMMEDIATE","IN","INCREMENT",
-"INDEX","INITIAL","INSERT","INTEGER","INTERSECT","INTO","IS","LEVEL","LIKE","LOCK","LONG","MAXEXTENTS","MINUS",
-"MLSLABEL","MODE","MODIFY","NOAUDIT","NOCOMPRESS","NOT","NOWAIT","NULL","NUMBER","OF","OFFLINE","ON","ONLINE",
-"OPTION","OR","ORDER","PCTFREE","PRIOR","PRIVILEGES","PUBLIC","RAW","RENAME","RESOURCE","REVOKE","ROW","ROWID",
-"ROWNUM","ROWS","SELECT","SESSION","SET","SHARE","SIZE","SMALLINT","START","SUCCESSFUL","SYNONYM","SYSDATE",
-"TABLE","THEN","TO","TRIGGER","UID","UNION","UNIQUE","UPDATE","VALIDATE","VALUES","VARCHAR","VARCHAR2",
-"VIEW","WHENEVER","WHERE","WITH",
-# Additional Oracle reserved words not in the legacy list
-"CROSS","CUBE","FETCH","FULL","INNER","JOIN","LEFT","MERGE","NATURAL","OFFSET",
-"OUTER","RIGHT","ROLLUP","USING","WHEN"})
+# Words that Oracle truly rejects as unquoted DDL identifiers (ORA-00903 / ORA-00904).
+# This list intentionally omits keywords that are reserved in SQL syntax but still work
+# as unquoted table/column names in DDL (e.g. CASE, DATE, GROUP, FILE, SIZE, etc. are
+# reserved SQL keywords but Oracle accepts them in CREATE TABLE / CREATE INDEX contexts).
+# Source: Oracle 19c V$RESERVED_WORDS where RESERVED='Y' and commonly tested by hand.
+# Use load_reserved_words_from_db() to get the authoritative list for your exact version.
+_ORACLE_RESERVED: frozenset[str] = frozenset({
+    # DML / query keywords that cause parse errors as unquoted identifiers
+    "SELECT", "FROM", "WHERE", "AND", "OR", "NOT", "IN", "IS", "AS",
+    "HAVING", "ORDER", "GROUP", "BY", "DISTINCT", "ALL", "ANY",
+    "UNION", "INTERSECT", "MINUS", "EXCEPT",
+    # DDL keywords
+    "CREATE", "ALTER", "DROP", "TRUNCATE", "RENAME", "COMMENT",
+    "TABLE", "VIEW", "INDEX", "SYNONYM", "SEQUENCE", "TRIGGER",
+    "PROCEDURE", "FUNCTION", "PACKAGE", "TYPE", "CLUSTER",
+    # DML keywords
+    "INSERT", "INTO", "VALUES", "UPDATE", "SET", "DELETE", "MERGE",
+    # Join / subquery keywords
+    "JOIN", "INNER", "LEFT", "RIGHT", "OUTER", "FULL", "CROSS", "NATURAL", "USING",
+    "ON", "EXISTS", "WITH",
+    # Control / transaction
+    "COMMIT", "ROLLBACK", "SAVEPOINT", "GRANT", "REVOKE",
+    "START", "CONNECT", "RESOURCE", "PUBLIC", "IDENTIFIED",
+    # Literals / nulls
+    "NULL", "TRUE", "FALSE",
+    # Oracle rowset pseudo-columns that shadow real column names
+    "ROWID", "ROWNUM", "LEVEL",
+})
+
+# Fallback suffix used when a column name collides with a reserved word.
+_COL_SUFFIX = "_COL"
+# Fallback suffix used when a TABLE name collides with a reserved word.
+_TBL_SUFFIX = "_TBL"
 
 
-def to_oracle_snake(value: str, max_len: int = 128, reserved: Iterable[str] = _ORACLE_RESERVED, reserved_prefix: str | None = None) -> str:
+def _snake_base(value: str) -> str:
+    """Convert an arbitrary identifier string to UPPER_SNAKE form (no reserved-word check)."""
     s = str(value).strip()
-    if not s: return 'COL'
+    if not s:
+        return ""
     s = re.sub(r'([a-z0-9])([A-Z])', r'\1_\2', s)
     s = re.sub(r'([A-Za-z])([0-9])', r'\1_\2', s)
     s = re.sub(r'([0-9])([A-Za-z])', r'\1_\2', s)
     s = re.sub(r'[^A-Za-z0-9_]+', '_', s)
-    # s = re.sub(r'_{2,}', '_', s)
-    s= s.strip('_').upper()
-    if not s: return 'COL'
-    if s[0].isdigit():
+    s = s.strip('_').upper()
+    if s and s[0].isdigit():
         s = 'C_' + s
+    return s
+
+
+def _apply_max_len(s: str, max_len: int, suffix: str) -> str:
+    if len(s) <= max_len:
+        return s
+    if s.endswith(suffix):
+        base = s[: max_len - len(suffix)].rstrip('_')
+        return f'{base}{suffix}'
+    return s[:max_len].rstrip('_')
+
+
+def to_oracle_table_name(
+    value: str,
+    max_len: int = 128,
+    reserved: frozenset[str] | None = None,
+) -> str:
+    """Convert a source table/object name to a safe Oracle table identifier.
+
+    Reserved-word conflicts get the ``_TBL`` suffix so the result is clearly
+    a table name, not a column name.  Falls back to ``'TBL'`` for empty input.
+    """
+    if reserved is None:
+        reserved = _ORACLE_RESERVED
+    s = _snake_base(value)
+    if not s:
+        return 'TBL'
     if s in reserved:
-        s = f'{reserved_prefix}{s}' if reserved_prefix else f'{s}_COL'
-    if len(s) > max_len:
-        prefix = reserved_prefix or ''
-        if reserved_prefix and s.startswith(prefix):
-            s = f'{prefix}{s[len(prefix):max_len].rstrip("_")}'
-        elif s.endswith('_COL'):
-            base = s[:max_len - 4].rstrip('_')
-            s = f'{base}_COL'
-        else:
-            s = s[:max_len].rstrip('_')
-    return s if s else 'COL'
+        s = f'{s}{_TBL_SUFFIX}'
+    return _apply_max_len(s, max_len, _TBL_SUFFIX) or 'TBL'
+
+
+def to_oracle_column_name(
+    value: str,
+    max_len: int = 128,
+    reserved: frozenset[str] | None = None,
+) -> str:
+    """Convert a source field/column name to a safe Oracle column identifier.
+
+    Reserved-word conflicts get the ``_COL`` suffix.
+    Falls back to ``'COL'`` for empty input.
+    """
+    if reserved is None:
+        reserved = _ORACLE_RESERVED
+    s = _snake_base(value)
+    if not s:
+        return 'COL'
+    if s in reserved:
+        s = f'{s}{_COL_SUFFIX}'
+    return _apply_max_len(s, max_len, _COL_SUFFIX) or 'COL'
+
+
+def to_oracle_snake(
+    value: str,
+    max_len: int = 128,
+    reserved: Iterable[str] = _ORACLE_RESERVED,
+    reserved_prefix: str | None = None,
+    *,
+    is_table: bool = False,
+) -> str:
+    """Convert a source identifier to a safe Oracle name.
+
+    Prefer the explicit ``to_oracle_table_name`` / ``to_oracle_column_name``
+    helpers.  This wrapper exists for backwards-compatibility.
+
+    Args:
+        is_table: When True, uses ``_TBL`` for reserved-word conflicts instead
+                  of ``_COL``.  Set this when mapping entity/table names.
+    """
+    reserved_set = frozenset(s.upper() for s in reserved)
+    if is_table:
+        return to_oracle_table_name(value, max_len=max_len, reserved=reserved_set)
+    return to_oracle_column_name(value, max_len=max_len, reserved=reserved_set)
+
+
+def load_reserved_words_from_db(cursor: Any) -> frozenset[str]:
+    """Query V$RESERVED_WORDS for this Oracle instance's authoritative reserved-word list.
+
+    Returns only words where RESERVED='Y' — i.e. identifiers that require double-quoting.
+    Keywords where RESERVED='N' (e.g. CASE, DATE, SIZE) are excluded because Oracle
+    accepts them as unquoted table/column names in DDL contexts.
+
+    Usage::
+
+        with client.connect().cursor() as cur:
+            live_reserved = load_reserved_words_from_db(cur)
+        safe_name = to_oracle_table_name(src_name, reserved=live_reserved)
+    """
+    cursor.execute("SELECT KEYWORD FROM V$RESERVED_WORDS WHERE RESERVED = 'Y'")
+    return frozenset(row[0].upper() for row in cursor.fetchall())
 
 def normalize_cell(raw: str, data_type: str) -> Any:
     value = _NULL_BYTE_RE.sub('', raw)

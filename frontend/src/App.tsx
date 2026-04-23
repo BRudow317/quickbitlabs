@@ -4,8 +4,9 @@ import { HomePage } from '@/pages/HomePage';
 import { DataMartPage } from '@/pages/DataMartPage';
 import { MigrationPage } from '@/pages/MigrationPage';
 import { ImportPage } from '@/pages/ImportPage';
+import { ContactsPage } from '@/pages/ContactsPage';
+import { ProfilePage } from '@/pages/ProfilePage';
 import { Layout } from '@/layouts/Layout';
-import { AppLayout } from '@/layouts/AppLayout';
 import { ThemeProvider } from '@/context/ThemeContext';
 import { BreakpointProvider } from '@/context/BreakpointContext';
 import { DataProvider } from '@/context/DataContext';
@@ -17,7 +18,6 @@ import { QueryClientProvider } from '@tanstack/react-query';
 import { Theme } from '@radix-ui/themes';
 import '@radix-ui/themes/styles.css';
 
-// Attach bearer token from localStorage to every request
 client.instance.interceptors.request.use((config) => {
   const token = localStorage.getItem('access_token');
   if (token && config.headers) {
@@ -38,16 +38,18 @@ export function App() {
               <Theme>
                 <ThemeProvider>
                   <Routes>
-                    {/* Public — login */}
+                    {/* Public */}
                     <Route element={<Layout />}>
                       <Route index element={<HomePage />} />
                     </Route>
 
-                    {/* Authenticated — nav layout */}
-                    <Route element={<AppLayout />}>
+                    {/* Authenticated */}
+                    <Route element={<Layout requireAuth />}>
                       <Route path="/datamart" element={<DataMartPage />} />
                       <Route path="/migration" element={<MigrationPage />} />
                       <Route path="/import" element={<ImportPage />} />
+                      <Route path="/contacts" element={<ContactsPage />} />
+                      <Route path="/profile" element={<ProfilePage />} />
                     </Route>
 
                     <Route path="*" element={<Navigate to="/" replace />} />

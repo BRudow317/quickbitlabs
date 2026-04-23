@@ -5,6 +5,10 @@ from enum import Enum
 import os
 from typing import NamedTuple, TypedDict
 
+CATALOG_NAME: str | None = 'Salesforce'
+CATALOG_ALIAS: str | None = 'sf'
+CATALOG_NAMESPACE: str | None = 'salesforce'
+
 API_VERSION: str = os.getenv('SF_API_VERSION', '66.0')
 SF_EXTERNAL_CLIENT_APP_NAME: str = os.getenv('SF_EXTERNAL_CLIENT_APP_NAME', 'automation')
 SF_BASE_URL: str = os.getenv('SF_BASE_URL') or f"https://{os.getenv('SF_BASE_DOMAIN')}.salesforce.com"

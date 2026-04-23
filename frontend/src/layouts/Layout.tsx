@@ -1,20 +1,32 @@
-// import { useBreakpoint } from "../context/BreakpointContext";
-// import type { ScreenSize } from "../context/BreakpointContext";
-import { Outlet } from "react-router";
-// import { MobileLayout } from "./MobileLayout";
-// import { DesktopLayout } from "./DesktopLayout";
-import React from "react";
+import React from 'react';
+import { Box, Container } from '@radix-ui/themes';
+import { Navigate, Outlet } from 'react-router';
+import { useAuth } from '@/auth/AuthContext';
+import { Navbar } from '@/components/Navbar';
 
-export const Layout = (): React.JSX.Element => {
-  // const screenSize: ScreenSize = useBreakpoint();
-  // console.log("Screen Size in Layout:", screenSize);
-  // const isMobile = screenSize === "xsm" || screenSize === "sm";
+interface LayoutProps {
+  requireAuth?: boolean;
+}
 
-  return <Outlet />;
+export function Layout({ requireAuth = false }: LayoutProps): React.JSX.Element {
+  const { isAuthenticated, isLoading } = useAuth();
 
-  // return isMobile ? (
-  //   <MobileLayout screenSize={screenSize} />
-  // ) : (
-  //   <DesktopLayout screenSize={screenSize} />
-  // );
-};
+  if (isLoading) return <></>;
+
+  if (requireAuth && !isAuthenticated) {
+    return <Navigate to="/" replace />;
+  }
+
+  return (
+    <Box style={{ minHeight: '100vh', background: 'var(--gray-a1)' }}>
+      <Navbar />
+      {requireAuth ? (
+        <Container size="4" p="5">
+          <Outlet />
+        </Container>
+      ) : (
+        <Outlet />
+      )}
+    </Box>
+  );
+}

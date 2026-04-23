@@ -113,11 +113,13 @@ def _read_excel(path: Path) -> tuple[Catalog, list[pa.Table]]:
         raise RuntimeError(f"Excel plugin catalog: {resp.message}")
 
     catalog = resp.data
+    if catalog is None:
+        raise ValueError("No readable entities found in the Excel file")
     tables: list[pa.Table] = []
 
     for entity in catalog.entities:
         dr = plugin.get_data(catalog.model_copy(update={"entities": [entity]}))
-        if not dr.ok:
+        if not dr.ok or dr.data is None:
             raise RuntimeError(f"Excel sheet '{entity.name}': {dr.message}")
         tables.append(dr.data.read_all())
 
@@ -132,6 +134,8 @@ def _read_single_file(staging_dir: str) -> tuple[Catalog, list[pa.Table]]:
         raise RuntimeError(f"Reader plugin catalog: {resp.message}")
 
     catalog = resp.data
+    if catalog is None:
+        raise ValueError("No readable entities found in the uploaded file")
     if not catalog.entities:
         raise ValueError("No readable entities found in the uploaded file")
 
@@ -140,6 +144,8 @@ def _read_single_file(staging_dir: str) -> tuple[Catalog, list[pa.Table]]:
         dr = plugin.get_data(catalog.model_copy(update={"entities": [entity]}))
         if not dr.ok:
             raise RuntimeError(f"Reader file '{entity.name}': {dr.message}")
+        if dr.data is None:
+            raise RuntimeError(f"Reader file '{entity.name}': no data returned")
         tables.append(dr.data.read_all())
 
     return catalog, tables

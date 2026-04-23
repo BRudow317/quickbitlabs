@@ -1,0 +1,1 @@
+CATALOG_ALIAS: str | None = 'excel'

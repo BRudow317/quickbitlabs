@@ -1,5 +1,28 @@
-* { 
-  box-sizing: border-box; 
+* {
+  box-sizing: border-box;
+}
+
+/* Ensure pointer cursor on all interactive elements */
+button, [role="button"], [role="tab"], [role="menuitem"],
+.rt-Button, .rt-TabNavLink, .rt-DropdownMenuItem {
+  cursor: pointer !important;
+}
+
+/* Ghost button hover */
+.rt-Button[data-variant="ghost"]:hover:not(:disabled) {
+  background-color: var(--gray-a3);
+}
+
+/* Surface tab nav link hover */
+.rt-TabNavLink:not([aria-disabled]):hover {
+  background-color: var(--gray-a2);
+}
+
+/* Card hover for clickable cards */
+.rt-Card[data-clickable]:hover {
+  box-shadow: var(--shadow-3);
+  transform: translateY(-1px);
+  transition: box-shadow 0.15s ease, transform 0.15s ease;
 }
 
 body,

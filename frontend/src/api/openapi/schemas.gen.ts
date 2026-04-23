@@ -1131,18 +1131,61 @@ export const TokenSchema = {
     title: 'Token'
 } as const;
 
-export const UserBaseSchema = {
+export const UserCreateSchema = {
     properties: {
         username: {
             type: 'string',
             title: 'Username'
+        },
+        email: {
+            type: 'string',
+            title: 'Email'
+        },
+        password: {
+            type: 'string',
+            maxLength: 128,
+            minLength: 8,
+            title: 'Password'
         }
     },
     type: 'object',
     required: [
-        'username'
+        'username',
+        'email',
+        'password'
     ],
-    title: 'UserBase'
+    title: 'UserCreate'
+} as const;
+
+export const UserOutSchema = {
+    properties: {
+        username: {
+            type: 'string',
+            title: 'Username'
+        },
+        email: {
+            type: 'string',
+            title: 'Email'
+        },
+        external_id: {
+            anyOf: [
+                {
+                    type: 'string'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'External Id'
+        }
+    },
+    type: 'object',
+    required: [
+        'username',
+        'email'
+    ],
+    title: 'UserOut',
+    description: 'Safe API response shape — no credentials.'
 } as const;
 
 export const ValidationErrorSchema = {

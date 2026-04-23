@@ -83,7 +83,7 @@ export function DataMartPage() {
         <Heading size="5">DataMart</Heading>
 
         <Flex gap="4" align="start">
-          {/* ── Entity Browser ─────────────────────────────────────────── */}
+          {/* -- Entity Browser ------------------------------------------- */}
           <Box style={{ width: 280, flexShrink: 0 }}>
             <Card>
               <Flex direction="column" gap="3">
@@ -151,7 +151,7 @@ export function DataMartPage() {
             </Card>
           </Box>
 
-          {/* ── Query Builder + Results ─────────────────────────────────── */}
+          {/* -- Query Builder + Results ----------------------------------- */}
           <Box style={{ flex: 1, minWidth: 0 }}>
             <Flex direction="column" gap="3">
               <Card>

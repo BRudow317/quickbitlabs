@@ -15,8 +15,8 @@ class OracleClient:
     _oracle_host: str
     _oracle_port: int
     _oracle_service: str
-    _current_connection: Connection
-    # _pool: ConnectionPool | None = None
+    _current_connection: Connection | None
+
     def __slot__(self):
         return (
             "_oracle_user", "_oracle_pass",
@@ -38,7 +38,7 @@ class OracleClient:
         self._oracle_host = oracle_host
         self._oracle_port = oracle_port
         self._oracle_service = oracle_service
-        self._connect()
+        self._current_connection = None
     
     def __repr__(self) -> str:
         return (
@@ -59,14 +59,14 @@ class OracleClient:
             )
             self._current_connection.autocommit = False
         except oracledb.Error as e:
-            logger.error(f'Error connecting to Oracle: {self.__repr__()}\nError: {e}')
+            logger.error(f'Error connecting to Oracle: {self.__repr__()}\\nError: {e}')
             raise
         except Exception as e:
-            logger.error(f'Unexpected error during Oracle connection: {self.__repr__()}\nError: {e}')
+            logger.error(f'Unexpected error during Oracle connection: {self.__repr__()}\\nError: {e}')
             raise
     
     def connect(self) -> oracledb.Connection:
-        if self._current_connection.is_healthy(): return self._current_connection
+        if self._current_connection is not None and self._current_connection.is_healthy(): return self._current_connection
         self._connect()
         return self._current_connection
     
@@ -74,20 +74,22 @@ class OracleClient:
         return self.connect()
     
     def close(self) -> None:
+        if self._current_connection is None:
+            return
         try:
             self._current_connection.close()
         except oracledb.Error as e:
-            logger.error(f'Error closing Oracle connection: {self.__repr__()}\nError: {e}')
+            logger.error(f'Error closing Oracle connection: {self.__repr__()}\\nError: {e}')
             raise
         except Exception as e:
-            logger.error(f'Unexpected error during Oracle connection close: {self.__repr__()}\nError: {e}')
+            logger.error(f'Unexpected error during Oracle connection close: {self.__repr__()}\\nError: {e}')
             raise
     
     def __del__(self):
         try:
             self.close()
         except Exception as e:
-            logger.warning(f'Error during OracleClient cleanup: {self.__repr__()}\nError: {e}')
+            logger.warning(f'Error during OracleClient cleanup: {self.__repr__()}\\nError: {e}')
     
     def cursor(self, scrollable: bool = False) -> Cursor:
         return Cursor(self.connect(), scrollable)
@@ -139,18 +141,17 @@ class OracleClient:
             requested_schema=requested_schema,
         )
 
-
     @property
     def auto_commit(self) -> bool:
-        return self._current_connection.autocommit
+        return self.connect().autocommit
 
     @auto_commit.setter
     def auto_commit(self, auto_commit: bool) -> None:
-        self._current_connection.autocommit = auto_commit
+        self.connect().autocommit = auto_commit
     
     @property
     def is_healthy(self) -> bool:
-        return self._current_connection.is_healthy()
+        return self._current_connection is not None and self._current_connection.is_healthy()
 
     @property
     def current_schema(self) -> str:

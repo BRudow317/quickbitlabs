@@ -2,7 +2,7 @@
 
 import { type Client, formDataBodySerializer, type Options as Options2, type TDataShape, urlSearchParamsBodySerializer } from './client';
 import { client } from './client.gen';
-import type { CreateCatalogApiCatalogInsertPutData, CreateCatalogApiCatalogInsertPutErrors, CreateCatalogApiCatalogInsertPutResponses, CreateColumnApiColumnInsertPutData, CreateColumnApiColumnInsertPutErrors, CreateColumnApiColumnInsertPutResponses, CreateDataApiDataInsertPutData, CreateDataApiDataInsertPutErrors, CreateDataApiDataInsertPutResponses, CreateEntityApiEntityInsertPutData, CreateEntityApiEntityInsertPutErrors, CreateEntityApiEntityInsertPutResponses, DeleteCatalogApiCatalogDeleteData, DeleteCatalogApiCatalogDeleteErrors, DeleteCatalogApiCatalogDeleteResponses, DeleteColumnApiColumnDeleteData, DeleteColumnApiColumnDeleteErrors, DeleteColumnApiColumnDeleteResponses, DeleteDataApiDataDeleteData, DeleteDataApiDataDeleteErrors, DeleteDataApiDataDeleteResponses, DeleteEntityApiEntityDeleteData, DeleteEntityApiEntityDeleteErrors, DeleteEntityApiEntityDeleteResponses, DeleteRegistryEntryData, DeleteRegistryEntryErrors, DeleteRegistryEntryResponses, GetCatalogApiCatalogPostData, GetCatalogApiCatalogPostErrors, GetCatalogApiCatalogPostResponses, GetColumnApiColumnPostData, GetColumnApiColumnPostErrors, GetColumnApiColumnPostResponses, GetDataApiDataPostData, GetDataApiDataPostErrors, GetDataApiDataPostResponses, GetEntityApiEntityPostData, GetEntityApiEntityPostErrors, GetEntityApiEntityPostResponses, GetRegistryEntryData, GetRegistryEntryErrors, GetRegistryEntryResponses, GetSessionData, GetSessionResponses, GetUserData, GetUserResponses, ListMigrationPluginsData, ListMigrationPluginsResponses, ListRegistryData, ListRegistryResponses, ListSystemsData, ListSystemsResponses, LoginData, LoginErrors, LoginResponses, LogoutData, LogoutResponses, RunMigrationData, RunMigrationErrors, RunMigrationResponses, SaveRegistryEntryData, SaveRegistryEntryErrors, SaveRegistryEntryResponses, UpdateCatalogApiCatalogPatchData, UpdateCatalogApiCatalogPatchErrors, UpdateCatalogApiCatalogPatchResponses, UpdateColumnApiColumnPatchData, UpdateColumnApiColumnPatchErrors, UpdateColumnApiColumnPatchResponses, UpdateDataApiDataPatchData, UpdateDataApiDataPatchErrors, UpdateDataApiDataPatchResponses, UpdateEntityApiEntityPatchData, UpdateEntityApiEntityPatchErrors, UpdateEntityApiEntityPatchResponses, UploadFileData, UploadFileErrors, UploadFileResponses, UpsertCatalogApiCatalogPutData, UpsertCatalogApiCatalogPutErrors, UpsertCatalogApiCatalogPutResponses, UpsertColumnApiColumnPutData, UpsertColumnApiColumnPutErrors, UpsertColumnApiColumnPutResponses, UpsertDataApiDataPutData, UpsertDataApiDataPutErrors, UpsertDataApiDataPutResponses, UpsertEntityApiEntityPutData, UpsertEntityApiEntityPutErrors, UpsertEntityApiEntityPutResponses } from './types.gen';
+import type { CreateCatalogApiCatalogInsertPutData, CreateCatalogApiCatalogInsertPutErrors, CreateCatalogApiCatalogInsertPutResponses, CreateColumnApiColumnInsertPutData, CreateColumnApiColumnInsertPutErrors, CreateColumnApiColumnInsertPutResponses, CreateDataApiDataInsertPutData, CreateDataApiDataInsertPutErrors, CreateDataApiDataInsertPutResponses, CreateEntityApiEntityInsertPutData, CreateEntityApiEntityInsertPutErrors, CreateEntityApiEntityInsertPutResponses, DeleteCatalogApiCatalogDeleteData, DeleteCatalogApiCatalogDeleteErrors, DeleteCatalogApiCatalogDeleteResponses, DeleteColumnApiColumnDeleteData, DeleteColumnApiColumnDeleteErrors, DeleteColumnApiColumnDeleteResponses, DeleteDataApiDataDeleteData, DeleteDataApiDataDeleteErrors, DeleteDataApiDataDeleteResponses, DeleteEntityApiEntityDeleteData, DeleteEntityApiEntityDeleteErrors, DeleteEntityApiEntityDeleteResponses, DeleteRegistryEntryData, DeleteRegistryEntryErrors, DeleteRegistryEntryResponses, GetCatalogApiCatalogPostData, GetCatalogApiCatalogPostErrors, GetCatalogApiCatalogPostResponses, GetColumnApiColumnPostData, GetColumnApiColumnPostErrors, GetColumnApiColumnPostResponses, GetDataApiDataPostData, GetDataApiDataPostErrors, GetDataApiDataPostResponses, GetEntityApiEntityPostData, GetEntityApiEntityPostErrors, GetEntityApiEntityPostResponses, GetRegistryEntryData, GetRegistryEntryErrors, GetRegistryEntryResponses, GetSessionData, GetSessionResponses, GetUserData, GetUserResponses, ListMigrationPluginsData, ListMigrationPluginsResponses, ListRegistryData, ListRegistryResponses, ListSystemsData, ListSystemsResponses, LoginData, LoginErrors, LoginResponses, LogoutData, LogoutResponses, RegisterData, RegisterErrors, RegisterResponses, RunMigrationData, RunMigrationErrors, RunMigrationResponses, SaveRegistryEntryData, SaveRegistryEntryErrors, SaveRegistryEntryResponses, UpdateCatalogApiCatalogPatchData, UpdateCatalogApiCatalogPatchErrors, UpdateCatalogApiCatalogPatchResponses, UpdateColumnApiColumnPatchData, UpdateColumnApiColumnPatchErrors, UpdateColumnApiColumnPatchResponses, UpdateDataApiDataPatchData, UpdateDataApiDataPatchErrors, UpdateDataApiDataPatchResponses, UpdateEntityApiEntityPatchData, UpdateEntityApiEntityPatchErrors, UpdateEntityApiEntityPatchResponses, UploadFileData, UploadFileErrors, UploadFileResponses, UpsertCatalogApiCatalogPutData, UpsertCatalogApiCatalogPutErrors, UpsertCatalogApiCatalogPutResponses, UpsertColumnApiColumnPutData, UpsertColumnApiColumnPutErrors, UpsertColumnApiColumnPutResponses, UpsertDataApiDataPutData, UpsertDataApiDataPutErrors, UpsertDataApiDataPutResponses, UpsertEntityApiEntityPutData, UpsertEntityApiEntityPutErrors, UpsertEntityApiEntityPutResponses } from './types.gen';
 
 export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends boolean = boolean> = Options2<TData, ThrowOnError> & {
     /**
@@ -19,9 +19,25 @@ export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends 
 };
 
 /**
+ * Register
+ *
+ * Register application credentials for a user.
+ * If the username exists in the Salesforce USER table it will be linked via EXTERNAL_ID.
+ */
+export const register = <ThrowOnError extends boolean = false>(options: Options<RegisterData, ThrowOnError>) => (options.client ?? client).post<RegisterResponses, RegisterErrors, ThrowOnError>({
+    responseType: 'json',
+    url: '/api/auth/register',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
+
+/**
  * Login
  *
- * Authenticate against Oracle using the supplied credentials.
+ * Authenticate against USER_CREDENTIALS.
  *
  * Rate-limited: too many failures from the same username or IP within the
  * configured window will return 429 before the DB is even contacted.

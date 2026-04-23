@@ -1,14 +1,14 @@
 import React, { createContext, useState, useContext, useEffect } from 'react';
-// Use the exact barrel exports we verified
-import { login as loginApi, getUser, type LoginData, type UserBase } from '@/api/openapi';
+import { login as loginApi, getUser, register as registerApi, type LoginData, type UserCreate, type UserOut } from '@/api/openapi';
 import { client } from '@/api/openapi/client.gen';
 
 type LoginResult = { success: boolean; error?: string };
 
 type AuthContextType = {
-  user: UserBase | null; 
+  user: UserOut | null;
   isAuthenticated: boolean;
   login: (credentials: LoginData['body']) => Promise<LoginResult>;
+  register: (data: UserCreate) => Promise<LoginResult>;
   logout: () => void;
   isLoading: boolean;
 };
@@ -22,20 +22,18 @@ export const useAuth = () => {
 };
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [user, setUser] = useState<UserBase | null>(null);
+  const [user, setUser] = useState<UserOut | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  // 1. Initial Load: Check if we have a valid session
   useEffect(() => {
     const initializeAuth = async () => {
       const savedToken = localStorage.getItem('access_token');
       if (savedToken) {
-        // set the client header immediately for the get user call
         client.setConfig({ headers: { Authorization: `Bearer ${savedToken}` } });
         try {
           const { data } = await getUser({});
           if (data) setUser(data);
-        } catch (err) {
+        } catch {
           localStorage.removeItem('access_token');
         }
       }
@@ -46,22 +44,28 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const login = async (credentials: LoginData['body']) => {
     try {
-      // Use the stable login method
       const { data, error } = await loginApi({ body: credentials });
-
       if (error || !data) throw new Error("Invalid credentials");
 
       const token = data.access_token;
       localStorage.setItem('access_token', token);
-      
-      // Update global client and fetch the full user profile
       client.setConfig({ headers: { Authorization: `Bearer ${token}` } });
+
       const profile = await getUser({});
-      
       setUser(profile.data || null);
       return { success: true };
     } catch (error: any) {
       return { success: false, error: error.message || 'Login failed' };
+    }
+  };
+
+  const register = async (data: UserCreate) => {
+    try {
+      const { error } = await registerApi({ body: data });
+      if (error) throw new Error("Registration failed");
+      return await login({ username: data.username, password: data.password });
+    } catch (error: any) {
+      return { success: false, error: error.message || 'Registration failed' };
     }
   };
 
@@ -72,12 +76,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   return (
-    <AuthContext.Provider value={{ 
-      user, 
-      login, 
-      logout, 
+    <AuthContext.Provider value={{
+      user,
+      login,
+      register,
+      logout,
       isAuthenticated: !!user,
-      isLoading 
+      isLoading,
     }}>
       {children}
     </AuthContext.Provider>

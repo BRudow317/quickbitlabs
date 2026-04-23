@@ -556,13 +556,41 @@ export type Token = {
 };
 
 /**
- * UserBase
+ * UserCreate
  */
-export type UserBase = {
+export type UserCreate = {
     /**
      * Username
      */
     username: string;
+    /**
+     * Email
+     */
+    email: string;
+    /**
+     * Password
+     */
+    password: string;
+};
+
+/**
+ * UserOut
+ *
+ * Safe API response shape — no credentials.
+ */
+export type UserOut = {
+    /**
+     * Username
+     */
+    username: string;
+    /**
+     * Email
+     */
+    email: string;
+    /**
+     * External Id
+     */
+    external_id?: string | null;
 };
 
 /**
@@ -592,6 +620,31 @@ export type ValidationError = {
         [key: string]: unknown;
     };
 };
+
+export type RegisterData = {
+    body: UserCreate;
+    path?: never;
+    query?: never;
+    url: '/api/auth/register';
+};
+
+export type RegisterErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type RegisterError = RegisterErrors[keyof RegisterErrors];
+
+export type RegisterResponses = {
+    /**
+     * Successful Response
+     */
+    200: UserOut;
+};
+
+export type RegisterResponse = RegisterResponses[keyof RegisterResponses];
 
 export type LoginData = {
     body: BodyLogin;
@@ -645,7 +698,7 @@ export type GetUserResponses = {
     /**
      * Successful Response
      */
-    200: UserBase;
+    200: UserOut;
 };
 
 export type GetUserResponse = GetUserResponses[keyof GetUserResponses];
