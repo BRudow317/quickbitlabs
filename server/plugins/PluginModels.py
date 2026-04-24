@@ -310,6 +310,29 @@ class Catalog(BaseModel):
                 writer.write_batch(batch)
         return sink.getvalue().to_pybytes()
 
+
+    def stream_arrow_ipc(self, reader: ArrowReader | pa.RecordBatchReader) -> Iterator[bytes]:
+        """Efficient Arrow IPC streaming using native buffers."""
+        
+        # 1. Open a buffer stream
+        sink = pa.BufferOutputStream()
+        
+        # 2. Initialize the writer with the schema
+        with pa.ipc.new_stream(sink, reader.schema) as writer:
+            # Yield the initial schema header
+            yield sink.getvalue().to_pybytes()
+            sink.reset()
+            
+            # 3. Write batches
+            for batch in reader:
+                writer.write_batch(batch)
+                # Yield the serialized batch
+                yield sink.getvalue().to_pybytes()
+                sink.reset()
+                
+        # 4. Finalize the stream (The context manager writes the EOS)
+        yield sink.getvalue().to_pybytes()
+
     @property
     def federate(self) -> list[Catalog]:
         """

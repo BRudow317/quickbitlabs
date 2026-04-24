@@ -5,8 +5,7 @@ from typing import Annotated, Any
 from fastapi import APIRouter, Depends, HTTPException, status
 
 from server.api.auth import get_current_user
-from server.configs.catalog_registry import CatalogRegistryService
-from server.configs.db import oracle_client
+from server.core.catalog_registry import CatalogRegistryService
 from server.models.user import UserBase
 from server.plugins.PluginModels import Catalog
 
@@ -14,8 +13,7 @@ router = APIRouter()
 
 
 def _registry() -> CatalogRegistryService:
-    return CatalogRegistryService(oracle_client)
-
+    return CatalogRegistryService()
 
 @router.get("/", response_model=list[dict[str, Any]], operation_id="list_registry")
 def list_registry(

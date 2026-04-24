@@ -28,12 +28,12 @@ def custom_generate_unique_id(route: APIRoute) -> str:
     return route.name
 
 from contextlib import asynccontextmanager
-from configs.db import oracle_client
+from server.db.db import ServerDatabase, server_db
 from server.db.setup_tables import create_tables
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    create_tables(oracle_client)
+    create_tables(server_db)
     yield
 
 def create_app() -> FastAPI:

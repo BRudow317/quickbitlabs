@@ -22,8 +22,7 @@ from typing import Annotated, Any
 from fastapi import APIRouter, Depends, Form, HTTPException, UploadFile, status
 
 from server.api.auth import get_current_user
-from server.configs.catalog_registry import CatalogRegistryService
-from server.configs.db import oracle_client
+from server.core.catalog_registry import CatalogRegistryService
 from server.configs.settings import settings
 from server.models.user import UserBase
 from server.services import file_service
@@ -33,7 +32,7 @@ router = APIRouter()
 
 
 def _registry() -> CatalogRegistryService:
-    return CatalogRegistryService(oracle_client)
+    return CatalogRegistryService()
 
 
 @router.post(

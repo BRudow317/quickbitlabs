@@ -20,7 +20,7 @@ import oracledb
 from server.plugins.PluginModels import Catalog, Column, Entity, Locator
 from server.plugins.PluginRegistry import PLUGIN, get_plugin, list_plugins
 
-from server.core.OracleClient import OracleClient
+from server.db.ServerDatabase import OracleClient
 
 logger = logging.getLogger(__name__)
 

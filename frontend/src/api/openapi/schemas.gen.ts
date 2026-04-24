@@ -1185,7 +1185,25 @@ export const UserOutSchema = {
         'email'
     ],
     title: 'UserOut',
-    description: 'Safe API response shape — no credentials.'
+    description: 'Safe API response shape - no credentials.'
+} as const;
+
+export const UserUpdateSchema = {
+    properties: {
+        email: {
+            anyOf: [
+                {
+                    type: 'string'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Email'
+        }
+    },
+    type: 'object',
+    title: 'UserUpdate'
 } as const;
 
 export const ValidationErrorSchema = {

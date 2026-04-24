@@ -29,7 +29,8 @@ def duckdb_orchestrator(catalog: Catalog, children_streams: list[tuple[Catalog, 
         
     # 2. Build and execute master query
     sql, binds = build_duckdb_select(catalog)
-    return con.execute(sql, binds).fetch_record_batch_reader()
+    arrow_reader: ArrowReader = con.execute(sql, binds).to_arrow_reader()
+    return arrow_reader
 
 def execute_federation(master_catalog: Catalog) -> dict[str, tuple[Plugin, Catalog]]:
     """
@@ -46,7 +47,7 @@ def execute_federation(master_catalog: Catalog) -> dict[str, tuple[Plugin, Catal
 def fanout(catalog: Catalog, method: str) -> JSONResponse:
     """
     Federates a catalog and fans out a single DDL method across all child systems.
-    Collects successes and failures independently — partial failure returns 207.
+    Collects successes and failures independently - partial failure returns 207.
     Used by catalog, entity, and column DDL routers.
     """
     children: list[Catalog] = catalog.federate

@@ -6,6 +6,7 @@ Responsibilities:
   - Log every sign-in attempt (success or failure)
   - Rate-limit check: count failed attempts per username + IP within a rolling window
   - Read / update the per-session JSON scratchpad (session_data)
+  - Load the unified Catalog from CATALOG_REGISTRY for session bootstrap
 """
 from __future__ import annotations
 
@@ -15,9 +16,8 @@ import logging
 from datetime import datetime, timezone
 from typing import Any
 
-import oracledb
-
-from server.core.OracleClient import OracleClient
+from server.db.ServerDatabase import ServerDatabase
+from server.plugins.PluginModels import Catalog, Entity
 
 logger = logging.getLogger(__name__)
 
@@ -29,11 +29,48 @@ def _hash_token(token: str) -> str:
 
 class SessionService:
 
-    def __init__(self, client: OracleClient) -> None:
-        self._client = client
+    _server_db: ServerDatabase
 
-    def _con(self) -> oracledb.Connection:
-        return self._client.connect()
+    def __init__(self, server_db: ServerDatabase):
+        self._server_db = server_db
+
+    # ------------------------------------------------------------------
+    # Catalog session bootstrap
+    # ------------------------------------------------------------------
+
+    def load_session(self) -> Catalog:
+        """
+        Read all SYSTEM-owned entries from CATALOG_REGISTRY and return a
+        unified Catalog containing every entity from every plugin.
+        Returns an empty Catalog if no rows exist yet.
+        """
+        sql = "SELECT CATALOG_JSON FROM CATALOG_REGISTRY WHERE OWNER = 'SYSTEM'"
+        entities: list[Entity] = []
+        with self._server_db.connect().cursor() as cur:
+            cur.execute(sql)
+            for (json_val,) in cur:
+                if json_val is None:
+                    continue
+                json_str: str = json_val.read() if hasattr(json_val, "read") else json_val
+                try:
+                    sub = Catalog.model_validate_json(json_str)
+                    entities.extend(sub.entities)
+                except Exception:
+                    logger.warning("Skipping malformed catalog row in CATALOG_REGISTRY")
+        return Catalog(entities=entities)
+
+    def list_systems(self) -> list[str]:
+        """Return sorted distinct plugin names present in CATALOG_REGISTRY."""
+        sql = """
+            SELECT DISTINCT SUBSTR(REGISTRY_KEY, 1, INSTR(REGISTRY_KEY, ':') - 1)
+              FROM CATALOG_REGISTRY
+             WHERE OWNER = 'SYSTEM'
+               AND INSTR(REGISTRY_KEY, ':') > 0
+             ORDER BY 1
+        """
+        with self._server_db.connect().cursor() as cur:
+            cur.execute(sql)
+            return [row[0] for row in cur.fetchall() if row[0]]
 
     # ------------------------------------------------------------------
     # Sessions
@@ -52,6 +89,7 @@ class SessionService:
         Any previous active sessions for this username are NOT invalidated here
         to support concurrent logins; call invalidate_all_sessions() if needed.
         """
+        import oracledb
         token_hash = _hash_token(token)
         sql = """
             INSERT INTO USER_SESSION
@@ -64,7 +102,7 @@ class SessionService:
                  CURRENT_TIMESTAMP, :username, CURRENT_TIMESTAMP, :username)
             RETURNING USER_SESSION_ID INTO :session_id
         """
-        con = self._con()
+        con = self._server_db.connect()
         with con.cursor() as cur:
             session_id_var = cur.var(oracledb.NUMBER)
             cur.execute(
@@ -94,7 +132,7 @@ class SessionService:
              WHERE TOKEN_HASH = :th
                AND IS_ACTIVE  = 1
         """
-        con = self._con()
+        con = self._server_db.connect()
         with con.cursor() as cur:
             cur.execute(sql, th=token_hash)
             updated = cur.rowcount > 0
@@ -111,7 +149,7 @@ class SessionService:
              WHERE USERNAME  = :username
                AND IS_ACTIVE = 1
         """
-        con = self._con()
+        con = self._server_db.connect()
         with con.cursor() as cur:
             cur.execute(sql, username=username)
             count = cur.rowcount
@@ -127,7 +165,7 @@ class SessionService:
                AND IS_ACTIVE  = 1
                AND EXPIRES_AT > CURRENT_TIMESTAMP
         """
-        with self._con().cursor() as cur:
+        with self._server_db.connect().cursor() as cur:
             cur.execute(sql, th=token_hash)
             return cur.fetchone() is not None
 
@@ -141,7 +179,7 @@ class SessionService:
               FROM USER_SESSION
              WHERE TOKEN_HASH = :th
         """
-        with self._con().cursor() as cur:
+        with self._server_db.connect().cursor() as cur:
             cur.execute(sql, th=token_hash)
             row = cur.fetchone()
         if row is None:
@@ -157,10 +195,7 @@ class SessionService:
             result["session_data"] = result["session_data"].read()
         return result
 
-    # ------------------------------------------------------------------
     # Session scratchpad (session_data JSON)
-    # ------------------------------------------------------------------
-
     def get_session_data(self, token: str) -> dict[str, Any]:
         """Return the parsed JSON scratchpad for the session, or {} if empty."""
         session = self.get_session(token)
@@ -173,6 +208,7 @@ class SessionService:
 
     def set_session_data(self, token: str, data: dict[str, Any]) -> bool:
         """Replace the entire session_data JSON blob. Returns True on success."""
+        import oracledb
         token_hash = _hash_token(token)
         sql = """
             UPDATE USER_SESSION
@@ -182,7 +218,7 @@ class SessionService:
              WHERE TOKEN_HASH    = :th
                AND IS_ACTIVE     = 1
         """
-        con = self._con()
+        con = self._server_db.connect()
         with con.cursor() as cur:
             cur.setinputsizes(data=oracledb.DB_TYPE_CLOB)
             cur.execute(sql, data=json.dumps(data), th=token_hash)
@@ -218,7 +254,7 @@ class SessionService:
                 (:username, :ip, :ua, :success, :reason,
                  CURRENT_TIMESTAMP, 'SYSTEM', CURRENT_TIMESTAMP, 'SYSTEM')
         """
-        con = self._con()
+        con = self._server_db.connect()
         with con.cursor() as cur:
             cur.execute(
                 sql,
@@ -255,7 +291,7 @@ class SessionService:
                AND (:username IS NULL OR USERNAME   = :username)
                AND (:ip       IS NULL OR IP_ADDRESS = :ip)
         """
-        with self._con().cursor() as cur:
+        with self._server_db.connect().cursor() as cur:
             cur.execute(sql, window=window_minutes, username=username, ip=ip_address)
             row = cur.fetchone()
         count = row[0] if row else 0
@@ -275,7 +311,7 @@ class SessionService:
                AND (:username IS NULL OR USERNAME   = :username)
                AND (:ip       IS NULL OR IP_ADDRESS = :ip)
         """
-        with self._con().cursor() as cur:
+        with self._server_db.connect().cursor() as cur:
             cur.execute(sql, window=window_minutes, username=username, ip=ip_address)
             row = cur.fetchone()
         return row[0] if row else 0

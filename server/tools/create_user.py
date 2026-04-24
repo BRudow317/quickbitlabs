@@ -76,7 +76,7 @@ def main() -> int:
     if str(PROJECT_ROOT) not in sys.path:
         sys.path.insert(0, str(PROJECT_ROOT))
 
-    from server.core.OracleClient import OracleClient
+    from server.db.ServerDatabase import OracleClient
     from server.core.security import get_password_hash
 
     try:

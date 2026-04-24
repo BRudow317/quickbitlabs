@@ -1,3 +1,7 @@
+"""
+The server database is only for use for metadata server operations, it is not for core application functions. 
+Instead use the plugin framework.
+"""
 from __future__ import annotations
 import os
 import logging
@@ -9,7 +13,7 @@ from oracledb.connection import Xid
 
 logger = logging.getLogger(__name__)
 
-class OracleClient:
+class ServerDatabase:
     _oracle_user: str
     _oracle_pass: str
     _oracle_host: str
@@ -17,12 +21,12 @@ class OracleClient:
     _oracle_service: str
     _current_connection: Connection | None
 
-    def __slot__(self):
-        return (
-            "_oracle_user", "_oracle_pass",
-            "_oracle_host", "_oracle_port",
-            "_oracle_service", "_current_connection"
-        )
+    __slots__ = (
+        "_oracle_user", "_oracle_pass",
+        "_oracle_host", "_oracle_port",
+        "_oracle_service", "_current_connection"
+    )
+
     def __frozen__(self):
         return True
     
@@ -30,13 +34,21 @@ class OracleClient:
         oracle_user: str = os.getenv('ORACLE_USER') or '',
         oracle_pass: str = os.getenv('ORACLE_PASS') or '',
         oracle_host: str = os.getenv('ORACLE_HOST') or '',
-        oracle_port: int = int(p) if (p := os.getenv('ORACLE_PORT')) else 0,
+        oracle_port: int | str | None = None,
         oracle_service: str = os.getenv('ORACLE_SERVICE') or ''
     ) -> None:
+        if oracle_port is None:
+            env_port = os.getenv('ORACLE_PORT') or ''
+            try:
+                oracle_port = int(env_port) if env_port else 0
+            except ValueError:
+                logger.warning("Ignoring invalid ORACLE_PORT value: %r", env_port)
+                oracle_port = 0
+
         self._oracle_user = oracle_user
         self._oracle_pass = oracle_pass
         self._oracle_host = oracle_host
-        self._oracle_port = oracle_port
+        self._oracle_port = int(oracle_port)
         self._oracle_service = oracle_service
         self._current_connection = None
     

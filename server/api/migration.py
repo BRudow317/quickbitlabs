@@ -2,8 +2,9 @@ from __future__ import annotations
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
-from server.plugins.PluginRegistry import list_plugins
+from server.plugins.PluginRegistry import list_plugins, PLUGIN_REGISTRY
 from server.plugins.PluginModels import Catalog
+from server.plugins.PluginRegistry import PLUGIN
 from server.services.CatalogMigration import CatalogMigration
 
 router = APIRouter()
@@ -38,6 +39,12 @@ def list_migration_plugins() -> list[str]:
 @router.post("/run", operation_id="run_migration", response_model=MigrationResult)
 def run_migration(request: MigrationRequest) -> MigrationResult:
     try:
+        # Validate that the provided plugin names are registered
+        if request.source_plugin not in PLUGIN_REGISTRY:
+            raise HTTPException(status_code=400, detail=f"Unknown source plugin: {request.source_plugin}")
+        if request.target_plugin not in PLUGIN_REGISTRY:
+            raise HTTPException(status_code=400, detail=f"Unknown target plugin: {request.target_plugin}")
+        
         migration = CatalogMigration(
             source_plugin=request.source_plugin,
             target_plugin=request.target_plugin,

@@ -10,9 +10,9 @@ class Settings(BaseSettings):
     DEBUG: bool = False
     CORS_ORIGINS: list[str] = ["http://localhost:5173"]
 
-    ORACLE_HOST: str = ""
-    ORACLE_PORT: int = 1521
-    ORACLE_SERVICE: str = ""
+    # ORACLE_HOST: str = ""
+    # ORACLE_PORT: int = 1521
+    # ORACLE_SERVICE: str = ""
 
     # base64-encoded 32-byte AES key for encrypting uploaded files at rest.
     # Leave empty to store uploads without encryption.

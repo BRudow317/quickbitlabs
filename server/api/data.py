@@ -1,4 +1,5 @@
 from fastapi import APIRouter, HTTPException, Response, UploadFile, File, Form, Body
+from fastapi.responses import StreamingResponse
 from typing import Annotated, cast
 import pyarrow as pa
 from server.plugins.PluginModels import Catalog, ArrowReader
@@ -9,7 +10,7 @@ router = APIRouter(prefix="/api/data", tags=["Federated Data Execution"])
 
 
 def _single_child(catalog: Catalog):
-    """Guard for write operations — data writes require exactly one target system."""
+    """Guard for write operations - data writes require exactly one target system."""
     children: list[Catalog] = catalog.federate
     if not children:
         raise HTTPException(status_code=400, detail="Could not resolve any plugins from the provided Catalog.")
@@ -42,8 +43,8 @@ def get_data(catalog: Catalog = Body(...)):
         resp = plugin.get_data(child)
         if not resp.ok:
             raise HTTPException(status_code=500, detail=resp.message)
-        return Response(
-            content=Catalog.serialize_arrow_stream(resp.data),
+        return StreamingResponse(
+            Catalog.stream_arrow_ipc(resp.data),
             media_type="application/vnd.apache.arrow.stream"
         )
 
@@ -61,8 +62,8 @@ def get_data(catalog: Catalog = Body(...)):
         children_streams.append((child, resp.data))
 
     federated_stream = duckdb_orchestrator(catalog, children_streams)
-    return Response(
-        content=Catalog.serialize_arrow_stream(federated_stream),
+    return StreamingResponse(
+        Catalog.stream_arrow_ipc(federated_stream),
         media_type="application/vnd.apache.arrow.stream"
     )
 
@@ -81,7 +82,7 @@ def create_data(
     resp = plugin.create_data(child, arrow_reader)
     if not resp.ok:
         raise HTTPException(status_code=500, detail=resp.message)
-    return Response(content=Catalog.serialize_arrow_stream(resp.data), media_type="application/vnd.apache.arrow.stream")
+    return StreamingResponse(Catalog.stream_arrow_ipc(resp.data), media_type="application/vnd.apache.arrow.stream")
 
 
 # ---------------------------------------
@@ -98,7 +99,7 @@ def upsert_data(
     resp = plugin.upsert_data(child, arrow_reader)
     if not resp.ok:
         raise HTTPException(status_code=500, detail=resp.message)
-    return Response(content=Catalog.serialize_arrow_stream(resp.data), media_type="application/vnd.apache.arrow.stream")
+    return StreamingResponse(Catalog.stream_arrow_ipc(resp.data), media_type="application/vnd.apache.arrow.stream")
 
 
 # ---------------------------------------
@@ -115,7 +116,7 @@ def update_data(
     resp = plugin.update_data(child, arrow_reader)
     if not resp.ok:
         raise HTTPException(status_code=500, detail=resp.message)
-    return Response(content=Catalog.serialize_arrow_stream(resp.data), media_type="application/vnd.apache.arrow.stream")
+    return StreamingResponse(Catalog.stream_arrow_ipc(resp.data), media_type="application/vnd.apache.arrow.stream")
 
 
 # ---------------------------------------

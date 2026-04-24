@@ -1,7 +1,8 @@
 from fastapi import APIRouter, Depends
 from server.api.auth import get_current_user
-from server.configs.db import oracle_client
 from server.models.user import UserOut, User, UserUpdate
+
+from server.db.db import server_db
 
 router = APIRouter()
 
@@ -21,7 +22,7 @@ def update_user(
     current_user: User = Depends(get_current_user),
 ):
     if update.email is not None:
-        con = oracle_client.connect()
+        con = server_db.connect()
         with con.cursor() as cur:
             cur.execute(
                 'UPDATE "USER" SET EMAIL = :email WHERE USERNAME = :username',

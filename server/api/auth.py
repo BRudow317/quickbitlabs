@@ -7,12 +7,12 @@ import jwt
 import oracledb
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
+from pydantic import BaseModel
 
-from server.configs.db import oracle_client, session_service
+from server.db.db import server_db, session_service
 from server.configs.settings import settings
 from server.core.jwt import create_access_token
 from server.core.security import verify_password, get_password_hash
-from server.models.AuthModels import Token
 from server.models.user import UserBase, UserOut, User, UserCreate
 
 router = APIRouter()
@@ -20,7 +20,7 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="api/auth/login")
 
 
 # ---------------------------------------------------------------------------
-# Internal helpers — raw Oracle queries against USER_CREDENTIALS
+# Internal helpers - raw Oracle queries against USER_CREDENTIALS
 # ---------------------------------------------------------------------------
 
 def _get_credentials(username: str) -> dict | None:
@@ -30,7 +30,7 @@ def _get_credentials(username: str) -> dict | None:
           FROM "USER"
          WHERE USERNAME = :username
     """
-    con = oracle_client.connect()
+    con = server_db.connect()
     with con.cursor() as cur:
         cur.execute(sql, username=username)
         row = cur.fetchone()
@@ -47,14 +47,14 @@ def _get_credentials(username: str) -> dict | None:
 
 def _username_exists(username: str) -> bool:
     sql = 'SELECT COUNT(*) FROM "USER" WHERE USERNAME = :u'
-    with oracle_client.connect().cursor() as cur:
+    with server_db.connect().cursor() as cur:
         cur.execute(sql, u=username)
         return (cur.fetchone() or (0,))[0] > 0
 
 
 def _email_exists(email: str) -> bool:
     sql = 'SELECT COUNT(*) FROM "USER" WHERE EMAIL = :e'
-    with oracle_client.connect().cursor() as cur:
+    with server_db.connect().cursor() as cur:
         cur.execute(sql, e=email)
         return (cur.fetchone() or (0,))[0] > 0
 
@@ -67,7 +67,7 @@ def _insert_user(username: str, email: str, hashed_password: str) -> None:
         VALUES
             (:username, :email, :hashed_password, 1)
     """
-    con = oracle_client.connect()
+    con = server_db.connect()
     with con.cursor() as cur:
         cur.execute(sql, username=username, email=email, hashed_password=hashed_password)
     con.commit()
@@ -93,6 +93,9 @@ def register(user_in: UserCreate):
 
     return UserOut(username=user_in.username, email=user_in.email)
 
+class Token(BaseModel):
+    access_token: str
+    token_type: str
 
 @router.post("/login", response_model=Token, operation_id="login")
 def login(
@@ -104,7 +107,7 @@ def login(
 
     Rate-limited: too many failures from the same username or IP within the
     configured window will return 429 before the DB is even contacted.
-    Every attempt — success or failure — is logged to USER_SIGN_IN.
+    Every attempt - success or failure - is logged to USER_SIGN_IN.
     Successful logins create a USER_SESSION row.
     """
     ip = request.client.host if request.client else None
@@ -151,7 +154,7 @@ def login(
     access_token = create_access_token(
         data={
             "sub": username,
-            "eid": creds["external_id"],   # Salesforce EXTERNAL_ID — may be None
+            "eid": creds["external_id"],   # Salesforce EXTERNAL_ID - may be None
             "email": creds["email"],
         },
         expires_delta=expires_delta,

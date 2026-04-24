@@ -2,7 +2,7 @@
 
 import { type Client, formDataBodySerializer, type Options as Options2, type TDataShape, urlSearchParamsBodySerializer } from './client';
 import { client } from './client.gen';
-import type { CreateCatalogApiCatalogInsertPutData, CreateCatalogApiCatalogInsertPutErrors, CreateCatalogApiCatalogInsertPutResponses, CreateColumnApiColumnInsertPutData, CreateColumnApiColumnInsertPutErrors, CreateColumnApiColumnInsertPutResponses, CreateDataApiDataInsertPutData, CreateDataApiDataInsertPutErrors, CreateDataApiDataInsertPutResponses, CreateEntityApiEntityInsertPutData, CreateEntityApiEntityInsertPutErrors, CreateEntityApiEntityInsertPutResponses, DeleteCatalogApiCatalogDeleteData, DeleteCatalogApiCatalogDeleteErrors, DeleteCatalogApiCatalogDeleteResponses, DeleteColumnApiColumnDeleteData, DeleteColumnApiColumnDeleteErrors, DeleteColumnApiColumnDeleteResponses, DeleteDataApiDataDeleteData, DeleteDataApiDataDeleteErrors, DeleteDataApiDataDeleteResponses, DeleteEntityApiEntityDeleteData, DeleteEntityApiEntityDeleteErrors, DeleteEntityApiEntityDeleteResponses, DeleteRegistryEntryData, DeleteRegistryEntryErrors, DeleteRegistryEntryResponses, GetCatalogApiCatalogPostData, GetCatalogApiCatalogPostErrors, GetCatalogApiCatalogPostResponses, GetColumnApiColumnPostData, GetColumnApiColumnPostErrors, GetColumnApiColumnPostResponses, GetDataApiDataPostData, GetDataApiDataPostErrors, GetDataApiDataPostResponses, GetEntityApiEntityPostData, GetEntityApiEntityPostErrors, GetEntityApiEntityPostResponses, GetRegistryEntryData, GetRegistryEntryErrors, GetRegistryEntryResponses, GetSessionData, GetSessionResponses, GetUserData, GetUserResponses, ListMigrationPluginsData, ListMigrationPluginsResponses, ListRegistryData, ListRegistryResponses, ListSystemsData, ListSystemsResponses, LoginData, LoginErrors, LoginResponses, LogoutData, LogoutResponses, RegisterData, RegisterErrors, RegisterResponses, RunMigrationData, RunMigrationErrors, RunMigrationResponses, SaveRegistryEntryData, SaveRegistryEntryErrors, SaveRegistryEntryResponses, UpdateCatalogApiCatalogPatchData, UpdateCatalogApiCatalogPatchErrors, UpdateCatalogApiCatalogPatchResponses, UpdateColumnApiColumnPatchData, UpdateColumnApiColumnPatchErrors, UpdateColumnApiColumnPatchResponses, UpdateDataApiDataPatchData, UpdateDataApiDataPatchErrors, UpdateDataApiDataPatchResponses, UpdateEntityApiEntityPatchData, UpdateEntityApiEntityPatchErrors, UpdateEntityApiEntityPatchResponses, UploadFileData, UploadFileErrors, UploadFileResponses, UpsertCatalogApiCatalogPutData, UpsertCatalogApiCatalogPutErrors, UpsertCatalogApiCatalogPutResponses, UpsertColumnApiColumnPutData, UpsertColumnApiColumnPutErrors, UpsertColumnApiColumnPutResponses, UpsertDataApiDataPutData, UpsertDataApiDataPutErrors, UpsertDataApiDataPutResponses, UpsertEntityApiEntityPutData, UpsertEntityApiEntityPutErrors, UpsertEntityApiEntityPutResponses } from './types.gen';
+import type { CreateCatalogApiCatalogInsertPutData, CreateCatalogApiCatalogInsertPutErrors, CreateCatalogApiCatalogInsertPutResponses, CreateColumnApiColumnInsertPutData, CreateColumnApiColumnInsertPutErrors, CreateColumnApiColumnInsertPutResponses, CreateDataApiDataInsertPutData, CreateDataApiDataInsertPutErrors, CreateDataApiDataInsertPutResponses, CreateEntityApiEntityInsertPutData, CreateEntityApiEntityInsertPutErrors, CreateEntityApiEntityInsertPutResponses, DeleteCatalogApiCatalogDeleteData, DeleteCatalogApiCatalogDeleteErrors, DeleteCatalogApiCatalogDeleteResponses, DeleteColumnApiColumnDeleteData, DeleteColumnApiColumnDeleteErrors, DeleteColumnApiColumnDeleteResponses, DeleteDataApiDataDeleteData, DeleteDataApiDataDeleteErrors, DeleteDataApiDataDeleteResponses, DeleteEntityApiEntityDeleteData, DeleteEntityApiEntityDeleteErrors, DeleteEntityApiEntityDeleteResponses, DeleteRegistryEntryData, DeleteRegistryEntryErrors, DeleteRegistryEntryResponses, GetCatalogApiCatalogPostData, GetCatalogApiCatalogPostErrors, GetCatalogApiCatalogPostResponses, GetColumnApiColumnPostData, GetColumnApiColumnPostErrors, GetColumnApiColumnPostResponses, GetDataApiDataPostData, GetDataApiDataPostErrors, GetDataApiDataPostResponses, GetEntityApiEntityPostData, GetEntityApiEntityPostErrors, GetEntityApiEntityPostResponses, GetRegistryEntryData, GetRegistryEntryErrors, GetRegistryEntryResponses, GetSessionData, GetSessionResponses, GetUserData, GetUserResponses, ListMigrationPluginsData, ListMigrationPluginsResponses, ListRegistryData, ListRegistryResponses, ListSystemsData, ListSystemsResponses, LoginData, LoginErrors, LoginResponses, LogoutData, LogoutResponses, RegisterData, RegisterErrors, RegisterResponses, RunMigrationData, RunMigrationErrors, RunMigrationResponses, SaveRegistryEntryData, SaveRegistryEntryErrors, SaveRegistryEntryResponses, UpdateCatalogApiCatalogPatchData, UpdateCatalogApiCatalogPatchErrors, UpdateCatalogApiCatalogPatchResponses, UpdateColumnApiColumnPatchData, UpdateColumnApiColumnPatchErrors, UpdateColumnApiColumnPatchResponses, UpdateDataApiDataPatchData, UpdateDataApiDataPatchErrors, UpdateDataApiDataPatchResponses, UpdateEntityApiEntityPatchData, UpdateEntityApiEntityPatchErrors, UpdateEntityApiEntityPatchResponses, UpdateUserData, UpdateUserErrors, UpdateUserResponses, UploadFileData, UploadFileErrors, UploadFileResponses, UpsertCatalogApiCatalogPutData, UpsertCatalogApiCatalogPutErrors, UpsertCatalogApiCatalogPutResponses, UpsertColumnApiColumnPutData, UpsertColumnApiColumnPutErrors, UpsertColumnApiColumnPutResponses, UpsertDataApiDataPutData, UpsertDataApiDataPutErrors, UpsertDataApiDataPutResponses, UpsertEntityApiEntityPutData, UpsertEntityApiEntityPutErrors, UpsertEntityApiEntityPutResponses } from './types.gen';
 
 export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends boolean = boolean> = Options2<TData, ThrowOnError> & {
     /**
@@ -41,7 +41,7 @@ export const register = <ThrowOnError extends boolean = false>(options: Options<
  *
  * Rate-limited: too many failures from the same username or IP within the
  * configured window will return 429 before the DB is even contacted.
- * Every attempt — success or failure — is logged to USER_SIGN_IN.
+ * Every attempt - success or failure - is logged to USER_SIGN_IN.
  * Successful logins create a USER_SESSION row.
  */
 export const login = <ThrowOnError extends boolean = false>(options: Options<LoginData, ThrowOnError>) => (options.client ?? client).post<LoginResponses, LoginErrors, ThrowOnError>({
@@ -74,6 +74,20 @@ export const getUser = <ThrowOnError extends boolean = false>(options?: Options<
     security: [{ scheme: 'bearer', type: 'http' }],
     url: '/api/users/',
     ...options
+});
+
+/**
+ * Update User
+ */
+export const updateUser = <ThrowOnError extends boolean = false>(options: Options<UpdateUserData, ThrowOnError>) => (options.client ?? client).patch<UpdateUserResponses, UpdateUserErrors, ThrowOnError>({
+    responseType: 'json',
+    security: [{ scheme: 'bearer', type: 'http' }],
+    url: '/api/users/',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
 });
 
 /**

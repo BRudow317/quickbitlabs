@@ -576,7 +576,7 @@ export type UserCreate = {
 /**
  * UserOut
  *
- * Safe API response shape — no credentials.
+ * Safe API response shape - no credentials.
  */
 export type UserOut = {
     /**
@@ -591,6 +591,16 @@ export type UserOut = {
      * External Id
      */
     external_id?: string | null;
+};
+
+/**
+ * UserUpdate
+ */
+export type UserUpdate = {
+    /**
+     * Email
+     */
+    email?: string | null;
 };
 
 /**
@@ -702,6 +712,31 @@ export type GetUserResponses = {
 };
 
 export type GetUserResponse = GetUserResponses[keyof GetUserResponses];
+
+export type UpdateUserData = {
+    body: UserUpdate;
+    path?: never;
+    query?: never;
+    url: '/api/users/';
+};
+
+export type UpdateUserErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type UpdateUserError = UpdateUserErrors[keyof UpdateUserErrors];
+
+export type UpdateUserResponses = {
+    /**
+     * Successful Response
+     */
+    200: UserOut;
+};
+
+export type UpdateUserResponse = UpdateUserResponses[keyof UpdateUserResponses];
 
 export type DeleteCatalogApiCatalogDeleteData = {
     body: CatalogInput;

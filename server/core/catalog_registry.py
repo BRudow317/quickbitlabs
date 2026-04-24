@@ -3,30 +3,27 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-import oracledb
 from oracledb import DB_TYPE_CLOB
 
+from server.db.ServerDatabase import ServerDatabase
 from server.plugins.PluginModels import Catalog
-from server.plugins.oracle.OracleClient import OracleClient
+
+
 
 logger = logging.getLogger(__name__)
 
 class CatalogRegistryService:
     """
-    Persists named Catalog snapshots to Oracle's CATALOG_REGISTRY table.
+    Persists named Catalog snapshots to CATALOG_REGISTRY table.
 
     Ownership is tracked by `owner` — the Oracle username stored in the JWT sub
-    claim. The service account (OracleClient) performs the actual DB operations;
+    claim. The service account (ServerDatabase) performs the actual DB operations;
     no user password is required after login.
     """
-
+    
     _TABLE = "CATALOG_REGISTRY"
-
-    def __init__(self, client: OracleClient) -> None:
-        self._client = client
-
-    def _con(self) -> oracledb.Connection:
-        return self._client.get_con()
+    from server.db.db import server_db
+    _server_db: ServerDatabase = server_db
 
     # ------------------------------------------------------------------
     # CRUD
@@ -47,7 +44,7 @@ class CatalogRegistryService:
                 VALUES (:registry_key, :owner, :catalog_json,
                         CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
         """
-        with self._con().cursor() as cur:
+        with self._server_db.connect().cursor() as cur:
             # Force CLOB binding — catalog JSON can exceed oracledb's 32 KB direct-string limit
             cur.setinputsizes(catalog_json=DB_TYPE_CLOB)
             cur.execute(sql, owner=owner, registry_key=registry_key, catalog_json=json_str)
@@ -61,7 +58,7 @@ class CatalogRegistryService:
              WHERE OWNER = :owner
              ORDER BY UPDATED_AT DESC
         """
-        with self._con().cursor() as cur:
+        with self._server_db.connect().cursor() as cur:
             cur.execute(sql, owner=owner)
             rows = cur.fetchall()
         return [
@@ -81,7 +78,7 @@ class CatalogRegistryService:
              WHERE OWNER = :owner
                AND REGISTRY_KEY = :registry_key
         """
-        with self._con().cursor() as cur:
+        with self._server_db.connect().cursor() as cur:
             cur.execute(sql, owner=owner, registry_key=registry_key)
             row = cur.fetchone()
         if row is None:
@@ -96,7 +93,7 @@ class CatalogRegistryService:
              WHERE OWNER = :owner
                AND REGISTRY_KEY = :registry_key
         """
-        with self._con().cursor() as cur:
+        with self._server_db.connect().cursor() as cur:
             cur.execute(sql, owner=owner, registry_key=registry_key)
             deleted = cur.rowcount > 0
         logger.info(

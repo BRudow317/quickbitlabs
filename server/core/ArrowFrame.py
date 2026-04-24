@@ -2126,6 +2126,37 @@ class ArrowFrame(DataFrame):
             for batch in stream:
                 writer.write_batch(batch)
         return sink.getvalue().to_pybytes()
+
+    @staticmethod
+    def stream_arrow_ipc(reader: ArrowReader | pa.RecordBatchReader) -> Iterator[bytes]:
+        """
+        Memory-efficient generator for Arrow IPC streaming.
+        Yields bytes for each batch as they are consumed from the reader.
+        """
+        if reader is None:
+            yield b""
+            return
+
+        class _ChunkedSink:
+            def __init__(self):
+                self.buffer = bytearray()
+            def write(self, b):
+                self.buffer.extend(b)
+            def get_and_clear(self):
+                res = bytes(self.buffer)
+                self.buffer.clear()
+                return res
+
+        sink = _ChunkedSink()
+        # 1. Write the schema header
+        with pa.ipc.new_stream(sink, reader.schema) as writer:
+            yield sink.get_and_clear()
+            # 2. Write batches as they arrive
+            for batch in reader:
+                writer.write_batch(batch)
+                yield sink.get_and_clear()
+        # 3. Finalize and write end-of-stream markers
+        yield sink.get_and_clear()
     
     @staticmethod
     def ipc_new_stream(sink, schema, *, options=None) -> RecordBatchStreamWriter:
