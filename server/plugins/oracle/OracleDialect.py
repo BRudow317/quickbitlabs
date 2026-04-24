@@ -156,15 +156,24 @@ def _parse_operation(op: Operation, binds: dict[str, Any]) -> str:
     if isinstance(dependent, Column):
         return f"{col} {sql_op} {dependent.qualified_name}"
 
-    if sql_op == "IN":
+    if sql_op in ("IN", "NOT IN"):
         if not isinstance(dependent, list) or not dependent:
-            return "1=0"
+            return "1=0" if sql_op == "IN" else "1=1"
         placeholders: list[str] = []
         for val in dependent:
             name = _bind_name(col, binds)
             placeholders.append(f":{name}")
             binds[name] = val
-        return f"{col} IN ({', '.join(placeholders)})"
+        return f"{col} {sql_op} ({', '.join(placeholders)})"
+
+    if sql_op in ("BETWEEN", "NOT BETWEEN"):
+        if not isinstance(dependent, list) or len(dependent) != 2:
+            raise ValueError(f"{sql_op} requires a 2-element list [low, high], got: {dependent!r}")
+        lo_name = _bind_name(f"{col}_lo", binds)
+        hi_name = _bind_name(f"{col}_hi", binds)
+        binds[lo_name] = dependent[0]
+        binds[hi_name] = dependent[1]
+        return f"{col} {sql_op} :{lo_name} AND :{hi_name}"
 
     name = _bind_name(col, binds)
     binds[name] = dependent
@@ -255,11 +264,22 @@ def build_select(catalog: Catalog) -> tuple[str, dict[str, Any]]:
     # ORDER BY
     sort_parts: list[str] = []
     for s in catalog.sort_columns:
-        sort_parts.append(f"{s.column.qualified_name} {s.direction}")
+        nulls = ""
+        if s.nulls_first is True:
+            nulls = " NULLS FIRST"
+        elif s.nulls_first is False:
+            nulls = " NULLS LAST"
+        sort_parts.append(f"{s.column.qualified_name} {s.direction}{nulls}")
     sort_clause = (" ORDER BY " + ", ".join(sort_parts)) if sort_parts else ""
 
-    # LIMIT (Oracle)
-    limit_clause = f" FETCH FIRST {catalog.limit} ROWS ONLY" if catalog.limit else ""
+    # LIMIT / OFFSET (Oracle syntax)
+    limit_clause = ""
+    if catalog.limit and catalog.offset:
+        limit_clause = f" OFFSET {catalog.offset} ROWS FETCH NEXT {catalog.limit} ROWS ONLY"
+    elif catalog.limit:
+        limit_clause = f" FETCH FIRST {catalog.limit} ROWS ONLY"
+    elif catalog.offset:
+        limit_clause = f" OFFSET {catalog.offset} ROWS"
 
     sql = (
         f"SELECT {cols_str} "

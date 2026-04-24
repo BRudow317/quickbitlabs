@@ -6,30 +6,31 @@ import pyarrow as pa
 from pyarrow import ipc
 from fastapi import UploadFile
 from server.plugins.PluginRegistry import PLUGIN
-
-if TYPE_CHECKING:
-    from pyarrow.ipc import (
-        RecordBatchFileWriter, 
-        RecordBatchStreamWriter,
-        RecordBatchFileReader,
-        RecordBatchStreamReader,
-    )
+from pyarrow.ipc import (
+    RecordBatchFileWriter, 
+    RecordBatchStreamWriter,
+    RecordBatchFileReader,
+    RecordBatchStreamReader,
+)
+    
 
 # https://arrow.apache.org/docs/python/api.html
 # https://arrow.apache.org/docs/python/api/datatypes.html
 # https://arrow.apache.org/cookbook/py/
 
 # Universal data formats
-Records: TypeAlias = Iterable[dict[str, Any]] # aka json/dict
-ArrowReader: TypeAlias = pa.RecordBatchReader
+Records: TypeAlias = Iterable[dict[str, Any]] | dict[str, Any] | list[dict[str, Any]] # aka json/dict
+ArrowReader: TypeAlias = pa.RecordBatchReader | RecordBatchStreamReader | RecordBatchFileReader
 
 arrow_type_literal = Literal[
-    "null", "bool", "int8", "int16", "int32", "int64", "uint8", 
+    "null", "bool", "int8", "int16", "int32", "int64", "uint8",
     "uint16", "uint32", "uint64", "float16", "float32", "float64",
     "string", "utf8", "large_string", "binary", "large_binary",
-    "date32", "date64", "timestamp_s", "timestamp_ms", "timestamp_us", 
-    "timestamp_ns", "time32_s", "time32_ms", "time64_us", "time64_ns", 
-    "duration_s", "decimal128", "decimal256", "json", "uuid", "string_view", "list", "large_list", "struct", "map", "list_view", "large_list_view", "dictionary"
+    "date32", "date64", "timestamp_s", "timestamp_ms", "timestamp_us",
+    "timestamp_ns", "time32_s", "time32_ms", "time64_us", "time64_ns",
+    "duration_s", "duration_ms", "duration_us", "duration_ns",
+    "decimal128", "decimal256", "json", "uuid", "string_view",
+    "list", "large_list", "struct", "map", "list_view", "large_list_view", "dictionary"
 ]
 
 ARROW_TYPE: dict[arrow_type_literal, pa.DataType] = {
@@ -47,7 +48,7 @@ ARROW_TYPE: dict[arrow_type_literal, pa.DataType] = {
     "float16": pa.float16(),
     "float32": pa.float32(),
     "float64": pa.float64(),
-    
+
     # Binary & String
     "string": pa.string(),
     "string_view": pa.string_view(),
@@ -55,7 +56,7 @@ ARROW_TYPE: dict[arrow_type_literal, pa.DataType] = {
     "large_string": pa.large_string(),
     "binary": pa.binary(),
     "large_binary": pa.large_binary(),
-    
+
     # Temporal (Default units)
     "date32": pa.date32(),
     "date64": pa.date64(),
@@ -68,12 +69,15 @@ ARROW_TYPE: dict[arrow_type_literal, pa.DataType] = {
     "time64_us": pa.time64('us'),
     "time64_ns": pa.time64('ns'),
     "duration_s": pa.duration('s'),
-    
+    "duration_ms": pa.duration('ms'),
+    "duration_us": pa.duration('us'),
+    "duration_ns": pa.duration('ns'),
+
     # Common Parameterized Defaults
     "decimal128": pa.decimal128(38, 9),
     "decimal256": pa.decimal256(76, 18),
 
-    # Complex Types
+    # Complex Types (parameterized — resolved at Column.arrow_type call time)
     # "json": pa.json_(),
     # "uuid": pa.uuid(),
     # "list": pa.list_(),
@@ -88,14 +92,12 @@ ARROW_TYPE: dict[arrow_type_literal, pa.DataType] = {
 class Locator(BaseModel):
     """The strict contract defining the absolute origin of a scalar"""
     plugin: PLUGIN | None = None # 'oracle', 'salesforce', 'excel', 'parquet', 'feather', 'frontend', etc..
+    url: str | None = None
+    is_file: bool = False
     environment: str | None = None # 'dev01', 'sf-devint'
     namespace: str | None = None   # schema or namespace, etc. 'oradwh01', 'sobjects'
     entity_name: str | None = None # 'account', 'financials', tables, etc
-    additional_locators: dict | None = None
-    @property
-    def fully_path(self) -> str:
-        parts = [self.plugin, self.environment, self.namespace, self.entity_name]
-        return ".".join([p for p in parts if p])
+    additional_locators: dict[str, Any] | None = None
 
 class Column(BaseModel):
     name: str
@@ -119,15 +121,24 @@ class Column(BaseModel):
     enum_values: list[Any] = Field(default_factory=list)
     timezone: str | None = None
     properties: dict[str, Any] = Field(default_factory=dict)
+    ordinal_position: int | None = None
+    is_computed: bool = False
+    is_deprecated: bool = False
+    is_hidden: bool = False
+    description: str | None = None
     @property
     def arrow_type(self) -> pa.DataType | None:
         """Dynamically build the C++ object, accounting for parameterized types."""
         if not self.arrow_type_id: return None
         arrow_type = self.arrow_type_id
+        if arrow_type == "decimal256":
+            p = self.precision if self.precision is not None else 76
+            s = self.scale if self.scale is not None else 18
+            return pa.decimal256(p, s)
         if arrow_type.startswith("decimal"):
             p = self.precision if self.precision is not None else 38
             s = self.scale if self.scale is not None else 9
-            return pa.decimal128(p, s)  
+            return pa.decimal128(p, s)
         if arrow_type.startswith("timestamp"):
             unit = arrow_type.split("_")[1]
             return pa.timestamp(unit, tz=self.timezone)
@@ -142,6 +153,9 @@ class Entity(BaseModel):
     name: str
     alias: str | None = None
     namespace: str | None = None
+    description: str | None = None
+    entity_type: Literal["table", "view", "materialized_view", "external", "api_endpoint", "procedure"] | None = None
+    row_count_estimate: int | None = None
     columns: list[Column] = Field(default_factory=list)
     properties: dict[str, Any] = Field(default_factory=dict)
     @property
@@ -156,13 +170,19 @@ class Entity(BaseModel):
             return ".".join([self.namespace, self.name])
         return self.name
     @property
+    def locator_list(self) -> list[Locator] | None:
+        result = [c.locator for c in self.columns if c.locator]
+        return result if result else None
+    @property
     def locator(self) -> Locator | None:
-        if len(self.columns) > 0:
-            return self.columns[0].locator
+        """Convenience: returns the first column locator. Use locator_list for all."""
+        locs = self.locator_list
+        return locs[0] if locs else None
 
 class Sort(BaseModel):
     column: Column
     direction: Literal["ASC", "DESC"] = "ASC"
+    nulls_first: bool | None = None
 
 class Join(BaseModel):
     left_entity: Entity
@@ -175,7 +195,7 @@ class Operation(BaseModel):
     """The single equal sign '=' is an assignment operator, it is not an equality operator."""
     model_config = ConfigDict(arbitrary_types_allowed=True)
     independent: Column
-    operator: Literal["=", "==", "!=", ">", "<", ">=", "<=", "IN", "LIKE", "IS NULL", "IS NOT NULL"]
+    operator: Literal["=", "==", "!=", ">", "<", ">=", "<=", "IN", "NOT IN", "LIKE", "NOT LIKE", "BETWEEN", "NOT BETWEEN", "IS NULL", "IS NOT NULL"]
     dependent: str | list[Any] | pa.Field | Column | None
 
 class OperatorGroup(BaseModel):
@@ -197,6 +217,8 @@ class Catalog(BaseModel):
     name: str | None = None
     alias: str | None = None
     namespace: str | None = None
+    version: int = 1
+    description: str | None = None
     scope: Literal["SYSTEM", "TEAM", "USER"] = "USER"
     source_type: PLUGIN | Literal["federation"] | None = None
     entities: list[Entity] = Field(default_factory=list)
@@ -204,12 +226,20 @@ class Catalog(BaseModel):
     joins: list[Join] = Field(default_factory=list)
     sort_columns: list[Sort] = Field(default_factory=list)
     limit: int | None = None
-    owner_user_id: str | None = None
+    offset: int | None = None
+    owner_username: str | None = None
     team_id: str | None = None
     properties: dict[str, Any] = Field(default_factory=dict)
     
     @property
-    def arrow_schema(self) -> pa.Schema:        
+    def arrow_schema(self) -> pa.Schema:
+        # Detect columns whose simple name appears in more than one entity (join name conflicts)
+        name_counts: dict[str, int] = {}
+        for entity in self.entities:
+            for column in entity.columns:
+                if column.arrow_type:
+                    name_counts[column.name] = name_counts.get(column.name, 0) + 1
+
         nullable_entities: set[str] = set()
         for j in self.joins:
             if j.join_type in ("LEFT", "OUTER"):
@@ -222,13 +252,19 @@ class Catalog(BaseModel):
             for column in entity.columns:
                 arrow_type = column.arrow_type
                 if not arrow_type: continue
-                # Safety-widen decimals to max precision (38) to avoid "precision mismatch" errors
-                # TODO implement proper sniffing and metadata describe logic to set the correct precision and scale in Column.arrow_type to avoid this inefficiency
+                # Safety-widen decimals to max precision to avoid "precision mismatch" errors
+                # TODO: replace with proper column-level sniffing once metadata describe is complete
                 if pa.types.is_decimal(arrow_type):
                     arrow_type = pa.decimal128(38, arrow_type.scale)
-                    
+
+                # Qualify only conflicting names to keep single-entity schemas unchanged
+                field_name = (
+                    f"{entity.name}.{column.name}"
+                    if name_counts.get(column.name, 0) > 1
+                    else column.name
+                )
                 final_nullable = column.is_nullable or (entity.name in nullable_entities)
-                arrow_fields.append(pa.field(f"{column.name}", arrow_type, nullable=final_nullable))
+                arrow_fields.append(pa.field(field_name, arrow_type, nullable=final_nullable))
 
         schema = pa.schema(arrow_fields, metadata={
             b"catalog": self.model_dump_json().encode()
@@ -263,14 +299,34 @@ class Catalog(BaseModel):
                     yield batch.cast(schema)
             return pa.RecordBatchReader.from_batches(schema, _cast_stream())
 
-            # SLOW PATH: Fallback for Python Dicts / JSON
+        # SLOW PATH: Fallback for Python Dicts / JSON
+        # Build a mapping: schema field name → source dict key (simple column name).
+        # Mirrors the name_counts logic in arrow_schema so qualified names
+        # (e.g. "ACCOUNT.ID") resolve back to the plain dict key ("ID").
+        _name_counts: dict[str, int] = {}
+        for _entity in self.entities:
+            for _col in _entity.columns:
+                if _col.arrow_type:
+                    _name_counts[_col.name] = _name_counts.get(_col.name, 0) + 1
+        _field_to_source: dict[str, str] = {}
+        for _entity in self.entities:
+            for _col in _entity.columns:
+                if _col.arrow_type:
+                    _fn = (
+                        f"{_entity.name}.{_col.name}"
+                        if _name_counts.get(_col.name, 0) > 1
+                        else _col.name
+                    )
+                    _field_to_source[_fn] = _col.name
+
         def batch_generator() -> Iterator[pa.RecordBatch]:
             row_count = 0
             field_map: dict[str, list[Any]] = {name: [] for name in schema.names}
-            
+
             for row in data:
                 for name in schema.names:
-                    field_map[name].append(row.get(name))
+                    source_key = _field_to_source.get(name, name) or name
+                    field_map[name].append(row.get(source_key))
                 row_count += 1
                 
                 if row_count == chunk_size:
@@ -312,31 +368,35 @@ class Catalog(BaseModel):
 
 
     def stream_arrow_ipc(self, reader: ArrowReader | pa.RecordBatchReader) -> Iterator[bytes]:
-        """Efficient Arrow IPC streaming using native buffers."""
-        
-        # 1. Open a buffer stream
+        """Stream Arrow IPC incrementally: yields schema header, then one chunk per batch.
+
+        Uses byte-position tracking against the single BufferOutputStream so each
+        yield contains only the bytes written since the previous yield.
+        BufferOutputStream has no reset() — slicing by tracked position is correct.
+        """
         sink = pa.BufferOutputStream()
-        
-        # 2. Initialize the writer with the schema
+        pos = 0
         with pa.ipc.new_stream(sink, reader.schema) as writer:
-            # Yield the initial schema header
-            yield sink.getvalue().to_pybytes()
-            sink.reset()
-            
-            # 3. Write batches
+            # Schema message is written on context entry
+            chunk = sink.getvalue().to_pybytes()
+            yield chunk[pos:]
+            pos = len(chunk)
+
             for batch in reader:
                 writer.write_batch(batch)
-                # Yield the serialized batch
-                yield sink.getvalue().to_pybytes()
-                sink.reset()
-                
-        # 4. Finalize the stream (The context manager writes the EOS)
-        yield sink.getvalue().to_pybytes()
+                chunk = sink.getvalue().to_pybytes()
+                yield chunk[pos:]
+                pos = len(chunk)
+
+        # EOS marker written by context manager exit
+        chunk = sink.getvalue().to_pybytes()
+        if len(chunk) > pos:
+            yield chunk[pos:]
 
     @property
     def federate(self) -> list[Catalog]:
         """
-        Divides a federated master Catalog into cluster-specific child Catalogs.
+        Divides a federated master Catalog into plugin-specific child Catalogs.
         Each child carries only entities connected by internal joins within one system.
         Cross-system joins and operator groups remain on the master for DuckDB to resolve.
         """
@@ -408,24 +468,6 @@ class Catalog(BaseModel):
 
     @staticmethod
     def ipc_open_stream(source, *, options=None, memory_pool=None) -> RecordBatchStreamReader: 
-        """
-        Create reader for Arrow streaming format.
-
-        Parameters
-        ----------
-        source : bytes/buffer-like, pyarrow.NativeFile, or file-like Python object
-            Either an in-memory buffer, or a readable file object.
-        options : pyarrow.ipc.IpcReadOptions
-            Options for IPC serialization.
-            If None, default values will be used.
-        memory_pool : MemoryPool, default None
-            If None, default memory pool is used.
-
-        Returns
-        -------
-        reader : RecordBatchStreamReader
-            A reader for the given source
-        """
         return ipc.open_stream(
             source=source, 
             options=options, 
@@ -434,27 +476,6 @@ class Catalog(BaseModel):
 
     @staticmethod
     def ipc_open_file(source, footer_offset=None, *, options=None, memory_pool=None) -> RecordBatchFileReader:
-        """
-    Create reader for Arrow file format.
-
-    Parameters
-    ----------
-    source : bytes/buffer-like, pyarrow.NativeFile, or file-like Python object
-        Either an in-memory buffer, or a readable file object.
-    footer_offset : int, default None
-        If the file is embedded in some larger file, this is the byte offset to
-        the very end of the file data.
-    options : pyarrow.ipc.IpcReadOptions
-        Options for IPC serialization.
-        If None, default values will be used.
-    memory_pool : MemoryPool, default None
-        If None, default memory pool is used.
-
-    Returns
-    -------
-    reader : RecordBatchFileReader
-        A reader for the given source
-    """
         return ipc.open_file(
             source=source,
             footer_offset=footer_offset,
@@ -479,114 +500,6 @@ class Catalog(BaseModel):
                   max_rows_per_file=None, min_rows_per_group=None,
                   max_rows_per_group=None, file_visitor=None,
                   existing_data_behavior='error', create_dir=True) -> None:
-        """
-        Write a dataset to a given format and partitioning.
-
-        Parameters
-        ----------
-        data : Dataset, Table/RecordBatch, RecordBatchReader, list of \
-    Table/RecordBatch, or iterable of RecordBatch
-            The data to write. This can be a Dataset instance or
-            in-memory Arrow data. If an iterable is given, the schema must
-            also be given.
-        base_dir : str
-            The root directory where to write the dataset.
-        basename_template : str, optional
-            A template string used to generate basenames of written data files.
-            The token '{i}' will be replaced with an automatically incremented
-            integer. If not specified, it defaults to
-            "part-{i}." + format.default_extname
-        format : FileFormat or str
-            The format in which to write the dataset. Currently supported:
-            "parquet", "ipc"/"arrow"/"feather", and "csv". If a FileSystemDataset
-            is being written and `format` is not specified, it defaults to the
-            same format as the specified FileSystemDataset. When writing a
-            Table or RecordBatch, this keyword is required.
-        partitioning : Partitioning or list[str], optional
-            The partitioning scheme specified with the ``partitioning()``
-            function or a list of field names. When providing a list of
-            field names, you can use ``partitioning_flavor`` to drive which
-            partitioning type should be used.
-        partitioning_flavor : str, optional
-            One of the partitioning flavors supported by
-            ``pyarrow.dataset.partitioning``. If omitted will use the
-            default of ``partitioning()`` which is directory partitioning.
-        schema : Schema, optional
-        filesystem : FileSystem, optional
-        file_options : pyarrow.dataset.FileWriteOptions, optional
-            FileFormat specific write options, created using the
-            ``FileFormat.make_write_options()`` function.
-        use_threads : bool, default True
-            Write files in parallel. If enabled, then maximum parallelism will be
-            used determined by the number of available CPU cores. Using multiple
-            threads may change the order of rows in the written dataset if
-            preserve_order is set to False.
-        preserve_order : bool, default False
-            Preserve the order of rows. If enabled, order of rows in the dataset are
-            guaranteed to be preserved even if use_threads is set to True. This may
-            cause notable performance degradation.
-        max_partitions : int, default 1024
-            Maximum number of partitions any batch may be written into.
-        max_open_files : int, default 1024
-            If greater than 0 then this will limit the maximum number of
-            files that can be left open. If an attempt is made to open
-            too many files then the least recently used file will be closed.
-            If this setting is set too low you may end up fragmenting your
-            data into many small files.
-        max_rows_per_file : int, default 0
-            Maximum number of rows per file. If greater than 0 then this will
-            limit how many rows are placed in any single file. Otherwise there
-            will be no limit and one file will be created in each output
-            directory unless files need to be closed to respect max_open_files
-        min_rows_per_group : int, default 0
-            Minimum number of rows per group. When the value is greater than 0,
-            the dataset writer will batch incoming data and only write the row
-            groups to the disk when sufficient rows have accumulated.
-        max_rows_per_group : int, default 1024 * 1024
-            Maximum number of rows per group. If the value is greater than 0,
-            then the dataset writer may split up large incoming batches into
-            multiple row groups.  If this value is set, then min_rows_per_group
-            should also be set. Otherwise it could end up with very small row
-            groups.
-        file_visitor : function
-            If set, this function will be called with a WrittenFile instance
-            for each file created during the call.  This object will have both
-            a path attribute and a metadata attribute.
-
-            The path attribute will be a string containing the path to
-            the created file.
-
-            The metadata attribute will be the parquet metadata of the file.
-            This metadata will have the file path attribute set and can be used
-            to build a _metadata file.  The metadata attribute will be None if
-            the format is not parquet.
-
-            Example visitor which simple collects the filenames created::
-
-                visited_paths = []
-
-                def file_visitor(written_file):
-                    visited_paths.append(written_file.path)
-        existing_data_behavior : 'error' | 'overwrite_or_ignore' | \
-    'delete_matching'
-            Controls how the dataset will handle data that already exists in
-            the destination.  The default behavior ('error') is to raise an error
-            if any data exists in the destination.
-
-            'overwrite_or_ignore' will ignore any existing data and will
-            overwrite files with the same name as an output file.  Other
-            existing files will be ignored.  This behavior, in combination
-            with a unique basename_template for each write, will allow for
-            an append workflow.
-
-            'delete_matching' is useful when you are writing a partitioned
-            dataset.  The first time each partition directory is encountered
-            the entire directory will be deleted.  This allows you to overwrite
-            old partitions completely.
-        create_dir : bool, default True
-            If False, directories will not be created.  This can be useful for
-            filesystems that do not require directories.
-        """
         from pyarrow.dataset import write_dataset
         write_dataset(
             data=data, 

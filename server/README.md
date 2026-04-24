@@ -44,6 +44,7 @@ The core vision is intended to be a system agnostic data & metadata engine built
 ## Existing Plugin Facades
 - **server/plugins/oracle/Oracle.py** The Oracle plugin facade.
 - **server/plugins/sf/Salesforce.py** The Salesforce plugin facade.
+- **server/plugins/readers/Salesforce.py** The Salesforce plugin facade.
 
 ## Additional Paths:
 - server/ - core application code
@@ -57,22 +58,20 @@ The core vision is intended to be a system agnostic data & metadata engine built
 - [PyArrow Interchange](https://arrow.apache.org/docs/python/interchange_protocol.html)
 - [C Stream Interface](https://arrow.apache.org/docs/format/CStreamInterface.html)
 - [Polars Python API Reference](https://docs.pola.rs/api/python/stable/reference/index.html)
-- [Pandas API Reference:](https://pandas.pydata.org/docs/reference/index.html)
-
-## Plugin Resources:
+- [DuckDB Python API Reference:](https://duckdb.org/docs/current/clients/python/overview)
+- [Arrow IPC:](https://arrow.apache.org/docs/python/ipc.html)
 - [oracledb API Reference:](https://python-oracledb.readthedocs.io/en/latest/user_guide/dataframes.html)
 - [Salesforce REST API Reference:](https://developer.salesforce.com/docs/atlas.en-us.api_rest.meta/api_rest/resources_query.htm)
-- 
 
 ## Maybe Later:
-- [DuckDB Python API Reference:](https://duckdb.org/docs/current/clients/python/overview)
+- [LanceDB Python API Reference:](https://lancedb.dev/lancedb-python/latest/)
 - [Arrow Flight SQL:](https://arrow.apache.org/blog/2022/02/16/introducing-arrow-flight-sql/)
 - [Arrow Flight Spec:](https://arrow.apache.org/docs/format/Flight.html)
-- [Arrow IPC:](https://arrow.apache.org/docs/python/ipc.html)
 
-## Much Much Later:
+## Legacy & Removed:
 - [Alembic](https://alembic.sqlalchemy.org/)
 - [SQLAlchemy](https://www.sqlalchemy.org/)
+- [Pandas](https://pandas.pydata.org/docs/reference/index.html)
 
 ## Bugs & Edge Cases Found
 - [ ] **Blob/Binary Support:** Exclude `base64`/`blob` fields from Bulk V2 CSV migrations (`Attachment`, `Document`).

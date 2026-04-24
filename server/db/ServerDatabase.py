@@ -13,6 +13,9 @@ from oracledb.connection import Xid
 
 logger = logging.getLogger(__name__)
 
+# TODO: Implement connection pooling for the server database to improve performance and resource management. This can be done using oracledb's ConnectionPool class, and the ServerDatabase can manage a pool of connections instead of a single connection. The connect() method would then acquire a connection from the pool, and there would be a corresponding method to release connections back to the pool when done.
+
+
 class ServerDatabase:
     _oracle_user: str
     _oracle_pass: str
@@ -60,8 +63,11 @@ class ServerDatabase:
             f"port={self._oracle_port!r}, "
             f"service={self._oracle_service!r})"
         )
-    def _connect(self) -> None:
+    def _new_connect(self) -> None:
         try:
+            if self._oracle_user == '' or self._oracle_pass == '' or self._oracle_host == '' or self._oracle_service == '':
+                raise ValueError(f"Missing required Oracle connection parameters: {self.__repr__()}")
+
             self._current_connection = oracledb.connect(
                 user=self._oracle_user,
                 password=self._oracle_pass,
@@ -81,7 +87,7 @@ class ServerDatabase:
         if self._current_connection is not None and self._current_connection.is_healthy(): 
             return self._current_connection
         
-        self._connect()
+        self._new_connect()
         if self._current_connection is None:
             raise RuntimeError(f"Failed to establish Oracle connection: {self.__repr__()}")
         return self._current_connection
@@ -119,7 +125,7 @@ class ServerDatabase:
         *,
         batch_size: int = 2**32 - 1,
     ) -> None:
-        self.direct_path_load(
+        self.connect().direct_path_load(
             schema_name, table_name, column_names, data, batch_size = batch_size
         )
     
@@ -132,7 +138,7 @@ class ServerDatabase:
         fetch_decimals: bool | None = None,
         requested_schema: Any | None = None,
     ) -> DataFrame:
-        return self.fetch_df_all(
+        return self.connect().fetch_df_all(
             statement,
             parameters,
             arraysize=arraysize,
@@ -149,7 +155,7 @@ class ServerDatabase:
         fetch_decimals: bool | None = None,
         requested_schema: Any | None = None,
     ) -> Iterator[DataFrame]:
-        return self.fetch_df_batches(
+        return self.connect().fetch_df_batches(
             statement,
             parameters,
             size=size,
@@ -171,19 +177,19 @@ class ServerDatabase:
 
     @property
     def current_schema(self) -> str:
-        return self.current_schema
+        return self.connect().current_schema
     
     @current_schema.setter
     def current_schema(self, schema_name: str) -> None:
-        self.current_schema = schema_name
+        self.connect().current_schema = schema_name
     
     @property
     def max_open_cursors(self) -> int:
-        return self.max_open_cursors
+        return self.connect().max_open_cursors
     
     @property
     def session_id(self) -> int:
-        return self.session_id
+        return self.connect().session_id
     
     @property
     def is_thin(self) -> bool:
@@ -191,91 +197,91 @@ class ServerDatabase:
     
     @property
     def username(self) -> str:
-        return self.username
+        return self.connect().username
     
     @property
     def version(self) -> str:
-        return self.version
+        return self.connect().version
     
     @property
     def ltxid(self) -> bytes:
-        return self.ltxid
+        return self.connect().ltxid
     
     @property
     def dsn(self) -> str:
-        return self.dsn
+        return self.connect().dsn
     
     @property
     def internal_name(self) -> str:
-        return self.internal_name
+        return self.connect().internal_name
 
     @internal_name.setter
     def internal_name(self, value: str) -> None:
-        self.internal_name = value
+        self.connect().internal_name = value
 
     @property
     def inputtypehandler(self) -> Callable:
-        return self.inputtypehandler
+        return self.connect().inputtypehandler
     
     @inputtypehandler.setter
     def inputtypehandler(self, value: Callable) -> None:
-        self.inputtypehandler = value
+        self.connect().inputtypehandler = value
 
     @property
     def external_name(self) -> str:
-        return self.external_name
+        return self.connect().external_name
 
     @external_name.setter
     def external_name(self, value: str) -> None:
-        self.external_name = value
+        self.connect().external_name = value
     
     @property
     def edition(self) -> str:
-        return self.edition
+        return self.connect().edition
     
     @property
     def econtext_id(self) -> str:
-        return self.econtext_id
+        return self.connect().econtext_id
     
     @econtext_id.setter
     def econtext_id(self, value: str) -> None:
-        self.econtext_id = value
+        self.connect().econtext_id = value
 
     @property
     def db_name(self) -> str:
-        return self.db_name
+        return self.connect().db_name
 
     @property
     def db_domain(self) -> str:
-        return self.db_domain
+        return self.connect().db_domain
     
     @property
     def client_identifier(self) -> str:
-        return self.client_identifier
+        return self.connect().client_identifier
     
     @client_identifier.setter
     def client_identifier(self, value: str) -> None:
-        self.client_identifier = value
+        self.connect().client_identifier = value
 
     @property
     def call_timeout(self) -> int:
-        return self.call_timeout
+        return self.connect().call_timeout
     
     @call_timeout.setter
     def call_timeout(self, value: int) -> None:
-        self.call_timeout = value
+        self.connect().call_timeout = value
 
     def cancel(self) -> None:
         self.connect().cancel()
 
     def dbop(self, value: str) -> None:
-        self.dbop(value)
+        self.connect().dbop = value
     
     def action(self, value: str) -> None:
-        self.action(value)
+        self.connect().action = value
 
     def gettype(self, name: str) -> DbObjectType:
-        return self.gettype(name)
+        return self.connect().gettype(name)
     
     def ping(self) -> None:
         """Throws an exception if the connection is not healthy. Otherwise, returns None."""
@@ -291,7 +297,7 @@ class ServerDatabase:
     
     def shutdown(self, mode: int = 0) -> None:
         """Shuts down the database."""
-        self.shutdown(mode)
+        self.connect().shutdown(mode)
 
     def startup(
         self,
@@ -300,18 +306,18 @@ class ServerDatabase:
         pfile: str | None = None,
     ) -> None:
         """Starts up the database."""
-        self.startup(force, restrict, pfile)
+        self.connect().startup(force, restrict, pfile)
     
     def createlob(
         self, lob_type: DbType, data: str | bytes | None = None
     ) -> LOB:
-        return self.createlob(lob_type, data)
+        return self.connect().createlob(lob_type, data)
 
     def encode_oson(self, value: Any) -> bytes:
-        return self.encode_oson(value)
+        return self.connect().encode_oson(value)
     
     def decode_oson(self, oson_value: bytes) -> Any:
-        return self.decode_oson(oson_value)
+        return self.connect().decode_oson(oson_value)
 
     def msgproperties(
         self,
@@ -323,7 +329,7 @@ class ServerDatabase:
         priority: int | None = None,
         recipients: list | None = None,
     ) -> MessageProperties:
-        return self.msgproperties(
+        return self.connect().msgproperties(
             payload,
             correlation,
             delay,
@@ -338,7 +344,12 @@ class ServerDatabase:
         name: str,
         payload_type: DbObjectType | str | None = None,
     ) -> Queue:
-        return self.queue(name, payload_type)
+        
+        q = self.connect().queue(name, payload_type)
+        if isinstance(q, Queue):
+            return q
+        else: 
+            raise TypeError(f"Expected Queue object from connection.queue(), got {type(q)}")
 
     def subscribe(
         self,
@@ -357,7 +368,7 @@ class ServerDatabase:
         client_initiated: bool = False,
         
     ) -> oracledb.Subscription:
-        return self.subscribe(
+        return self.connect().subscribe(
             namespace,
             protocol,
             callback,
@@ -382,7 +393,7 @@ class ServerDatabase:
         transaction_id: str = "",
         branch_id: str = "",
     ) -> None:
-        self.begin(format_id, transaction_id, branch_id)
+        self.connect().begin(format_id, transaction_id, branch_id)
     
     def xid(
         self,
@@ -390,35 +401,35 @@ class ServerDatabase:
         global_transaction_id: bytes | str,
         branch_qualifier: bytes | str,
     ) -> Xid:
-        return self.xid(format_id, global_transaction_id, branch_qualifier)
+        return self.connect().xid(format_id, global_transaction_id, branch_qualifier)
     
     def prepare(self) -> bool:
-        return self.prepare()
+        return self.connect().prepare()
     
     def tpc_begin(
         self, xid: Xid, flags: int = oracledb.TPC_BEGIN_NEW, timeout: int = 0
     ) -> None:
         """Begins a Two-Phase Commit (TPC) on a global transaction using Xid"""
-        self.tpc_begin(xid, flags, timeout)
+        self.connect().tpc_begin(xid, flags, timeout)
 
     def tpc_commit(
         self, xid: Xid | None = None, one_phase: bool = False
     ) -> None:
-        self.tpc_commit(xid, one_phase)
+        self.connect().tpc_commit(xid, one_phase)
 
     def tpc_end(
         self, xid: Xid | None = None, flags: int = oracledb.TPC_END_NORMAL
     ) -> None:
-        self.tpc_end(xid, flags)
+        self.connect().tpc_end(xid, flags)
     
     def tpc_forget(self, xid: Xid) -> None:
-        self.tpc_forget(xid)
+        self.connect().tpc_forget(xid)
 
     def tpc_prepare(self, xid: Xid | None = None) -> bool:
-        return self.tpc_prepare(xid)
+        return self.connect().tpc_prepare(xid)
     
     def tpc_recover(self) -> list:
-        return self.tpc_recover()
+        return self.connect().tpc_recover()
     
     
     
@@ -430,15 +441,15 @@ class ServerDatabase:
         timeout: int = 60,
         defer_round_trip: bool = False,
     ) -> bytes:
-        return self.begin_sessionless_transaction(
+        return self.connect().begin_sessionless_transaction(
             transaction_id, timeout, defer_round_trip
         )
         
     def suspend_sessionless_transaction(self) -> None:
-        self.suspend_sessionless_transaction()
+        self.connect().suspend_sessionless_transaction()
 
     def resume_sessionless_transaction(self, transaction_id: str | bytes) -> None:
-        self.resume_sessionless_transaction(transaction_id)
+        self.connect().resume_sessionless_transaction(transaction_id)
 
 
 

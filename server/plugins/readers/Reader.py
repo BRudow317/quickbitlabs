@@ -13,7 +13,6 @@ from .ReaderService import ReaderService
 class Reader(Plugin):
     """
     File-reader plugin facade. Reads and writes CSV, Parquet, and Feather files.
-
     kwargs:
         base_path (str)      — directory to scan when get_catalog receives an empty catalog.
         encryption_key (str) — base64-encoded 32-byte AES master key; enables encryption at rest.

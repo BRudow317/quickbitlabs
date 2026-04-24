@@ -20,7 +20,7 @@ import oracledb
 from server.plugins.PluginModels import Catalog, Column, Entity, Locator
 from server.plugins.PluginRegistry import PLUGIN, get_plugin, list_plugins
 
-from server.db.ServerDatabase import OracleClient
+from server.db.ServerDatabase import ServerDatabase
 
 logger = logging.getLogger(__name__)
 
@@ -124,7 +124,7 @@ def _catalog_json_for_storage(plugin_name: str, entity: Entity) -> str:
 
 
 
-def sync_plugin(plugin_name: str, conn: OracleClient) -> int:
+def sync_plugin(plugin_name: str, conn: ServerDatabase) -> int:
     """Discover full schema for one plugin and upsert to Oracle. Returns entity count."""
     p = get_plugin(cast(PLUGIN, plugin_name))
 
@@ -166,7 +166,7 @@ def sync_all() -> dict[str, int]:
     """Sync all registered plugins. Returns {plugin_name: entity_count}."""
     results: dict[str, int] = {}
     
-    conn = OracleClient()
+    conn = ServerDatabase()
     # Open a single connection for the entire sync run
     for plugin_name in list_plugins():
         try:
@@ -179,7 +179,6 @@ def sync_all() -> dict[str, int]:
 
 
 if __name__ == "__main__":
-    logging.basicConfig(level=logging.INFO)
     counts = sync_all()
     for name, count in counts.items():
         print(f"  {name}: {count} entities")
