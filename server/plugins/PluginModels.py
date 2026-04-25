@@ -89,6 +89,8 @@ ARROW_TYPE: dict[arrow_type_literal, pa.DataType] = {
     # "map": pa.map_(),
 }
 
+
+
 class Locator(BaseModel):
     """The strict contract defining the absolute origin of a scalar"""
     plugin: PLUGIN | None = None # 'oracle', 'salesforce', 'excel', 'parquet', 'feather', 'frontend', etc..
@@ -154,7 +156,8 @@ class Entity(BaseModel):
     alias: str | None = None
     namespace: str | None = None
     description: str | None = None
-    entity_type: Literal["table", "view", "materialized_view", "external", "api_endpoint", "procedure"] | None = None
+    entity_type: Literal["table", "view", "materialized_view", "external", "api_endpoint", "procedure", "file", "unknown"]  = "unknown"
+    plugin: PLUGIN | None = None
     row_count_estimate: int | None = None
     columns: list[Column] = Field(default_factory=list)
     properties: dict[str, Any] = Field(default_factory=dict)
@@ -366,13 +369,9 @@ class Catalog(BaseModel):
                 writer.write_batch(batch)
         return sink.getvalue().to_pybytes()
 
-
-    def stream_arrow_ipc(self, reader: ArrowReader | pa.RecordBatchReader) -> Iterator[bytes]:
-        """Stream Arrow IPC incrementally: yields schema header, then one chunk per batch.
-
-        Uses byte-position tracking against the single BufferOutputStream so each
-        yield contains only the bytes written since the previous yield.
-        BufferOutputStream has no reset() — slicing by tracked position is correct.
+    @staticmethod
+    def stream_arrow_ipc(reader: ArrowReader | pa.RecordBatchReader) -> Iterator[bytes]:
+        """Stream Arrow IPC incrementally: yields schema header, then one chunk per batch. This is a broken function and should not be used.
         """
         sink = pa.BufferOutputStream()
         pos = 0
@@ -526,53 +525,16 @@ Catalog.model_rebuild()
 OperatorGroup.model_rebuild()    
 
 catalog_doc_string =     """
-    Catalog is the top-level wrapper. It may be called schema, namespace, database, etc. in different systems, 
-    but the concept is the same: a container for entities/objects/tables sharing the same namespace.
 
-    Catalog acts as the envelope that carries the metadata and context needed to perform the requested operation. 
-    It may be populated with all entities and columns, or just the relevant ones needed for a specific operation. 
-
-    Higher level services can utilize catalogs in different ways, some examples:
-    - Provide an empty catalog with just a name to retrieve the entire schema metadata.
-    - Provide a catalog with one entity and one column to retrieve the metadata for that specific column
-    - Provide a catalog with multiple entities and columns to perform operations on those specific objects.
-    - Provide a catalog with relevant entities and columns as the envelope to carry the metadata needed to 
-        perform the requested operation.
-
-    As a pydantic BaseModel you can serialize the entire working contract to JSON with 
-        catalog.model_dump()
-        or dict with catalog.model_dump_json(),
-        and rehydrate with Catalog.model_validate()
-        or Catalog.model_validate_json() respectively
     """
 
 file_doc_string = """
-    When implementing a plugin it is up to you to decide how to route the catalog, but the catalog or an entity, and the columns needed for operations should be passed along. 
 
-    The intention is not to populate an entire catalog and every entity and every column every call, but to provide the relevant metadata needed to perform the requested operation. 
-
-    The standard objects are not an exhaustive list of what a plugin facade can provide, just the minimum columns higher level services can rely building upon.
-
-    An example might be implementing a csv plugin where the catalog is the source directory, the entity is the file, and the columns are the columns, and records, the rows.
-
-    Another example might be a REST API plugin where the catalog is the base URL, the entity is the endpoint, and the columns are the query parameters or body parameters needed to perform the request.
-
-    Another example might be a SQL plugin where the catalog is the database, the entity is the table, and the columns are the columns needed to perform the query or DML operation.
-
-    Perhaps you only know the catalog to search for, the target plugin may accept an a catalog with an empty entity list and populate the entire catalog with its metadata, so the caller service can inspect and make relevant decisions about which entities and columns to operate on in subsequent calls.
-
-    Or perhaps you want to know the type of a specific column, so you provide a catalog with one entity and one column, and the plugin returns the catalog with the column's metadata populated or just an entity with its columns. 
-
-    This is how the protocols should be designed, and implemented. The catalog or the entity is the envelope that carries the metadata and context needed to perform the requested operation.
-    
     As a pydantic BaseModel you can serialize the entire working contract to JSON with 
         catalog.model_dump()
         or dict with catalog.model_dump_json(),
         and rehydrate with CatalogModel.model_validate()
         or CatalogModel.model_validate_json() respectively
-
-    It can also serve as a base for implementing openapi schemas, ORM models, or any other structured representation of metadata you need.
-
 """
 
 

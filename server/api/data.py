@@ -43,8 +43,8 @@ def get_data(catalog: Catalog = Body(...)):
         resp = plugin.get_data(child)
         if not resp.ok:
             raise HTTPException(status_code=500, detail=resp.message)
-        return StreamingResponse(
-            Catalog.stream_arrow_ipc(resp.data),
+        return Response(
+            content=Catalog.serialize_arrow_stream(resp.data),
             media_type="application/vnd.apache.arrow.stream"
         )
 
@@ -62,8 +62,8 @@ def get_data(catalog: Catalog = Body(...)):
         children_streams.append((child, resp.data))
 
     federated_stream = duckdb_orchestrator(catalog, children_streams)
-    return StreamingResponse(
-        Catalog.stream_arrow_ipc(federated_stream),
+    return Response(
+        content=Catalog.serialize_arrow_stream(federated_stream),
         media_type="application/vnd.apache.arrow.stream"
     )
 
@@ -82,7 +82,10 @@ def create_data(
     resp = plugin.create_data(child, arrow_reader)
     if not resp.ok:
         raise HTTPException(status_code=500, detail=resp.message)
-    return StreamingResponse(Catalog.stream_arrow_ipc(resp.data), media_type="application/vnd.apache.arrow.stream")
+    return Response(
+        content=Catalog.serialize_arrow_stream(resp.data),
+        media_type="application/vnd.apache.arrow.stream"
+    )
 
 
 # ---------------------------------------
@@ -99,7 +102,10 @@ def upsert_data(
     resp = plugin.upsert_data(child, arrow_reader)
     if not resp.ok:
         raise HTTPException(status_code=500, detail=resp.message)
-    return StreamingResponse(Catalog.stream_arrow_ipc(resp.data), media_type="application/vnd.apache.arrow.stream")
+    return Response(
+        content=Catalog.serialize_arrow_stream(resp.data),
+        media_type="application/vnd.apache.arrow.stream"
+    )
 
 
 # ---------------------------------------
@@ -116,7 +122,10 @@ def update_data(
     resp = plugin.update_data(child, arrow_reader)
     if not resp.ok:
         raise HTTPException(status_code=500, detail=resp.message)
-    return StreamingResponse(Catalog.stream_arrow_ipc(resp.data), media_type="application/vnd.apache.arrow.stream")
+    return Response(
+        content=Catalog.serialize_arrow_stream(resp.data),
+        media_type="application/vnd.apache.arrow.stream"
+    )
 
 
 # ---------------------------------------

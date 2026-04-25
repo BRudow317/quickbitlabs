@@ -50,7 +50,7 @@ from pyarrow import (
 from pyarrow.interchange.from_dataframe import from_dataframe
 from pyarrow.dataset import dataset, Dataset, FileSystemDataset
 
-from server.core.DataFrame import (
+from server.models.DataFrame import (
     Buffer as Buffer_,
     CategoricalDescription,
     Column as Column_,

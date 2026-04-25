@@ -1,9 +1,12 @@
 """
-python "Q:/scripts/boot.py" -v  -l ./.logs --env homelab --config Q:/.secrets/.env --exec ./main.py
+
+logging, .env parsing, venv, and other generic bootloading are handled by boot.py - main.py is app specific configuration.
+
+python "Q:/scripts/boot.py" -v  -l ./.logs --env homelab --exec ./main.py
 """
 from __future__ import annotations
 from datetime import datetime
-import logging, os, sys, subprocess, re
+import logging, os, sys, subprocess, re, secrets
 from pathlib import Path
 
 PY_PROJECT_ROOT = Path(__file__).resolve().parent
@@ -14,52 +17,9 @@ FRONTEND_DIR = PY_PROJECT_ROOT / "frontend"
 
 # Cold start: create the log file, store its path for reload children to inherit.
 # Reload children: skip pre-checks and attach to the same log file via _QBL_LOGFILE.
-_IS_RELOAD_CHILD = os.environ.get("_QBL_PRECHECKS_DONE") == "1"
 
+# 
 logger = logging.getLogger(__name__)
- 
-def dotenv_loader(config_path: str | Path = "", env: str = "") -> None:
-    """
-    #!/usr/bin/env bash
-    env=$1 
-    example_homelab_user=ExampleUserName
-    EXAMPLE_USER=example_${env}_user
-    """
-    _var = re.compile(r"\$\{([A-Za-z_][A-Za-z0-9_]*)\}|\$([A-Za-z_][A-Za-z0-9_]*)")
-
-    path = Path(config_path)
-    if not path.is_file():
-        raise FileNotFoundError(f"Config file not found: {config_path}")
-
-    raw = {}
-    with open(path, encoding="utf-8") as f:
-        for line in f:
-            line = line.strip()
-            if not line or line.startswith("#") or line.startswith("!") or "=" not in line:
-                continue
-            key, _, val = line.partition("=")
-            raw[key.strip()] = val.strip().strip('"').strip("'")
-
-    lookup = {**os.environ, **raw, "env": env, "ENV": env}
-
-    def interpolate(val: str) -> str:
-        previous = None
-        loops = 0
-        while val != previous and loops < 10:
-            previous = val
-            def repl(m: re.Match) -> str:
-                name = m.group(1) or m.group(2)
-                return lookup.get(name, m.group(0))
-            
-            val = _var.sub(repl, val)
-            loops += 1
-        return val
-
-    resolved = {k: interpolate(v) for k, v in raw.items()}
-    for k, v in list(resolved.items()):
-        if v in resolved:
-            resolved[k] = resolved[v]
-    os.environ.update(resolved)
 
 def _npm(script: str) -> None:
     result = subprocess.run(
@@ -85,26 +45,50 @@ def _check_db() -> bool:
         sys.exit(1)
         return False
 
+_PLACEHOLDER = "CHANGE_ME_FOR_PRODUCTION"
+
+def _ensure_jwt_secret() -> None:
+    """
+    Guarantee a cryptographically strong JWT_SECRET is in the environment before
+    uvicorn starts. Hot-reload children inherit the env var, so the key stays
+    stable across reloads.
+
+    Priority order:
+      1. JWT_SECRET already set in environment (e.g. from .env / boot.py loader) — used as-is.
+      2. Not set or still the placeholder — generate a fresh 256-bit random key.
+
+    In production, set JWT_SECRET in .env so restarts don't invalidate sessions.
+    In development, the ephemeral key is regenerated each time the server process starts;
+    sessions naturally invalidate on restart, which is acceptable.
+    """
+    current = os.environ.get("JWT_SECRET", "")
+    if current and current != _PLACEHOLDER:
+        return
+    key = secrets.token_urlsafe(32)   # 256-bit URL-safe base64
+    os.environ["JWT_SECRET"] = key
+    logger.info("JWT_SECRET: generated ephemeral 256-bit key (set JWT_SECRET in .env for persistence)")
+
+
 def build_process(mode="prod") -> None:
-    try:
-        if _IS_RELOAD_CHILD:
-            return
-       
+    try:       
         # _secrets_path = os.environ.get("SECRETS_ENV")
-        # dotenv_loader(
-        #     config_path=os.environ.get("SECRETS_ENV", ""),
-        #     env="homelab"
-        # )
 
         _check_db()
+        _ensure_jwt_secret()
+
+        # Uncomment for production: deep-hydrates CATALOG_REGISTRY from all plugins.
+        # Safe to run here — _IS_BUILD_STEP_COMPLETED guard ensures it runs once per server start,
+        # not on every uvicorn hot reload. Keep commented in development.
+        # from server.services.sync_systems import sync_all
+        # sync_all()
 
         if mode == "development":
             _npm("build")
-
+        
         # Mark done so uvicorn reload children skip all of the above
-        os.environ["_QBL_PRECHECKS_DONE"] = "1"
+        os.environ["_BUILD_STEP_COMPLETED"] = "1"
     except Exception as e:
-        logger.critical("Pre-checks failed: %s", e)
+        logger.critical("Build process failed: %s", e)
         sys.exit(1)
     
 def start_app(mode="prod") -> None:
@@ -116,7 +100,8 @@ def start_app(mode="prod") -> None:
 
 if __name__ == "__main__":
     mode="development"
-    build_process(mode=mode)
+    if not (os.environ.get("_BUILD_STEP_COMPLETED") == "1"):   
+        build_process(mode=mode)
     start_app(mode=mode)
     # Load secrets BEFORE server imports - ServerDatabase reads env vars at init time
     

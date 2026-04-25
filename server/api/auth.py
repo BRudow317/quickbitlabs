@@ -118,14 +118,14 @@ def login(
     if session_service.is_rate_limited(
         username,
         ip,
-        window_minutes=settings.LOGIN_RATE_LIMIT_WINDOW_MINUTES,
-        max_failures=settings.LOGIN_RATE_LIMIT_MAX_FAILURES,
+        window_minutes=settings.login_rate_limit_window_minutes,
+        max_failures=settings.login_rate_limit_max_failures,
     ):
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
             detail=(
                 f"Too many failed login attempts. "
-                f"Please wait {settings.LOGIN_RATE_LIMIT_WINDOW_MINUTES} minutes before trying again."
+                f"Please wait {settings.login_rate_limit_window_minutes} minutes before trying again."
             ),
         )
 
@@ -150,7 +150,7 @@ def login(
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Account is disabled")
 
     # --- Issue token -------------------------------------------------------
-    expires_delta = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
+    expires_delta = timedelta(minutes=settings.access_token_expire_minutes)
     access_token = create_access_token(
         data={
             "sub": username,
@@ -186,7 +186,7 @@ def get_current_user(token: str = Depends(oauth2_scheme)) -> User:
         headers={"WWW-Authenticate": "Bearer"},
     )
     try:
-        payload = jwt.decode(token, settings.JWT_SECRET, algorithms=[settings.ALGORITHM])
+        payload = jwt.decode(token, settings.jwt_secret.get_secret_value(), algorithms=[settings.algorithm])
         username: str | None = payload.get("sub")
         if username is None:
             raise credentials_exception

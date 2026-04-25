@@ -44,10 +44,12 @@ class CatalogRegistryService:
                 VALUES (:registry_key, :owner, :catalog_json,
                         CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
         """
-        with self._server_db.connect().cursor() as cur:
+        con = self._server_db.connect()
+        with con.cursor() as cur:
             # Force CLOB binding — catalog JSON can exceed oracledb's 32 KB direct-string limit
             cur.setinputsizes(catalog_json=DB_TYPE_CLOB)
             cur.execute(sql, owner=owner, registry_key=registry_key, catalog_json=json_str)
+        con.commit()
         logger.info(f"CatalogRegistry: saved '{registry_key}' for owner '{owner}'")
 
     def list_entries(self, owner: str) -> list[dict[str, Any]]:
@@ -93,9 +95,11 @@ class CatalogRegistryService:
              WHERE OWNER = :owner
                AND REGISTRY_KEY = :registry_key
         """
-        with self._server_db.connect().cursor() as cur:
+        con = self._server_db.connect()
+        with con.cursor() as cur:
             cur.execute(sql, owner=owner, registry_key=registry_key)
             deleted = cur.rowcount > 0
+        con.commit()
         logger.info(
             f"CatalogRegistry: {'deleted' if deleted else 'not found'} "
             f"'{registry_key}' for owner '{owner}'"

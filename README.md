@@ -3,6 +3,10 @@ FastAPI + PyArrow + React + TypeScript + Vite
 
 See server/readme.md and frontend/readme.md for detailed information on the backend and frontend respectively.
 
+## Startup
+```shell
+python "Q:/scripts/boot.py" -v  -l ./.logs --env homelab --config Q:/.secrets/.env --exec ./main.py
+```
 # Frontend Documentation
 1. [@hey-api/openapi-ts](https://heyapi.dev/)
 2. [Tailwind CSS](https://tailwindcss.com/)

@@ -72,21 +72,16 @@ def main() -> int:
     for k, v in env_vars.items():
         os.environ[k] = v
 
-    PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
+    PROJECT_ROOT = Path(__file__).resolve().parent.parent
     if str(PROJECT_ROOT) not in sys.path:
         sys.path.insert(0, str(PROJECT_ROOT))
 
-    from server.db.ServerDatabase import OracleClient
+    from server.db.db import server_db
     from server.core.security import get_password_hash
 
-    try:
-        client = OracleClient()
-    except Exception as exc:
-        print(f"ERROR: could not connect to Oracle: {exc}", file=sys.stderr)
-        return 1
 
     hashed = get_password_hash(args.password)
-    con = client.connect()
+    con = server_db.connect()
 
     # MERGE: update HASHED_PASSWORD if USERNAME exists, insert new row otherwise
     merge_sql = """

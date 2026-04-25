@@ -18,10 +18,17 @@ if str(PROJECT_ROOT) not in sys.path:
 
 from configs.settings import settings
 from api import auth, users
-from api import catalog, entity, column, data
-from api import session, migration
-from api import registry
-from api import files
+from api import (
+    catalog, 
+    entity, 
+    column, 
+    data, 
+    info,
+    session,
+    migration,
+    registry,
+    files, 
+    )
 
 from fastapi.routing import APIRoute
 def custom_generate_unique_id(route: APIRoute) -> str:
@@ -38,17 +45,17 @@ async def lifespan(app: FastAPI):
 
 def create_app() -> FastAPI:
     app = FastAPI(
-        title=settings.PROJECT_NAME,
+        title=settings.project_name,
         generate_unique_id_callback=custom_generate_unique_id,
         lifespan=lifespan,
     )
 
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=settings.CORS_ORIGINS,
-        allow_credentials=True,
-        allow_methods=["*"],
-        allow_headers=["*"],
+        allow_origins=settings.cors_origins,
+        allow_credentials=settings.allow_credentials,
+        allow_methods=settings.allow_methods,
+        allow_headers=settings.allow_headers,
     )
 
     # Auth & Users

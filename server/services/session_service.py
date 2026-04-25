@@ -60,17 +60,30 @@ class SessionService:
         return Catalog(entities=entities)
 
     def list_systems(self) -> list[str]:
-        """Return sorted distinct plugin names present in CATALOG_REGISTRY."""
-        sql = """
-            SELECT DISTINCT SUBSTR(REGISTRY_KEY, 1, INSTR(REGISTRY_KEY, ':') - 1)
-              FROM CATALOG_REGISTRY
-             WHERE OWNER = 'SYSTEM'
-               AND INSTR(REGISTRY_KEY, ':') > 0
-             ORDER BY 1
+        """Return sorted distinct plugin names for all SYSTEM-owned entries in CATALOG_REGISTRY.
+        Plugin name is derived from the stored Catalog's source_type, falling back to the
+        first entity's column locator. Never parses REGISTRY_KEY strings.
         """
+        sql = "SELECT CATALOG_JSON FROM CATALOG_REGISTRY WHERE OWNER = 'SYSTEM'"
+        plugins: set[str] = set()
         with self._server_db.connect().cursor() as cur:
             cur.execute(sql)
-            return [row[0] for row in cur.fetchall() if row[0]]
+            for (json_val,) in cur:
+                if json_val is None:
+                    continue
+                json_str: str = json_val.read() if hasattr(json_val, "read") else json_val
+                try:
+                    sub = Catalog.model_validate_json(json_str)
+                    if sub.source_type and sub.source_type != "federation":
+                        plugins.add(sub.source_type)
+                    else:
+                        for entity in sub.entities:
+                            if entity.locator and entity.locator.plugin:
+                                plugins.add(entity.locator.plugin)
+                                break
+                except Exception:
+                    logger.warning("Skipping malformed catalog row in list_systems")
+        return sorted(plugins)
 
     # ------------------------------------------------------------------
     # Sessions
@@ -157,17 +170,61 @@ class SessionService:
         return count
 
     def is_session_active(self, token: str) -> bool:
-        """Return True if the session exists, is marked active, and has not expired."""
+        """Return True if the session exists, is marked active, and has not expired.
+        If the session is found but has expired, opportunistically deactivates it.
+        """
         token_hash = _hash_token(token)
         sql = """
-            SELECT 1 FROM USER_SESSION
+            SELECT IS_ACTIVE, EXPIRES_AT > CURRENT_TIMESTAMP
+              FROM USER_SESSION
+             WHERE TOKEN_HASH = :th
+        """
+        con = self._server_db.connect()
+        with con.cursor() as cur:
+            cur.execute(sql, th=token_hash)
+            row = cur.fetchone()
+        if row is None:
+            return False
+        is_active, not_expired = row
+        if is_active and not not_expired:
+            # Expired but still flagged active — clean it up now
+            self._deactivate_by_hash(token_hash)
+            return False
+        return bool(is_active and not_expired)
+
+    def _deactivate_by_hash(self, token_hash: str) -> None:
+        sql = """
+            UPDATE USER_SESSION
+               SET IS_ACTIVE    = 0,
+                   UPDATED_DATE = CURRENT_TIMESTAMP,
+                   UPDATED_BY   = 'SYSTEM'
              WHERE TOKEN_HASH = :th
                AND IS_ACTIVE  = 1
-               AND EXPIRES_AT > CURRENT_TIMESTAMP
         """
-        with self._server_db.connect().cursor() as cur:
+        con = self._server_db.connect()
+        with con.cursor() as cur:
             cur.execute(sql, th=token_hash)
-            return cur.fetchone() is not None
+        con.commit()
+
+    def deactivate_expired_sessions(self) -> int:
+        """Bulk-deactivate all sessions whose EXPIRES_AT has passed but IS_ACTIVE is still 1.
+        Returns the number of rows updated.
+        """
+        sql = """
+            UPDATE USER_SESSION
+               SET IS_ACTIVE    = 0,
+                   UPDATED_DATE = CURRENT_TIMESTAMP,
+                   UPDATED_BY   = 'SYSTEM'
+             WHERE IS_ACTIVE  = 1
+               AND EXPIRES_AT <= CURRENT_TIMESTAMP
+        """
+        con = self._server_db.connect()
+        with con.cursor() as cur:
+            cur.execute(sql)
+            count = cur.rowcount
+        con.commit()
+        logger.info(f"deactivate_expired_sessions: deactivated {count} expired session(s)")
+        return count
 
     def get_session(self, token: str) -> dict[str, Any] | None:
         """Return the full session row as a dict, or None if not found."""

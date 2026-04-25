@@ -2,10 +2,44 @@
 CatalogMigration service: Source -> Target with schema mapping, DDL, and data transfer.
 
 python Q:/scripts/boot.py -v -l ./.logs --env homelab --config Q:/.secrets/.env --exec ./main.py
+    
+    Known Failings & Architectural Gaps (Identified 2026-04-24):
+    ---
+    1. Oracle DDL Generation (Missing Managed Metadata):
+       The DDL generated during `upsert_catalog` is currently a raw structural copy. It fails to 
+       inject the mandatory "Managed Entity" boilerplate required by the framework:
+       - Audit Columns: `CREATED_AT`, `CREATED_BY`, `UPDATED_AT`, `UPDATED_BY` are missing.
+       - System PK: A unique, system-generated primary key (e.g., `INTERNAL_ID`) is not created.
+       This results in tables that do not comply with the project's internal data governance 
+       and auditing standards.
+
+    2. Uniqueness & Identity Loss:
+       The migration lifecycle fails to propagate "Source Truth" identity into "Target Schema" 
+       constraints. Specifically, even when a source column (like Salesforce `Id`) is 
+       identified as a Primary Key during discovery, `upsert_catalog` does not explicitly 
+       apply the `PRIMARY KEY` or `UNIQUE` constraints to the Oracle target. This leads to 
+       heap tables without structural identity.
+
+    3. Upsert/MERGE Execution Failure (Missing ON Clause & Rigid Logic):
+       The Oracle Plugin's `upsert_data` implementation and its supporting `OracleDialect.build_merge_dml` 
+       contain several architectural flaws:
+       - Mandatory Match Criteria: It currently raises a `ValueError` if `catalog.operator_groups` 
+         is missing. This is a framework violation: for tables without primary keys or when 
+         no match is possible, `upsert` should logically fall back to a standard `INSERT`.
+       - Metadata Ignorance: The plugin does not autonomously utilize the `Entity` primary key 
+         metadata to derive the `ON` clause, forcing callers (like the migration service) to 
+         manually construct boilerplate `operator_groups`.
+       - Identity Flexibility: It fails to recognize that a "match" for an upsert can be any 
+         arbitrary column set (e.g., matching on `USERNAME` in a session log), not just the 
+         primary key.
+
+    4. Framework Protocol Non-Compliance:
+       The service acts as a shallow proxy rather than an intelligent orchestrator. It 
+       violates the "Universal Data Interaction" principle by failing to normalize 
+       and enrich the target Catalog with framework-required locators and standard 
+       column sets before triggering DDL.
 """
 from __future__ import annotations
-
-from collections.abc import Iterator
 from typing import Any
 
 import pyarrow as pa
@@ -21,6 +55,7 @@ logger = logging.getLogger(__name__)
 
 class CatalogMigration:
     """Orchestrates a full schema + data migration between two Plugin implementations.
+
     Input:
     ---
         - source_plugin: PLUGIN name for the source system (e.g. "salesforce")
@@ -29,6 +64,7 @@ class CatalogMigration:
         - target_catalog: Optional Catalog to scope the DDL and data migration on the target side. If not provided, the target plugin will be queried with an empty Catalog (i.e. no pre-existing schema knowledge, full DDL and data migration).
         - source_kwargs: Optional dict of additional parameters to pass to the source plugin. This can include things like parallelism settings, filters to scope the discovery or migration, or any other plugin-specific parameters.
         - target_kwargs: Optional dict of additional parameters to pass to the target plugin. This can include things like parallelism settings, conflict resolution strategies, or any other plugin-specific parameters.
+    
     Output:
     ---
         - A report of the migration results, including any errors encountered during discovery, DDL, or data migration, and a summary of the entities and records migrated.
@@ -138,13 +174,9 @@ class CatalogMigration:
                 results.append({"entity": entity.name, "target": entity.name, "status": "ok"})
 
         return results
-
-def run_job() -> None:
-    """Entry point for the bootloader."""
-    catalog_migration = CatalogMigration(
-        source_plugin="salesforce",
-        target_plugin="oracle",
-    )
-    catalog_migration.get_catalog()
-    catalog_migration.upsert_catalog()
-    catalog_migration.upsert_data()
+    
+def run_migration(job: CatalogMigration) -> None:
+    """Bootloader entry point."""
+    job.get_catalog()
+    job.upsert_catalog()
+    job.upsert_data()

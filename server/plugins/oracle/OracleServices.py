@@ -272,11 +272,32 @@ class OracleService:
         data: ArrowReader,
         **kwargs: Any,
     ) -> PluginResponse[None]:
-        """MERGE rows from an Arrow stream using catalog.operator_groups as the ON clause.
+        """
+        [WORKING REQUIREMENTS] - Universal Upsert Lifecycle for Oracle:
+        
+        1. Match Resolution (The 'ON' Clause):
+           - Priority 1 (Explicit): If catalog.operator_groups is populated, use it to build 
+             the MERGE ON clause. This supports flexible identity matching (e.g. email, username).
+           - Priority 2 (Metadata): If operator_groups is empty, autonomously derive the ON 
+             clause from the primary_key=True metadata in the Entity.columns, or a matching unique not null constraint column.
+           - Priority 3 (Fallback): If no identity can be determined, degrade gracefully 
+             to a standard INSERT (insert_data) to ensure "upsert" is never a hard failure.
 
-        The stream may contain all columns or just key columns; the Catalog
-        defines the target shape.  Static binds from the ON clause (non-pa.Field
-        dependents) are merged with each stream row by execute_many.
+        2. Managed Entity Alignment (Audit Boilerplate):
+           The implementation must recognize and automatically manage framework audit columns 
+           even if they are missing from the source Arrow stream:
+           - WHEN MATCHED: Update UPDATED_AT (SYSTIMESTAMP) and UPDATED_BY (current session user).
+           - WHEN NOT MATCHED: Initialize both CREATED_* and UPDATED_* boilerplate.
+
+        3. System Identity (INTERNAL_ID):
+           - Support for system-generated primary keys. If the target entity defines a 
+             managed PK (e.g. via identity column), the MERGE must allow Oracle to 
+             generate the value during the INSERT branch.
+
+        4. Execution:
+           - Derive the DML via OracleDialect.build_merge_dml (or build_insert_dml).
+           - Execute via arrow_frame.execute_many for high-performance batching.
+           - Ensure transactional integrity (COMMIT on success, ROLLBACK on error).
         """
         if not catalog.entities:
             return PluginResponse.error("Catalog contains no entities.")

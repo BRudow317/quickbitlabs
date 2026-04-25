@@ -56,7 +56,7 @@ async def upload_file(
     """
     filename = file.filename or "upload"
     key = registry_key or Path(filename).stem
-    enc_key: str | None = settings.UPLOAD_ENCRYPTION_KEY or None
+    enc_key: str | None = settings.upload_encryption_key.get_secret_value() or None
 
     try:
         file_bytes = await file.read()

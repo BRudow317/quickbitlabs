@@ -8,23 +8,13 @@ QuickBitLabs is a data integration platform designed to solve the **N x M integr
 
 The core vision is intended to be a system agnostic data & metadata engine built to bridge relationally complex systems like Salesforce and Oracle. This includes self discovery of metadata, data federation, agnostic querying, and orm style metadata management. 
 
-- ### ArrowReader:
-  - typed from pyarrow.RecordBatchReader
-  - A lazy-loaded, memory-efficient stream of data batches. It is the "Package" that carries the actual data payload. The ArrowReader is designed to be consumed in a streaming fashion, allowing for efficient processing of large datasets without loading everything into memory at once.
-
-- ### Catalog: 
-  - A Pydantic metadata model. It defines the "Intent" (Request) and the "Reality" (Result). It is decoupled from the live data stream to ensure serializability. The Catalog is the "Envelope" that carries metadata and context, while the ArrowFrame is the "Package" that carries the actual data. This separation allows for maximum flexibility and system-agnosticism.
-
-- ### System Agnosticism:
-  - The "High level Service Layer" (not to be confused with "plugin service layer") and the Interchange Objects (ArrowFrame) must be blind to the source system. Only the Plugins handle the "Plugin Native <-> Universal" bridge.
+See **Q:\quickbitlabs\Plugin Framework Rules.md**
 
 ## Prototypes
 
 ### ArrowFrame:
   - A system-agnostic data interchange container. It represents the "Clean Slate" where data is transitioned from system-specific native formats to a universal PyArrow stream. It does NOT own or carry system-specific metadata.
   - A *God Object* during prototyping, but the long-term vision is to have ArrowFrame adapted to the DataFrame Interchange Protocol, allowing it to be a true universal container that can be easily converted to/from Pandas, Spark, Dask, etc. without losing the Arrow-based performance benefits.
-### DuckDB:
-  - As a successor to the Catalog query engine, allowing for more complex transformations and in-memory operations on the ArrowFrame without needing to regress to Python objects.
 
 ## Legacy Types:
 ### Records:
@@ -36,7 +26,6 @@ The core vision is intended to be a system agnostic data & metadata engine built
 - **server/plugins/PluginProtocol.py** The universal interface defining CRUD operations for data and metadata.
 - **server/plugins/PluginRegistry.py** Handles lazy-loading and instantiation of plugin facades.
 - **server/plugins/PluginResponse.py** The generic envelope for all plugin returns, handling codes and errors.
-- **server/plugins/ArrowFrame.py** (Current: 0 bytes) The intended location for the universal interchange class.
 
 ## Successful Implementations:
 - **server/services/FullMigration.py** A working full schema and data migration from Salesforce to Oracle.
@@ -44,7 +33,8 @@ The core vision is intended to be a system agnostic data & metadata engine built
 ## Existing Plugin Facades
 - **server/plugins/oracle/Oracle.py** The Oracle plugin facade.
 - **server/plugins/sf/Salesforce.py** The Salesforce plugin facade.
-- **server/plugins/readers/Salesforce.py** The Salesforce plugin facade.
+- **server/plugins/readers/Readers.py** A collection of file handlers including CSV, Parquet, and feather.
+- - **server/plugins/excel/Excel.py** A polars-based Excel reader plugin.
 
 ## Additional Paths:
 - server/ - core application code
@@ -96,11 +86,9 @@ The platform is strictly divided into three layers:
    6. Plugins must have a Facade that implements the Plugin Protocol.
 
 ## Data Transmission
-Previously data transmission occured between plugins through the use of a shared `Records` object returned as an Iterable of dictionaries. However now there are new methods I am implementing such as the `Apache Arrow streaming`. 
-
-Current implementations include:
-- `Records` (Iterable[dict]): The deprecated universal boundary for data transmission.
 - `ArrowReader` (Iterator[pa.RecordBatch]): A more efficient boundary for large data transfers, especially from databases or APIs that can natively produce Arrow RecordBatches. This allows for zero-copy data transmission and efficient in-memory processing.
+- `Arrow IPC Streams`: IPC streaming is an arrow native binary format that allows for efficient serialization and deserialization of Arrow data. This is ideal for transmitting data across the network, but not beetween plugins or internal processes, as it requires serialization overhead.
+- `Records` (Iterable[dict]): The deprecated universal boundary for data transmission and the final fall back. It's intended to be used as a last resort and should be in JSON format.
 
 ## The Plugin Ecosystem (The Secret Sauce)
 

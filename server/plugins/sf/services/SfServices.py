@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Generator
 from typing import Any, Literal, TYPE_CHECKING
+from urllib.parse import urlparse
 
 import pyarrow as pa
 
@@ -47,37 +48,61 @@ class SfService:
         self.rest = SfRest(client)
         self.bulk2 = Bulk2(client)
         self.arrow_frame = SfArrowFrame(self.rest, self.bulk2)
+        _host = urlparse(client.base_url).hostname or "salesforce"
+        self._namespace: str = _host.split(".")[0]  # e.g. "myorg" or "myorg--dev"
 
-    def _describe_to_column(self, field: dict[str, Any], object_name: str = "") -> Column | None:
+    def _describe_to_column(self, field: dict[str, Any], object_name: str = "", ordinal_position: int | None = None) -> Column | None:
         """Map one SF field describe dict to a Column. Returns None for compound types (address, location) that have no Arrow mapping."""
         sf_type = field.get("type", "anyType")
         arrow_id = SF_TO_ARROW_LITERAL.get(sf_type)
-        if arrow_id is None: return None
+        if arrow_id is None:
+            return None
         field_name = field["name"]
+        is_id = field_name == "Id"
+        is_ref = sf_type == "reference"
+        ref_targets: list[str] = field.get("referenceTo", [])
+        deprecated_hidden: bool = field.get("deprecatedAndHidden", False)
+        default_val = field.get("defaultValue")
         return Column(
             name=field_name,
-            locator=Locator(entity_name=object_name) if object_name else None,
+            description=field.get("inlineHelpText") or None,
+            locator=Locator(
+                plugin="salesforce",
+                namespace=self._namespace,
+                entity_name=object_name,
+            ) if object_name else None,
             alias=field_name,
             raw_type=sf_type,
             arrow_type_id=arrow_id,
-            primary_key=field_name == "Id",
-            is_unique=field.get("unique", False),
+            primary_key=is_id,
+            is_unique=is_id or field.get("unique", False) or field.get("externalId", False),
             is_nullable=field.get("nillable", True),
             is_read_only=not field.get("createable", False) and not field.get("updateable", False),
+            is_compound_key=False,
+            is_foreign_key=is_ref,
+            foreign_key_entity=ref_targets[0] if is_ref and ref_targets else None,
+            foreign_key_column="Id" if is_ref else None,
+            is_computed=field.get("calculated", False) or field.get("autoNumber", False),
+            is_deprecated=deprecated_hidden,
+            is_hidden=deprecated_hidden,
             max_length=field.get("length") or None,
             precision=field.get("precision") or None,
             scale=field.get("scale") or None,
+            serialized_null_value="null",
+            default_value=str(default_val) if default_val is not None else None,
             timezone="UTC" if sf_type == "datetime" else None,
             enum_values=[
                 pv["value"]
                 for pv in field.get("picklistValues", [])
                 if pv.get("active")
             ],
+            ordinal_position=ordinal_position,
             properties={
+                "label": field.get("label"),
                 "createable": field.get("createable", False),
                 "updateable": field.get("updateable", False),
                 "filterable": field.get("filterable", False),
-                "reference_to": field.get("referenceTo", []),
+                "reference_to": ref_targets,
                 "relationship_name": field.get("relationshipName"),
             },
         )
@@ -89,43 +114,61 @@ class SfService:
             raise ValueError("Describe response is missing 'name' field.")
         columns = [
             col
-            for f in describe.get("fields", [])
-            if (col := self._describe_to_column(f, object_name)) is not None
+            for i, f in enumerate(describe.get("fields", []))
+            if (col := self._describe_to_column(f, object_name, ordinal_position=i + 1)) is not None
         ]
-        return Entity(name=object_name, alias=object_name, columns=columns)
-    
+        return Entity(
+            name=object_name,
+            alias=object_name,
+            description=describe.get("label"),
+            plugin="salesforce",
+            namespace=self._namespace,
+            entity_type="api_endpoint",
+            columns=columns,
+        )
+
     def get_catalog(self, catalog: Catalog, **kwargs: Any) -> PluginResponse[Catalog]:
+        """
+        Salesforce Discovery & Hydration Lifecycle:
+
+        Empty catalog  → full discovery: describe all migratable SObjects, call get_entity for each, replace shallow stubs with fully hydrated Entities.
+        Populated catalog → targeted hydration: call get_entity for each requested entity, replace with the fresh describe result. If the input entity contained
+        a column projection, only those columns are returned.
+        """
         try:
-            catalog.name = catalog.name or "Salesforce"
-            # Empty catalog returns all migratable entities without columns.
+            catalog.name = catalog.name or self._namespace
+            catalog.namespace = self._namespace
+            catalog.source_type = "salesforce"
+
             if not catalog.entities:
                 sobjects = self.rest.describe_migratable()
                 catalog.entities = [
-                    Entity(name=obj.get("name", ""), 
-                           namespace=catalog.name if catalog.name else None,
-                           alias=obj.get("name", ""))
+                    Entity(name=obj.get("name", ""), alias=obj.get("name", ""))
                     for obj in sobjects
                 ]
-                return PluginResponse.success(catalog)
-            
-            # For each entity in the catalog, populate columns and metadata from describe.
+
             validate_nullables: bool = kwargs.get("validate_nullables", False)
             for idx, entity in enumerate(catalog.entities):
-                object_name = entity.name or ""
-                if not object_name:
+                sub_catalog = Catalog(entities=[entity])
+                resp = self.get_entity(sub_catalog, **kwargs)
+
+                if not resp.ok or resp.data is None:
+                    logger.warning(f"Failed to hydrate entity '{entity.name}': {resp.message}")
                     continue
-                describe = getattr(self.rest, object_name).describe()
-                populated = self._describe_to_entity(describe)
+
+                hydrated = resp.data
+                # PROJECTION: when the input entity named specific columns, filter to only those.
                 if entity.columns:
-                    col_map = populated.column_map
-                    entity.columns = [col_map.get(c.name, c) for c in entity.columns]
-                else:
-                    entity.columns = populated.columns
-                entity.name = populated.name
-                entity.alias = populated.alias
+                    requested = {c.name for c in entity.columns}
+                    hydrated = hydrated.model_copy(update={
+                        "columns": [c for c in hydrated.columns if c.name in requested]
+                    })
+
                 if validate_nullables:
-                    entity = self._verify_entity_nullables(entity)
-                catalog.entities[idx] = entity
+                    hydrated = self._verify_entity_nullables(hydrated)
+
+                catalog.entities[idx] = hydrated
+
             return PluginResponse.success(catalog)
         except Exception as e:
             logger.exception("get_catalog failed")
@@ -133,7 +176,8 @@ class SfService:
 
     def get_entity(self, catalog: Catalog, **kwargs: Any) -> PluginResponse[Entity]:
         try:
-            if not catalog.entities: return PluginResponse.not_found("No entities specified in catalog.")
+            if not catalog.entities:
+                return PluginResponse.not_found("No entities specified in catalog.")
             entity = catalog.entities[0]
             object_name = entity.name or ""
             describe = getattr(self.rest, object_name).describe()
@@ -154,7 +198,15 @@ class SfService:
             sf_field = field_map.get(col.name)
             if not sf_field:
                 return PluginResponse.not_found(f"Field '{col.name}' not found on {object_name}.")
-            result = self._describe_to_column(sf_field, object_name)
+            # Preserve ordinal position from source field index
+            field_index = next(
+                (i for i, f in enumerate(describe.get("fields", [])) if f["name"] == col.name),
+                None,
+            )
+            result = self._describe_to_column(
+                sf_field, object_name,
+                ordinal_position=field_index + 1 if field_index is not None else None,
+            )
             if result is None:
                 return PluginResponse.not_found(
                     f"Field '{col.name}' is a compound type with no Arrow mapping."
@@ -205,7 +257,7 @@ class SfService:
             explicit_query_type: str | None = kwargs.get("query_type")
             streams: list[ArrowReader] = []
             for entity in catalog.entities:
-                # TODO sniff the total record counts for all entities up front and determine if Arrow Tables in memory is feasible or if encrypted Parquet is needed.
+                # TODO sniff the total record counts for all entities up front and determine if Arrow Tables in memory is feasible or if encrypted feather is needed.
                 # TODO implement custom data frame functionality to manage the Federated query protocols for multiple entities, including joining on the fly and limiting entities and fields to the minimum viable requirements for the query. Current state implements a list of iterators of the objects, and that's a violation of the contract.
                 object_name = entity.name or ""
                 sub_catalog = catalog.model_copy(update={"entities": [entity]})
@@ -357,7 +409,7 @@ class SfService:
             logger.exception(f"delete_data failed: {e}")
             return PluginResponse.error(str(e))
 
-    # Plugin Uniques``
+    # Plugin Uniques
     def rest_query(self,
                    soql: str,
                    object_name: str | None = None,
@@ -398,11 +450,11 @@ class SfService:
                 yield from sf_obj.csv_bytes_to_arrow(csv_bytes).to_pylist()
             else:
                 yield csv_bytes
-    
-    def query(self, 
-              soql: str, 
-              object_name: str | None = None, 
-              query_type: Literal['Rest', 'Bulk2'] = 'Rest', 
+
+    def query(self,
+              soql: str,
+              object_name: str | None = None,
+              query_type: Literal['Rest', 'Bulk2'] = 'Rest',
               return_type: Literal['Records', 'ArrowReader'] = 'Records') -> PluginResponse[Records | ArrowReader]:
         try:
             if not object_name:
