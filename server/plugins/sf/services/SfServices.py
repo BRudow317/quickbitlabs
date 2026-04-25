@@ -82,6 +82,7 @@ class SfService:
             is_foreign_key=is_ref,
             foreign_key_entity=ref_targets[0] if is_ref and ref_targets else None,
             foreign_key_column="Id" if is_ref else None,
+            is_foreign_key_enforced=field.get("relationshipOrder") is not None if is_ref else False,
             is_computed=field.get("calculated", False) or field.get("autoNumber", False),
             is_deprecated=deprecated_hidden,
             is_hidden=deprecated_hidden,

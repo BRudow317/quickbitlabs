@@ -1,11 +1,18 @@
 Q:/quickbitlabs/
 ├── .claude/
-│   └── CLAUDE.md
+│   ├── .gitignore
+│   ├── CLAUDE.md
+│   └── settings.local.json
+├── .data/
+│   ├── backend_antipattern_report.md
+│   └── results.csv
 ├── .gemini/
 │   ├── .gitignore
 │   ├── GEMINI.md
-│   ├── plan.md
-│   └── project_context.md
+│   └── plan.md
+├── .keys/
+│   ├── aes256.key
+│   └── jwt.key
 ├── frontend/
 │   ├── assets/
 │   │   └── rudow_fam.jpg
@@ -31,7 +38,7 @@ Q:/quickbitlabs/
 │   │   │   │   ├── schemas.gen.ts
 │   │   │   │   ├── sdk.gen.ts
 │   │   │   │   └── types.gen.ts
-│   │   │   ├── pluginsApi.ts
+│   │   │   ├── migrationApi.ts
 │   │   │   └── sessionApi.ts
 │   │   ├── assets/
 │   │   │   ├── react.svg
@@ -40,14 +47,8 @@ Q:/quickbitlabs/
 │   │   │   ├── AuthContext.tsx
 │   │   │   └── authenticateUser.ts
 │   │   ├── components/
-│   │   │   ├── CreateLeadDialog.tsx
-│   │   │   ├── DynamicField.tsx
-│   │   │   ├── DynamicForm.tsx
-│   │   │   ├── DynamicValidation.tsx
-│   │   │   ├── FieldInfo.tsx
-│   │   │   ├── Grid.tsx
-│   │   │   ├── LeadsTable.tsx
-│   │   │   └── TanstackForm.tsx
+│   │   │   ├── FileDropzone.tsx
+│   │   │   └── Navbar.tsx
 │   │   ├── configs/
 │   │   │   └── localCache.ts
 │   │   ├── context/
@@ -57,15 +58,15 @@ Q:/quickbitlabs/
 │   │   │   └── ThemeContext.tsx
 │   │   ├── hooks/
 │   │   ├── layouts/
-│   │   │   ├── AppLayout.tsx
 │   │   │   └── Layout.tsx
 │   │   ├── models/
 │   │   ├── pages/
+│   │   │   ├── ContactsPage.tsx
 │   │   │   ├── DataMartPage.tsx
 │   │   │   ├── HomePage.tsx
+│   │   │   ├── ImportPage.tsx
 │   │   │   ├── MigrationPage.tsx
-│   │   │   ├── QueryPage.tsx
-│   │   │   └── TablePage.tsx
+│   │   │   └── ProfilePage.tsx
 │   │   ├── styles/
 │   │   │   ├── ColorTokens.css
 │   │   │   ├── fonts.css
@@ -74,6 +75,7 @@ Q:/quickbitlabs/
 │   │   ├── templates/
 │   │   │   ├── about.html
 │   │   │   ├── base.html
+│   │   │   ├── globe-loader.html
 │   │   │   └── index.html
 │   │   ├── utils/
 │   │   │   ├── cn.ts
@@ -102,27 +104,39 @@ Q:/quickbitlabs/
 │   │   ├── column.py
 │   │   ├── data.py
 │   │   ├── entity.py
-│   │   ├── leads.py
+│   │   ├── files.py
+│   │   ├── info.py
 │   │   ├── migration.py
+│   │   ├── registry.py
 │   │   ├── session.py
 │   │   └── users.py
 │   ├── configs/
 │   │   ├── __init__.py
-│   │   ├── db.py
 │   │   └── settings.py
 │   ├── core/
 │   │   ├── __init__.py
-│   │   ├── ArrowFrame.py
-│   │   ├── DataFrame.py
+│   │   ├── catalog_registry.py
+│   │   ├── DuckDBDialect.py
 │   │   ├── federation.py
 │   │   ├── jwt.py
 │   │   └── security.py
+│   ├── db/
+│   │   ├── __init__.py
+│   │   ├── db.py
+│   │   ├── ServerDatabase.py
+│   │   └── setup_tables.py
 │   ├── models/
 │   │   ├── __init__.py
-│   │   ├── AuthModels.py
-│   │   ├── lead.py
+│   │   ├── ArrowFrame.py
+│   │   ├── DataFrame.py
 │   │   └── user.py
 │   ├── plugins/
+│   │   ├── excel/
+│   │   │   ├── __init__.py
+│   │   │   ├── Excel.py
+│   │   │   ├── ExcelEngine.py
+│   │   │   ├── ExcelService.py
+│   │   │   └── ExcelTypeMap.py
 │   │   ├── oracle/
 │   │   │   ├── tests/
 │   │   │   ├── __init__.py
@@ -135,6 +149,16 @@ Q:/quickbitlabs/
 │   │   │   ├── OracleServices.py
 │   │   │   ├── OracleTools.py
 │   │   │   └── OracleTypeMap.py
+│   │   ├── readers/
+│   │   │   ├── __init__.py
+│   │   │   ├── CsvEngine.py
+│   │   │   ├── FeatherEngine.py
+│   │   │   ├── ParquetEngine.py
+│   │   │   ├── Reader.py
+│   │   │   ├── ReaderEncryption.py
+│   │   │   ├── ReaderModels.py
+│   │   │   ├── ReaderService.py
+│   │   │   └── ReaderTypeMap.py
 │   │   ├── sf/
 │   │   │   ├── engines/
 │   │   │   │   ├── SfAuth.py
@@ -166,18 +190,24 @@ Q:/quickbitlabs/
 │   │   └── PluginResponse.py
 │   ├── services/
 │   │   ├── __init__.py
-│   │   ├── FullMigration.py
-│   │   ├── new_session.py
-│   │   ├── SfToSfMigration.py
+│   │   ├── CatalogMigration.py
+│   │   ├── file_service.py
+│   │   ├── session_service.py
 │   │   └── sync_systems.py
+│   ├── tools/
+│   │   ├── rename_stream.py
+│   │   └── sync_systems_to_db.py
 │   ├── __init__.py
 │   ├── ProjectTree.md
 │   ├── README.md
-│   └── start_server.py
+│   └── start_app.py
+├── tests/
 ├── .gitignore
+├── boot_server.py
+├── command book.md
 ├── FullProjectTree.md
 ├── LICENSE
-├── main.py
+├── Plugin Framework Rules.md
 ├── pyproject.toml
 ├── quickbitlabs.code-workspace
 ├── README.md

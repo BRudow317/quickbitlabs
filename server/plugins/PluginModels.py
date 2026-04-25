@@ -115,6 +115,7 @@ class Column(BaseModel):
     is_foreign_key: bool = False
     foreign_key_entity: str | None = None
     foreign_key_column: str | None = None
+    is_foreign_key_enforced: bool = False
     max_length: int | None = None
     precision: int | None = None
     scale: int | None = None
