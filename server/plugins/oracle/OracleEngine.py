@@ -183,12 +183,69 @@ class OracleTable:
         self._insert_sql_stmt = f"INSERT INTO {self.qualified_name} ({','.join(columns)}) VALUES ({','.join(binds)})"
         logger.debug(f'Generated insert SQL for {self.qualified_name}:\n{self._insert_sql_stmt}')
         return self._insert_sql_stmt
+    def fetch_unique_columns(self) -> set[str]:
+        """Return column names covered by UNIQUE constraints (ENABLED only)."""
+        sql = (
+            "SELECT acc.COLUMN_NAME "
+            "FROM ALL_CONSTRAINTS ac "
+            "JOIN ALL_CONS_COLUMNS acc "
+            "  ON ac.OWNER = acc.OWNER "
+            " AND ac.CONSTRAINT_NAME = acc.CONSTRAINT_NAME "
+            " AND ac.TABLE_NAME = acc.TABLE_NAME "
+            "WHERE ac.OWNER = :owner "
+            "  AND ac.TABLE_NAME = :table_name "
+            "  AND ac.CONSTRAINT_TYPE = 'U' "
+            "  AND ac.STATUS = 'ENABLED'"
+        )
+        with self.schema.client.get_con().cursor() as cursor:
+            cursor.execute(
+                sql,
+                {"owner": self.schema.schema_name.upper(), "table_name": self.table_name.upper()},
+            )
+            return {str(row[0]) for row in cursor.fetchall()}
+
+    def fetch_foreign_keys(self) -> dict[str, dict[str, Any]]:
+        """Return FK metadata keyed by local column name."""
+        sql = (
+            "SELECT acc.COLUMN_NAME, rc.TABLE_NAME AS REF_TABLE, "
+            "       racc.COLUMN_NAME AS REF_COLUMN, ac.STATUS "
+            "FROM ALL_CONSTRAINTS ac "
+            "JOIN ALL_CONS_COLUMNS acc "
+            "  ON ac.OWNER = acc.OWNER "
+            " AND ac.CONSTRAINT_NAME = acc.CONSTRAINT_NAME "
+            " AND ac.TABLE_NAME = acc.TABLE_NAME "
+            "JOIN ALL_CONSTRAINTS rc "
+            "  ON ac.R_OWNER = rc.OWNER "
+            " AND ac.R_CONSTRAINT_NAME = rc.CONSTRAINT_NAME "
+            "JOIN ALL_CONS_COLUMNS racc "
+            "  ON rc.OWNER = racc.OWNER "
+            " AND rc.CONSTRAINT_NAME = racc.CONSTRAINT_NAME "
+            " AND rc.TABLE_NAME = racc.TABLE_NAME "
+            "WHERE ac.OWNER = :owner "
+            "  AND ac.TABLE_NAME = :table_name "
+            "  AND ac.CONSTRAINT_TYPE = 'R'"
+        )
+        result: dict[str, dict[str, Any]] = {}
+        with self.schema.client.get_con().cursor() as cursor:
+            cursor.execute(
+                sql,
+                {"owner": self.schema.schema_name.upper(), "table_name": self.table_name.upper()},
+            )
+            for row in cursor.fetchall():
+                result[str(row[0])] = {
+                    "REF_TABLE": str(row[1]),
+                    "REF_COLUMN": str(row[2]),
+                    "STATUS": str(row[3]),
+                }
+        return result
+
     @property
     def _fetch_tab_columns(self) -> list[dict[str, Any]]| None:
         if self._fetched_db_col is not None: return self._fetched_db_col
-        sql = f"""SELECT COLUMN_NAME, DATA_TYPE, CHAR_LENGTH, CHAR_USED, DATA_PRECISION, DATA_SCALE, COLUMN_ID, NULLABLE
-                    FROM ALL_TAB_COLUMNS WHERE OWNER = :owner 
-                    AND TABLE_NAME = :table_name 
+        sql = f"""SELECT COLUMN_NAME, DATA_TYPE, CHAR_LENGTH, CHAR_USED, DATA_PRECISION, DATA_SCALE, COLUMN_ID, NULLABLE,
+                         DATA_DEFAULT, VIRTUAL_COLUMN, HIDDEN_COLUMN
+                    FROM ALL_TAB_COLUMNS WHERE OWNER = :owner
+                    AND TABLE_NAME = :table_name
                     ORDER BY COLUMN_ID
                 """
         with self.schema.client.get_con().cursor() as cursor:

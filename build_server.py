@@ -8,16 +8,17 @@ from __future__ import annotations
 import logging, os, sys, subprocess, secrets
 from pathlib import Path
 from typing import Literal
-from server.start_app import start_app
 
 PY_PROJECT_ROOT = Path(__file__).resolve().parent
 if str(PY_PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PY_PROJECT_ROOT))
+os.environ.setdefault("PY_PROJECT_ROOT", str(PY_PROJECT_ROOT))
+
+from server.start_app import start_app
 
 # Cold start: create the log file, store its path for reload children to inherit.
 # Reload children: skip pre-checks and attach to the same log file via _QBL_LOGFILE.
 
-# 
 logger = logging.getLogger(__name__)
 
 def _npm(script: str) -> None:

@@ -10,163 +10,115 @@ from .OracleClient import OracleClient
 
 
 class Oracle(Plugin):
-    """The Oracle Plugin Facade. Strictly complies with the Program rules. Routes traffic to the Service layer.
-        # The Facade is blind to the Client and Engine. 
-        """
+    """Oracle Plugin Facade. Strictly complies with the Plugin Protocol.
+    Routes all traffic to OracleService; never raises for expected failures.
+    """
     client: OracleClient
     service: OracleService
     properties: dict[str, Any]
+
     def __init__(self, **kwargs: Any):
         self.client = OracleClient(**kwargs)
         self.service = OracleService(self.client)
         self.properties = {}
 
-    # -- Records (Row / Data Level) --
-
-    def create_data(self, catalog: Catalog, data: ArrowReader,  **kwargs: Any) -> PluginResponse[ArrowReader]:
-        try:
-            self.service.insert_data(catalog, data, **kwargs)
-            return PluginResponse.success(data)
-        except Exception as e:
-            return PluginResponse.error(str(e))
+    # ------------------------------------------------------------------
+    # Data protocol
+    # ------------------------------------------------------------------
 
     def get_data(self, catalog: Catalog, **kwargs: Any) -> PluginResponse[ArrowReader]:
-        try:
-            return PluginResponse.success(self.service.get_data(catalog=catalog, **kwargs))
-        except Exception as e:
-            return PluginResponse.error(str(e))
+        return self.service.get_data(catalog, **kwargs)
 
-    def update_data(self, catalog: Catalog, data: ArrowReader ,  **kwargs: Any) -> PluginResponse[ArrowReader]:
-        try:
-            result = self.service.update_data(catalog, data, **kwargs)
-            if not result.ok:
-                return PluginResponse.error(result.message)
-            return PluginResponse.success(data)
-        except Exception as e:
-            return PluginResponse.error(str(e))
+    def create_data(self, catalog: Catalog, data: ArrowReader, **kwargs: Any) -> PluginResponse[ArrowReader]:
+        return self.service.create_data(catalog, data, **kwargs)
 
-    def upsert_data(self, catalog: Catalog, data: ArrowReader ,  **kwargs: Any) -> PluginResponse[ArrowReader]:
-        try:
-            self.service.upsert_data(catalog, data, **kwargs)
-            return PluginResponse.success(data)
-        except Exception as e:
-            return PluginResponse.error(str(e))
+    def update_data(self, catalog: Catalog, data: ArrowReader, **kwargs: Any) -> PluginResponse[ArrowReader]:
+        return self.service.update_data(catalog, data, **kwargs)
 
-    def delete_data(self, catalog: Catalog, data: ArrowReader ,  **kwargs: Any) -> PluginResponse[None]:
-        try:
-            return PluginResponse.success(self.service.delete_data(catalog, data, **kwargs))
-        except Exception as e:
-            return PluginResponse.error(str(e))
+    def upsert_data(self, catalog: Catalog, data: ArrowReader, **kwargs: Any) -> PluginResponse[ArrowReader]:
+        return self.service.upsert_data(catalog, data, **kwargs)
 
-    # ==========================================
-    # -- Field (Column / Attribute Level) --
-    # ==========================================
+    def delete_data(self, catalog: Catalog, data: ArrowReader, **kwargs: Any) -> PluginResponse[None]:
+        return self.service.delete_data(catalog, data, **kwargs)
 
-    def create_column(self, catalog: Catalog, **kwargs: Any) -> PluginResponse[Column]:
-        try:
-            return PluginResponse.success(self.service.create_column(catalog, **kwargs))
-        except Exception as e:
-            return PluginResponse.error(str(e))
+    # ------------------------------------------------------------------
+    # Column protocol
+    # ------------------------------------------------------------------
 
     def get_column(self, catalog: Catalog, **kwargs: Any) -> PluginResponse[Column]:
-        try:
-            return PluginResponse.success(self.service.get_column(catalog, **kwargs))
-        except Exception as e:
-            return PluginResponse.error(str(e))
+        return self.service.get_column(catalog, **kwargs)
+
+    def create_column(self, catalog: Catalog, **kwargs: Any) -> PluginResponse[Column]:
+        return self.service.create_column(catalog, **kwargs)
 
     def update_column(self, catalog: Catalog, **kwargs: Any) -> PluginResponse[Column]:
-        return PluginResponse.not_implemented("Oracle does not support ALTER COLUMN via this protocol. Use upsert_entity to add missing columns.")
+        return self.service.update_column(catalog, **kwargs)
 
     def upsert_column(self, catalog: Catalog, **kwargs: Any) -> PluginResponse[Column]:
-        try:
-            # Oracle upsert_entity already handles adding missing columns
-            self.service.upsert_entity(catalog, **kwargs)
-            if catalog.entities and catalog.entities[0].columns:
-                return PluginResponse.success(catalog.entities[0].columns[0])
-            return PluginResponse.error("Catalog must contain an entity with at least one column.")
-        except Exception as e:
-            return PluginResponse.error(str(e))
+        return self.service.upsert_column(catalog, **kwargs)
 
     def delete_column(self, catalog: Catalog, **kwargs: Any) -> PluginResponse[None]:
-        return PluginResponse.not_implemented("Oracle column deletion not implemented. Dropping columns is destructive and should be done manually.")
+        return self.service.delete_column(catalog, **kwargs)
 
-    # ==========================================
-    # -- Entity (Table / Object Level) --
-    # ==========================================
-
-    def create_entity(self, catalog: Catalog, **kwargs: Any) -> PluginResponse[Entity]:
-        try:
-            return PluginResponse.success(self.service.create_entity(catalog, **kwargs))
-        except Exception as e:
-            return PluginResponse.error(str(e))
+    # ------------------------------------------------------------------
+    # Entity protocol
+    # ------------------------------------------------------------------
 
     def get_entity(self, catalog: Catalog, **kwargs: Any) -> PluginResponse[Entity]:
-        try:
-            return PluginResponse.success(self.service.get_entity(catalog, **kwargs))
-        except Exception as e:
-            return PluginResponse.error(str(e))
+        return self.service.get_entity(catalog, **kwargs)
+
+    def create_entity(self, catalog: Catalog, **kwargs: Any) -> PluginResponse[Entity]:
+        return self.service.create_entity(catalog, **kwargs)
 
     def update_entity(self, catalog: Catalog, **kwargs: Any) -> PluginResponse[Entity]:
-        try:
-            return PluginResponse.success(self.service.upsert_entity(catalog, **kwargs))
-        except Exception as e:
-            return PluginResponse.error(str(e))
+        return self.service.update_entity(catalog, **kwargs)
 
     def upsert_entity(self, catalog: Catalog, **kwargs: Any) -> PluginResponse[Entity]:
-        try:
-            return PluginResponse.success(self.service.upsert_entity(catalog, **kwargs))
-        except Exception as e:
-            return PluginResponse.error(str(e))
+        return self.service.upsert_entity(catalog, **kwargs)
 
     def delete_entity(self, catalog: Catalog, **kwargs: Any) -> PluginResponse[None]:
-        return PluginResponse.not_implemented("Oracle table deletion not implemented. Dropping tables is destructive and should be done manually.")
+        return self.service.delete_entity(catalog, **kwargs)
 
-    # ==========================================
-    # -- Catalog (Database / Schema Level) --
-    # ==========================================
-
-    def create_catalog(self, catalog: Catalog, **kwargs: Any) -> PluginResponse[Catalog]:
-        try:
-            return PluginResponse.success(self.service.upsert_catalog(catalog, **kwargs))
-        except Exception as e:
-            return PluginResponse.error(str(e))
+    # ------------------------------------------------------------------
+    # Catalog protocol
+    # ------------------------------------------------------------------
 
     def get_catalog(self, catalog: Catalog, **kwargs: Any) -> PluginResponse[Catalog]:
-        try:
-            return PluginResponse.success(self.service.get_catalog(catalog, **kwargs))
-        except Exception as e:
-            return PluginResponse.error(str(e))
+        return self.service.get_catalog(catalog, **kwargs)
+
+    def create_catalog(self, catalog: Catalog, **kwargs: Any) -> PluginResponse[Catalog]:
+        return self.service.create_catalog(catalog, **kwargs)
 
     def update_catalog(self, catalog: Catalog, **kwargs: Any) -> PluginResponse[Catalog]:
-        try:
-            return PluginResponse.success(self.service.upsert_catalog(catalog, **kwargs))
-        except Exception as e:
-            return PluginResponse.error(str(e))
+        return self.service.update_catalog(catalog, **kwargs)
 
     def upsert_catalog(self, catalog: Catalog, **kwargs: Any) -> PluginResponse[Catalog]:
-        try:
-            return PluginResponse.success(self.service.upsert_catalog(catalog, **kwargs))
-        except Exception as e:
-            return PluginResponse.error(str(e))
+        return self.service.upsert_catalog(catalog, **kwargs)
 
     def delete_catalog(self, catalog: Catalog, **kwargs: Any) -> PluginResponse[None]:
-        return PluginResponse.not_implemented("Oracle schema deletion not implemented. Dropping schemas is destructive and should be done manually.")
+        return self.service.delete_catalog(catalog, **kwargs)
 
-    def query(self, statement: str, binds: dict[str, Any] | None = None, page_size: int | None = None, catalog: Catalog | None = None, **kwargs: Any) -> PluginResponse[ArrowReader]:
-        try:
-            kwargs['statement'] = statement
-            kwargs['binds'] = binds
-            kwargs['page_size'] = page_size
-            if not catalog:
-                catalog = Catalog(name=self.client.oracle_user)
-            return PluginResponse.success(
-                self.service.get_data(
-                    catalog=catalog,
-                    statement=statement, 
-                    **kwargs
-                    ))
-        except Exception as e:
-            return PluginResponse.error(str(e))
-# Explicitly enforce duck-typing compliance at module load time
-# Intentionally avoid instantiating Oracle at import time because that creates
+    # ------------------------------------------------------------------
+    # Plugin-unique: raw SQL passthrough
+    # ------------------------------------------------------------------
+
+    def query(
+        self,
+        statement: str,
+        binds: dict[str, Any] | None = None,
+        page_size: int | None = None,
+        catalog: Catalog | None = None,
+        **kwargs: Any,
+    ) -> PluginResponse[ArrowReader]:
+        kwargs["statement"] = statement
+        kwargs["binds"] = binds
+        kwargs["page_size"] = page_size
+        return self.service.get_data(
+            catalog or Catalog(name=self.client.oracle_user),
+            **kwargs,
+        )
+
+
+# Explicitly enforce duck-typing compliance at module load time.
+# Intentionally avoid instantiating Oracle here because that creates
 # a live DB connection through OracleClient.

@@ -1,5 +1,6 @@
 from __future__ import annotations
 import datetime, json, re
+from decimal import Decimal
 from typing import Any, Literal, TypeVar
 # from server.plugins.PluginModels import PythonTypes
 from server.plugins.PluginModels import Catalog, Entity, Column, ArrowReader, Records, arrow_type_literal
@@ -171,11 +172,16 @@ def _to_time(v: str) -> datetime.time:
     return datetime.time.fromisoformat(v)
 
 
+def _to_decimal(v: Any) -> Decimal:
+    # str() avoids floating-point representation noise (e.g. 1234.56 not 1234.5599999...)
+    return Decimal(str(v))
+
+
 _SF_CONVERTERS: dict[str, Any] = {
     'int':      int,
     'integer':  int,
     'double':   float,
-    'currency': float,
+    'currency': _to_decimal,  # decimal128 requires Decimal, not float
     'percent':  float,
     'boolean':  _to_bool,
     'date':     datetime.date.fromisoformat,
