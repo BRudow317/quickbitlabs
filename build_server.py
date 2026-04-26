@@ -56,8 +56,8 @@ def _ensure_jwt_secret() -> None:
     stable across reloads.
 
     Priority order:
-      1. JWT_SECRET already set in environment (e.g. from .env / boot.py loader) — used as-is.
-      2. Not set or still the placeholder — generate a fresh 256-bit random key.
+      1. JWT_SECRET already set in environment (e.g. from .env / boot.py loader) - used as-is.
+      2. Not set or still the placeholder - generate a fresh 256-bit random key.
 
     In production, set JWT_SECRET in .env so restarts don't invalidate sessions.
     In development, the ephemeral key is regenerated each time the server process starts;
@@ -79,7 +79,7 @@ def build_process(mode: Literal["development", "staging", "production"]) -> None
         _ensure_jwt_secret()
 
         # Uncomment for production: deep-hydrates CATALOG_REGISTRY from all plugins.
-        # Safe to run here — _IS_BUILD_STEP_COMPLETED guard ensures it runs once per server start,
+        # Safe to run here - _IS_BUILD_STEP_COMPLETED guard ensures it runs once per server start,
         # not on every uvicorn hot reload. Keep commented in development.
         
 

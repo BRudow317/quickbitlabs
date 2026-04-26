@@ -16,7 +16,7 @@ class Excel(Plugin):
     worksheet to an Entity.
 
     kwargs:
-        file_path (str) — path to the .xlsx workbook. Used as the default when
+        file_path (str) - path to the .xlsx workbook. Used as the default when
                           the catalog's locator does not carry a namespace.
     """
 
@@ -115,7 +115,7 @@ class Excel(Plugin):
             return PluginResponse.error(str(e))
 
     # ------------------------------------------------------------------
-    # Column (Field Level) — schema is fixed by worksheet contents
+    # Column (Field Level) - schema is fixed by worksheet contents
     # ------------------------------------------------------------------
 
     def get_column(self, catalog: Catalog, **kwargs: Any) -> PluginResponse[Column]:

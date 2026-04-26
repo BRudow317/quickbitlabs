@@ -1,5 +1,5 @@
 """
-sync_systems.py — Offline schema discovery for all registered plugins.
+sync_systems.py - Offline schema discovery for all registered plugins.
 
 Calls get_catalog(Catalog()) (blank = full discovery) for each registered plugin
 and writes the resulting Catalog to CATALOG_REGISTRY under the 'SYSTEM' owner.

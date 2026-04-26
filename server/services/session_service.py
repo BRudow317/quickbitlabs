@@ -1,5 +1,5 @@
 """
-SessionService — manages USER_SESSION and USER_SIGN_IN records via OracleClient.
+SessionService - manages USER_SESSION and USER_SIGN_IN records via OracleClient.
 
 Responsibilities:
   - Create / invalidate / look-up JWT sessions
@@ -23,7 +23,7 @@ logger = logging.getLogger(__name__)
 
 
 def _hash_token(token: str) -> str:
-    """SHA-256 hex digest of a raw JWT — what we store in the DB."""
+    """SHA-256 hex digest of a raw JWT - what we store in the DB."""
     return hashlib.sha256(token.encode()).hexdigest()
 
 
@@ -187,7 +187,7 @@ class SessionService:
             return False
         is_active, not_expired = row
         if is_active and not not_expired:
-            # Expired but still flagged active — clean it up now
+            # Expired but still flagged active - clean it up now
             self._deactivate_by_hash(token_hash)
             return False
         return bool(is_active and not_expired)

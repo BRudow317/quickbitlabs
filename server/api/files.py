@@ -1,14 +1,14 @@
 """
-File upload API — POST /api/files/upload
+File upload API - POST /api/files/upload
 
 Accepts a raw file upload (csv, parquet, feather, arrow, xlsx), processes it
 through the appropriate plugin, saves each entity as encrypted Parquet, and
 persists the resulting Catalog to the user's registry.
 
 Response JSON:
-    registry_key  — the key under which the catalog was saved
-    catalog       — the full Catalog dict (locators point at saved Parquet files)
-    registry      — updated list of all registry entries for the current user
+    registry_key  - the key under which the catalog was saved
+    catalog       - the full Catalog dict (locators point at saved Parquet files)
+    registry      - updated list of all registry entries for the current user
 
 After this call the frontend can load a preview by posting the returned Catalog
 (with limit=500) to POST /api/data/.

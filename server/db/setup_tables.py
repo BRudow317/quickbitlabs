@@ -153,7 +153,7 @@ def _run(cur: oracledb.Cursor, sql: str, label: str) -> None:
         logger.info(f"  OK  {label}")
     except oracledb.DatabaseError as exc:
         (error,) = exc.args
-        logger.warning(f"  SKIP {label} — {error.message.strip()}")
+        logger.warning(f"  SKIP {label} - {error.message.strip()}")
 
 
 # ---------------------------------------------------------------------------
@@ -176,16 +176,16 @@ def create_tables(server_db: ServerDatabase) -> None:
                     logger.info('Adding HASHED_PASSWORD to "USER"...')
                     _run(cur, 'ALTER TABLE "USER" ADD HASHED_PASSWORD VARCHAR2(255 CHAR)', 'ADD HASHED_PASSWORD')
                 else:
-                    logger.info('"USER".HASHED_PASSWORD already exists — skipping')
+                    logger.info('"USER".HASHED_PASSWORD already exists - skipping')
             else:
-                logger.warning('"USER" table not found — skipping HASHED_PASSWORD column. Run migration first.')
+                logger.warning('"USER" table not found - skipping HASHED_PASSWORD column. Run migration first.')
 
             # -- USER_SESSION ------------------------------------------------
             if not _table_exists(cur, "USER_SESSION"):
                 logger.info("Creating USER_SESSION...")
                 _run(cur, _CREATE_USER_SESSION, "CREATE TABLE USER_SESSION")
             else:
-                logger.info("USER_SESSION already exists — skipping")
+                logger.info("USER_SESSION already exists - skipping")
 
             for ddl in _CREATE_USER_SESSION_INDEXES:
                 idx_name = ddl.split("CREATE INDEX")[1].split(" ON ")[0].strip()
@@ -200,7 +200,7 @@ def create_tables(server_db: ServerDatabase) -> None:
                 logger.info("Creating USER_SIGN_IN...")
                 _run(cur, _CREATE_USER_SIGN_IN, "CREATE TABLE USER_SIGN_IN")
             else:
-                logger.info("USER_SIGN_IN already exists — skipping")
+                logger.info("USER_SIGN_IN already exists - skipping")
 
             for ddl in _CREATE_USER_SIGN_IN_INDEXES:
                 idx_name = ddl.split("CREATE INDEX")[1].split(" ON ")[0].strip()
@@ -212,7 +212,7 @@ def create_tables(server_db: ServerDatabase) -> None:
                 logger.info("Creating CATALOG_REGISTRY...")
                 _run(cur, _CREATE_CATALOG_REGISTRY, "CREATE TABLE CATALOG_REGISTRY")
             else:
-                logger.info("CATALOG_REGISTRY already exists — skipping")
+                logger.info("CATALOG_REGISTRY already exists - skipping")
 
             for ddl in _CREATE_CATALOG_REGISTRY_INDEXES:
                 idx_name = ddl.split("CREATE INDEX")[1].split(" ON ")[0].strip()

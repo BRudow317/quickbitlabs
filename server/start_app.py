@@ -73,7 +73,7 @@ def create_app() -> FastAPI:
     return _app
 
 
-# Module-level app instance — required for uvicorn string import ("server.start_app:app")
+# Module-level app instance - required for uvicorn string import ("server.start_app:app")
 app = create_app()
 
 

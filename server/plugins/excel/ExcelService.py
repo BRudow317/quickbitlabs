@@ -1,5 +1,5 @@
 """
-ExcelService — orchestrates sheet discovery, schema inspection, and data I/O.
+ExcelService - orchestrates sheet discovery, schema inspection, and data I/O.
 
 Catalog model:
     Catalog  ↔  one Excel workbook (.xlsx)
@@ -7,7 +7,7 @@ Catalog model:
 
 Locator layout stamped on every column:
     plugin       = 'excel'
-    namespace    = str(path_to_workbook)   — full absolute path to the .xlsx file
+    namespace    = str(path_to_workbook)   - full absolute path to the .xlsx file
     entity_name  = sheet_name
 
 get_catalog behaviour:
@@ -93,7 +93,7 @@ class ExcelService:
                 entities.append(Entity(name=sheet_name, columns=columns))
                 logger.debug(f"Excel: discovered sheet '{sheet_name}' ({len(columns)} columns)")
             except Exception as exc:
-                logger.warning(f"Excel: skipping sheet '{sheet_name}' — {exc}")
+                logger.warning(f"Excel: skipping sheet '{sheet_name}' - {exc}")
         return catalog.model_copy(update={"entities": entities})
 
     def _inspect_sheets(self, path: Path, catalog: Catalog) -> Catalog:
@@ -107,7 +107,7 @@ class ExcelService:
                 columns = schema_to_columns(schema, locator)
                 entities.append(Entity(name=sheet_name, columns=columns))
             except Exception as exc:
-                logger.warning(f"Excel: skipping sheet '{sheet_name}' — {exc}")
+                logger.warning(f"Excel: skipping sheet '{sheet_name}' - {exc}")
         return catalog.model_copy(update={"entities": entities})
 
     # ------------------------------------------------------------------

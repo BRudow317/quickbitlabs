@@ -16,7 +16,7 @@ class CatalogRegistryService:
     """
     Persists named Catalog snapshots to CATALOG_REGISTRY table.
 
-    Ownership is tracked by `owner` — the Oracle username stored in the JWT sub
+    Ownership is tracked by `owner` - the Oracle username stored in the JWT sub
     claim. The service account (ServerDatabase) performs the actual DB operations;
     no user password is required after login.
     """
@@ -46,7 +46,7 @@ class CatalogRegistryService:
         """
         con = self._server_db.connect()
         with con.cursor() as cur:
-            # Force CLOB binding — catalog JSON can exceed oracledb's 32 KB direct-string limit
+            # Force CLOB binding - catalog JSON can exceed oracledb's 32 KB direct-string limit
             cur.setinputsizes(catalog_json=DB_TYPE_CLOB)
             cur.execute(sql, owner=owner, registry_key=registry_key, catalog_json=json_str)
         con.commit()

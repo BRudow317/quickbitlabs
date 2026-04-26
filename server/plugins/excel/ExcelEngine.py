@@ -3,10 +3,10 @@ Excel engine for the Excel plugin.
 
 File model: one workbook (.xlsx) = one Catalog; one worksheet = one Entity.
 
-Reading:  polars.read_excel with openpyxl engine — handles type inference and
+Reading:  polars.read_excel with openpyxl engine - handles type inference and
           returns a polars DataFrame which we convert to a PyArrow table.
 
-Writing:  openpyxl directly — gives full workbook control (add/replace individual
+Writing:  openpyxl directly - gives full workbook control (add/replace individual
           sheets without disturbing others) which polars write_excel cannot guarantee
           in append mode.
 
@@ -72,7 +72,7 @@ class ExcelEngine:
         # Header row
         ws.append([f.name for f in table.schema])
 
-        # Data rows — convert each column to Python list once, then zip across columns
+        # Data rows - convert each column to Python list once, then zip across columns
         col_lists = [table.column(i).to_pylist() for i in range(table.num_columns)]
         for row in zip(*col_lists):
             ws.append(list(row))

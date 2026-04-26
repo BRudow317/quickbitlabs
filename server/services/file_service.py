@@ -1,5 +1,5 @@
 """
-FileService — processes raw file uploads through the Reader or Excel plugin,
+FileService - processes raw file uploads through the Reader or Excel plugin,
 converts each entity to encrypted Parquet for persistent storage, and returns
 a Catalog (with 'reader' locators pointing at the saved Parquet files) alongside
 a PyArrow Table for preview slicing.

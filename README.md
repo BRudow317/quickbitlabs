@@ -20,7 +20,7 @@ python "Q:/scripts/boot.py" -v  -l ./.logs --env homelab --config Q:/.secrets/.e
 10. [Axios](https://axios-http.com/)
 11. [Zod](https://zod.dev/)
 12. [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
-13. 
+13. []
 
 # Backend Documentation
 1. [Python](https://docs.python.org/3.13/py-modindex.html)
