@@ -1,21 +1,11 @@
 Q:/quickbitlabs/
-├── .claude/
-│   ├── .gitignore
-│   ├── CLAUDE.md
-│   └── settings.local.json
 ├── .data/
 │   ├── backend_antipattern_report.md
 │   └── results.csv
-├── .gemini/
-│   ├── .gitignore
-│   ├── GEMINI.md
-│   └── plan.md
 ├── .keys/
 │   ├── aes256.key
 │   └── jwt.key
 ├── frontend/
-│   ├── assets/
-│   │   └── rudow_fam.jpg
 │   ├── src/
 │   │   ├── api/
 │   │   │   ├── openapi/

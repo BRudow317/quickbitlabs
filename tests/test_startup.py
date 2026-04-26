@@ -55,25 +55,25 @@ def test_settings_loads_successfully_when_required_vars_present(monkeypatch: pyt
 # ---------------------------------------------------------------------------
 
 def test_ensure_jwt_secret_preserves_existing_secret(monkeypatch: pytest.MonkeyPatch) -> None:
-	import boot_server
+	import build_server
 	monkeypatch.setenv("JWT_SECRET", "already-set-strong-secret")
-	boot_server._ensure_jwt_secret()
+	build_server._ensure_jwt_secret()
 	assert os.environ["JWT_SECRET"] == "already-set-strong-secret"
 
 
 def test_ensure_jwt_secret_replaces_placeholder(monkeypatch: pytest.MonkeyPatch) -> None:
-	import boot_server
-	monkeypatch.setenv("JWT_SECRET", boot_server._PLACEHOLDER)
-	monkeypatch.setattr(boot_server.secrets, "token_urlsafe", lambda _: "fresh-generated-key")
-	boot_server._ensure_jwt_secret()
+	import build_server
+	monkeypatch.setenv("JWT_SECRET", build_server._PLACEHOLDER)
+	monkeypatch.setattr(build_server.secrets, "token_urlsafe", lambda _: "fresh-generated-key")
+	build_server._ensure_jwt_secret()
 	assert os.environ["JWT_SECRET"] == "fresh-generated-key"
 
 
 def test_ensure_jwt_secret_generates_when_missing(monkeypatch: pytest.MonkeyPatch) -> None:
-	import boot_server
+	import build_server
 	monkeypatch.delenv("JWT_SECRET", raising=False)
-	monkeypatch.setattr(boot_server.secrets, "token_urlsafe", lambda _: "fresh-generated-key")
-	boot_server._ensure_jwt_secret()
+	monkeypatch.setattr(build_server.secrets, "token_urlsafe", lambda _: "fresh-generated-key")
+	build_server._ensure_jwt_secret()
 	assert os.environ["JWT_SECRET"] == "fresh-generated-key"
 
 
@@ -95,17 +95,17 @@ def fake_uvicorn(monkeypatch: pytest.MonkeyPatch) -> list[dict[str, object]]:
 def test_build_process_generates_ephemeral_secret_and_marks_completion(
 	monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-	import boot_server
+	import build_server
 
 	calls: list[tuple[str, str | None]] = []
 
 	monkeypatch.delenv("JWT_SECRET", raising=False)
 	monkeypatch.delenv("_BUILD_STEP_COMPLETED", raising=False)
-	monkeypatch.setattr(boot_server, "_check_db", lambda: calls.append(("db", None)) or True)
-	monkeypatch.setattr(boot_server, "_npm", lambda script: calls.append(("npm", script)))
-	monkeypatch.setattr(boot_server.secrets, "token_urlsafe", lambda _: "ephemeral-test-secret")
+	monkeypatch.setattr(build_server, "_check_db", lambda: calls.append(("db", None)) or True)
+	monkeypatch.setattr(build_server, "_npm", lambda script: calls.append(("npm", script)))
+	monkeypatch.setattr(build_server.secrets, "token_urlsafe", lambda _: "ephemeral-test-secret")
 
-	boot_server.build_process(mode="development")
+	build_server.build_process(mode="development")
 
 	assert os.environ["JWT_SECRET"] == "ephemeral-test-secret"
 	assert os.environ["_BUILD_STEP_COMPLETED"] == "1"

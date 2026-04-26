@@ -4,17 +4,10 @@ python "Q:/scripts/boot.py" -l ./.logs -config
 from __future__ import annotations
 import sys
 from pathlib import Path
+from typing import Literal
 from fastapi import FastAPI
-import uvicorn
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
-
-SERVER_DIR = Path(__file__).resolve().parent
-PROJECT_ROOT = SERVER_DIR.parent
-if str(SERVER_DIR) not in sys.path:
-    sys.path.insert(0, str(SERVER_DIR))
-if str(PROJECT_ROOT) not in sys.path:
-    sys.path.insert(0, str(PROJECT_ROOT))
 
 from configs.settings import settings
 from api import auth, users
@@ -30,67 +23,77 @@ from api import (
     files, 
     )
 
-from fastapi.routing import APIRoute
-def custom_generate_unique_id(route: APIRoute) -> str:
-    return route.name
+SERVER_DIR = Path(__file__).resolve().parent
+# if str(SERVER_DIR) not in sys.path:
+#     sys.path.insert(0, str(SERVER_DIR))
 
-from contextlib import asynccontextmanager
-from server.db.db import ServerDatabase, server_db
-from server.db.setup_tables import create_tables
+# PROJECT_ROOT = SERVER_DIR.parent
+# if str(PROJECT_ROOT) not in sys.path:
+#     sys.path.insert(0, str(PROJECT_ROOT))
 
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    create_tables(server_db)
-    yield
+def start_app(mode: Literal["development", "staging", "production"]) -> None:
+    reload = False
+    if mode == "development":
+        reload = True
+        import uvicorn
+        uvicorn.run("server.start_app:app", host="0.0.0.0", port=8000, reload=reload)
 
-def create_app() -> FastAPI:
-    app = FastAPI(
-        title=settings.project_name,
-        generate_unique_id_callback=custom_generate_unique_id,
-        lifespan=lifespan,
-    )
+    from fastapi.routing import APIRoute
+    def custom_generate_unique_id(route: APIRoute) -> str:
+        return route.name
 
-    app.add_middleware(
-        CORSMiddleware,
-        allow_origins=settings.cors_origins,
-        allow_credentials=settings.allow_credentials,
-        allow_methods=settings.allow_methods,
-        allow_headers=settings.allow_headers,
-    )
+    from contextlib import asynccontextmanager
+    from server.db.db import ServerDatabase, server_db
+    from server.db.setup_tables import create_tables
 
-    # Auth & Users
-    app.include_router(auth.router, prefix="/api/auth", tags=["auth"])
-    app.include_router(users.router, prefix="/api/users", tags=["users"])
+    @asynccontextmanager
+    async def lifespan(app: FastAPI):
+        create_tables(server_db)
+        yield
 
-    # Plugin metadata federation (prefixes defined inside each router)
-    app.include_router(catalog.router)
-    app.include_router(entity.router)
-    app.include_router(column.router)
-    app.include_router(data.router)
+    def create_app() -> FastAPI:
+        app = FastAPI(
+            title=settings.project_name,
+            generate_unique_id_callback=custom_generate_unique_id,
+            lifespan=lifespan,
+        )
 
-    # Session metadata (loaded from parquet cache written by sync_systems.py)
-    app.include_router(session.router)
+        app.add_middleware(
+            CORSMiddleware,
+            allow_origins=settings.cors_origins,
+            allow_credentials=settings.allow_credentials,
+            allow_methods=settings.allow_methods,
+            allow_headers=settings.allow_headers,
+        )
 
-    # User-saved Catalog views (persisted to Oracle CATALOG_REGISTRY)
-    app.include_router(registry.router, prefix="/api/registry", tags=["registry"])
+        # Auth & Users
+        app.include_router(auth.router, prefix="/api/auth", tags=["auth"])
+        app.include_router(users.router, prefix="/api/users", tags=["users"])
 
-    # File uploads (csv / parquet / feather / xlsx → encrypted Parquet + registry)
-    app.include_router(files.router, prefix="/api/files", tags=["files"])
+        # Plugin metadata federation (prefixes defined inside each router)
+        app.include_router(catalog.router)
+        app.include_router(entity.router)
+        app.include_router(column.router)
+        app.include_router(data.router)
 
-    # Migration management
-    app.include_router(migration.router, prefix="/api/migration", tags=["migration"])
+        # Session metadata (loaded from parquet cache written by sync_systems.py)
+        app.include_router(session.router)
 
-    return app
+        # User-saved Catalog views (persisted to Oracle CATALOG_REGISTRY)
+        app.include_router(registry.router, prefix="/api/registry", tags=["registry"])
 
-app = create_app()
+        # File uploads (csv / parquet / feather / xlsx → encrypted Parquet + registry)
+        app.include_router(files.router, prefix="/api/files", tags=["files"])
 
-# Serve the static frontend build
-frontend_dist = PROJECT_ROOT / "frontend" / "dist"
-if frontend_dist.exists():
-    app.mount("/", StaticFiles(directory=str(frontend_dist), html=True), name="static")
-else:
-    raise FileNotFoundError("The frontend/dist directory does not exist. Please build the frontend first.")
+        # Migration management
+        app.include_router(migration.router, prefix="/api/migration", tags=["migration"])
 
-if __name__ == "__main__":
-    uvicorn.run("server.start_server:app", host="0.0.0.0", port=8000, reload=True)
+        return app
 
+    app = create_app()
+
+    # Serve the static frontend build
+    if Path(settings.frontend).exists():
+        app.mount("/", StaticFiles(directory=str(settings.frontend), html=True), name="static")
+    else:
+        raise FileNotFoundError("The frontend/dist directory does not exist. Please build the frontend first.")
