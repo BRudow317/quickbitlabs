@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useMemo } from 'react';
 import {
   Box,
   Flex,
@@ -10,15 +10,21 @@ import { Database } from 'lucide-react';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { getData, getSession, type Catalog, type Entity, type QueryResult } from '@/api/sessionApi';
 import { useToast } from '@/context/ToastContext';
+import { useData } from '@/context/DataContext';
+import { useBreakpoint } from '@/context/BreakpointContext';
 import { EntityBrowser } from '@/components/EntityBrowser';
 import { QueryBuilder } from '@/components/QueryBuilder';
 import { DataTable } from '@/components/DataTable';
 
 export function DataMartSection() {
-  const [selectedEntities, setSelectedEntities] = useState<Entity[]>([]);
-  const [limit, setLimit] = useState('500');
-  const [results, setResults] = useState<QueryResult | null>(null);
+  const { 
+    selectedEntities, setSelectedEntities, 
+    queryResults, setQueryResults,
+    queryLimit, setQueryLimit 
+  } = useData();
+  
   const { toast } = useToast();
+  const screenSize = useBreakpoint();
 
   const { data: session, isLoading: sessionLoading } = useQuery({
     queryKey: ['session'],
@@ -37,33 +43,37 @@ export function DataMartSection() {
         ? prev.filter((e) => e.name !== entity.name)
         : [...prev, entity],
     );
-    setResults(null);
+    setQueryResults(null);
   };
 
   const queryMutation = useMutation({
     mutationFn: (): Promise<QueryResult> => {
       const catalog: Catalog = {
         entities: selectedEntities,
-        limit: parseInt(limit) || 500,
+        limit: parseInt(queryLimit) || 500,
       };
       return getData(catalog);
     },
     onSuccess: (data) => {
-      setResults(data);
+      setQueryResults(data);
     },
     onError: (err: unknown) => {
       if (err instanceof Error && !('isAxiosError' in err)) {
         toast.error(err.message);
       }
-      setResults(null);
+      setQueryResults(null);
     },
   });
 
+  // FLEX-STANDARD synchronization with BreakpointContext
+  const isStacked = ["xsm", "sm"].includes(screenSize);
+  const layoutDirection = isStacked ? "column" : "row";
+
   return (
-    <Section size="2">
-      <Flex direction="column" gap="4">
+    <Section size="2" style={{ width: '100%' }}>
+      <Flex direction="column" gap="4" width="100%">
         {/* Section Header */}
-        <Flex align="center" gap="3">
+        <Flex align="center" gap="3" width="100%">
           <Box style={{ 
             background: 'var(--accent-9)', 
             padding: '8px', 
@@ -85,11 +95,12 @@ export function DataMartSection() {
             Row on Desktop, Column on Mobile 
         */}
         <Flex 
-          direction={{ initial: 'column', md: 'row' }} 
+          direction={layoutDirection} 
           gap="5" 
           align="start"
+          width="100%"
         >
-          {/* Col 1: Browser */}
+          {/* Col 1: Browser (Column Component) */}
           <EntityBrowser 
             entities={allEntities}
             selectedNames={selectedNames}
@@ -97,27 +108,27 @@ export function DataMartSection() {
             isLoading={sessionLoading}
           />
 
-          {/* Col 2: Query & Results */}
-          <Flex direction="column" gap="3" style={{ flex: 1, minWidth: 0 }}>
+          {/* Col 2: Query & Results (Column Component) */}
+          <Flex direction="column" gap="3" style={{ flex: 1, minWidth: 0 }} width="100%">
             <QueryBuilder 
               selectedEntities={selectedEntities}
               onToggleEntity={toggleEntity}
               onClear={() => {
                 setSelectedEntities([]);
-                setResults(null);
+                setQueryResults(null);
               }}
-              limit={limit}
-              onLimitChange={setLimit}
+              limit={queryLimit}
+              onLimitChange={setQueryLimit}
               onRunQuery={() => queryMutation.mutate()}
               isPending={queryMutation.isPending}
             />
 
-            {results && (
-              <Box mt="2">
+            {queryResults && (
+              <Box mt="2" width="100%">
                 <Text as="div" size="2" color="gray" mb="2">
-                  {results.total} row{results.total !== 1 ? 's' : ''} returned
+                  {queryResults.total} row{queryResults.total !== 1 ? 's' : ''} returned
                 </Text>
-                <DataTable data={results.rows} />
+                <DataTable data={queryResults.rows} />
               </Box>
             )}
           </Flex>

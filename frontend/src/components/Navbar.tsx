@@ -8,6 +8,7 @@ import { useAuth } from '@/auth/AuthContext';
 import { useBreakpoint } from '@/context/BreakpointContext';
 import { useToast } from '@/context/ToastContext';
 import { Database, ArrowRightLeft, Upload, Users, LogOut, User, FlaskConical } from 'lucide-react';
+import { NavSelector } from '@/components/NavSelector';
 
 type AuthDialog = 'none' | 'login' | 'register';
 

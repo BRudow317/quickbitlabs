@@ -10,6 +10,7 @@ import {
 } from '@radix-ui/themes';
 import { MagnifyingGlassIcon } from '@radix-ui/react-icons';
 import type { Entity } from '@/api/sessionApi';
+import { useBreakpoint } from '@/context/BreakpointContext';
 
 interface EntityBrowserProps {
   entities: Entity[];
@@ -25,6 +26,7 @@ export function EntityBrowser({
   isLoading,
 }: EntityBrowserProps) {
   const [search, setSearch] = useState('');
+  const screenSize = useBreakpoint();
 
   const filteredEntities = useMemo(
     () =>
@@ -36,8 +38,10 @@ export function EntityBrowser({
     [entities, search],
   );
 
+  const isStacked = ["xsm", "sm"].includes(screenSize);
+
   return (
-    <Box style={{ width: 280, flexShrink: 0 }}>
+    <Box style={{ width: isStacked ? '100%' : 280, flexShrink: 0 }}>
       <Card>
         <Flex direction="column" gap="3">
           <Text size="2" weight="medium">

@@ -213,6 +213,22 @@ export const Catalog_InputSchema = {
             ],
             title: 'Namespace'
         },
+        version: {
+            type: 'integer',
+            title: 'Version',
+            default: 1
+        },
+        description: {
+            anyOf: [
+                {
+                    type: 'string'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Description'
+        },
         scope: {
             type: 'string',
             enum: [
@@ -283,7 +299,18 @@ export const Catalog_InputSchema = {
             ],
             title: 'Limit'
         },
-        owner_user_id: {
+        offset: {
+            anyOf: [
+                {
+                    type: 'integer'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Offset'
+        },
+        owner_username: {
             anyOf: [
                 {
                     type: 'string'
@@ -292,7 +319,7 @@ export const Catalog_InputSchema = {
                     type: 'null'
                 }
             ],
-            title: 'Owner User Id'
+            title: 'Owner Username'
         },
         team_id: {
             anyOf: [
@@ -360,6 +387,22 @@ export const Catalog_OutputSchema = {
                 }
             ],
             title: 'Namespace'
+        },
+        version: {
+            type: 'integer',
+            title: 'Version',
+            default: 1
+        },
+        description: {
+            anyOf: [
+                {
+                    type: 'string'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Description'
         },
         scope: {
             type: 'string',
@@ -431,7 +474,18 @@ export const Catalog_OutputSchema = {
             ],
             title: 'Limit'
         },
-        owner_user_id: {
+        offset: {
+            anyOf: [
+                {
+                    type: 'integer'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Offset'
+        },
+        owner_username: {
             anyOf: [
                 {
                     type: 'string'
@@ -440,7 +494,7 @@ export const Catalog_OutputSchema = {
                     type: 'null'
                 }
             ],
-            title: 'Owner User Id'
+            title: 'Owner Username'
         },
         team_id: {
             anyOf: [
@@ -535,6 +589,9 @@ export const ColumnSchema = {
                         'time64_us',
                         'time64_ns',
                         'duration_s',
+                        'duration_ms',
+                        'duration_us',
+                        'duration_ns',
                         'decimal128',
                         'decimal256',
                         'json',
@@ -554,6 +611,18 @@ export const ColumnSchema = {
                 }
             ],
             title: 'Arrow Type Id'
+        },
+        arrow_type_meta: {
+            anyOf: [
+                {
+                    additionalProperties: true,
+                    type: 'object'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Arrow Type Meta'
         },
         primary_key: {
             type: 'boolean',
@@ -606,6 +675,11 @@ export const ColumnSchema = {
                 }
             ],
             title: 'Foreign Key Column'
+        },
+        is_foreign_key_enforced: {
+            type: 'boolean',
+            title: 'Is Foreign Key Enforced',
+            default: false
         },
         max_length: {
             anyOf: [
@@ -674,6 +748,43 @@ export const ColumnSchema = {
             additionalProperties: true,
             type: 'object',
             title: 'Properties'
+        },
+        ordinal_position: {
+            anyOf: [
+                {
+                    type: 'integer'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Ordinal Position'
+        },
+        is_computed: {
+            type: 'boolean',
+            title: 'Is Computed',
+            default: false
+        },
+        is_deprecated: {
+            type: 'boolean',
+            title: 'Is Deprecated',
+            default: false
+        },
+        is_hidden: {
+            type: 'boolean',
+            title: 'Is Hidden',
+            default: false
+        },
+        description: {
+            anyOf: [
+                {
+                    type: 'string'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Description'
         }
     },
     type: 'object',
@@ -710,6 +821,60 @@ export const EntitySchema = {
                 }
             ],
             title: 'Namespace'
+        },
+        description: {
+            anyOf: [
+                {
+                    type: 'string'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Description'
+        },
+        entity_type: {
+            type: 'string',
+            enum: [
+                'table',
+                'view',
+                'materialized_view',
+                'external',
+                'api_endpoint',
+                'procedure',
+                'file',
+                'unknown'
+            ],
+            title: 'Entity Type',
+            default: 'unknown'
+        },
+        plugin: {
+            anyOf: [
+                {
+                    type: 'string',
+                    enum: [
+                        'salesforce',
+                        'oracle',
+                        'reader',
+                        'excel'
+                    ]
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Plugin'
+        },
+        row_count_estimate: {
+            anyOf: [
+                {
+                    type: 'integer'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Row Count Estimate'
         },
         columns: {
             items: {
@@ -798,6 +963,22 @@ export const LocatorSchema = {
                 }
             ],
             title: 'Plugin'
+        },
+        url: {
+            anyOf: [
+                {
+                    type: 'string'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Url'
+        },
+        is_file: {
+            type: 'boolean',
+            title: 'Is File',
+            default: false
         },
         environment: {
             anyOf: [
@@ -989,7 +1170,11 @@ export const OperationSchema = {
                 '>=',
                 '<=',
                 'IN',
+                'NOT IN',
                 'LIKE',
+                'NOT LIKE',
+                'BETWEEN',
+                'NOT BETWEEN',
                 'IS NULL',
                 'IS NOT NULL'
             ],
@@ -1103,6 +1288,17 @@ export const SortSchema = {
             ],
             title: 'Direction',
             default: 'ASC'
+        },
+        nulls_first: {
+            anyOf: [
+                {
+                    type: 'boolean'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Nulls First'
         }
     },
     type: 'object',

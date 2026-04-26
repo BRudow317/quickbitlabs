@@ -20,6 +20,8 @@ import pyarrow as pa
 
 from server.plugins.PluginModels import Catalog, Entity, Locator
 from server.plugins.PluginRegistry import PLUGIN, get_plugin
+from server.plugins.readers.ReaderModels import FORMAT_MAP
+from server.plugins.readers.ReaderService import ReaderService
 from server.plugins.readers.ParquetEngine import ParquetEngine
 
 logger = logging.getLogger(__name__)
@@ -87,10 +89,18 @@ def process_upload(
             plugin=cast(PLUGIN, "reader"),
             namespace=str(upload_dir),
             entity_name=parquet_name,
+            is_file=True,
             additional_locators={"format": "parquet"},
         )
         saved_columns = [col.model_copy(update={"locator": locator}) for col in entity.columns]
-        saved_entities.append(Entity(name=entity.name, columns=saved_columns))
+        saved_entities.append(Entity(
+            name=entity.name,
+            entity_type="file",
+            plugin=cast(PLUGIN, "reader"),
+            namespace=str(upload_dir),
+            row_count_estimate=len(table),
+            columns=saved_columns,
+        ))
         all_tables.append(table)
 
     final_catalog = Catalog(
@@ -134,9 +144,9 @@ def _read_single_file(staging_dir: str) -> tuple[Catalog, list[pa.Table]]:
         raise RuntimeError(f"Reader plugin catalog: {resp.message}")
 
     catalog = resp.data
-    if catalog is None:
-        raise ValueError("No readable entities found in the uploaded file")
-    if not catalog.entities:
+    if not catalog or not catalog.entities:
+        # _scan_directory swallows parse errors — re-read directly to surface the real cause.
+        _raise_parse_error(Path(staging_dir))
         raise ValueError("No readable entities found in the uploaded file")
 
     tables: list[pa.Table] = []
@@ -149,3 +159,15 @@ def _read_single_file(staging_dir: str) -> tuple[Catalog, list[pa.Table]]:
         tables.append(dr.data.read_all())
 
     return catalog, tables
+
+
+def _raise_parse_error(staging_dir: Path) -> None:
+    """Attempt a direct schema read on each file in staging_dir to surface parse errors."""
+    for f in staging_dir.iterdir():
+        fmt = FORMAT_MAP.get(f.suffix.lower())
+        if not fmt:
+            continue
+        try:
+            ReaderService._engine_for(fmt).read_schema(f)
+        except Exception as exc:
+            raise ValueError(f"'{f.name}' could not be parsed: {exc}") from exc

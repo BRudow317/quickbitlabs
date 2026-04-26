@@ -356,7 +356,7 @@ export const createDataApiDataInsertPut = <ThrowOnError extends boolean = false>
 /**
  * Get Session
  *
- * Return the full metadata catalog from the parquet cache.
+ * Return the full metadata catalog from CATALOG_REGISTRY.
  */
 export const getSession = <ThrowOnError extends boolean = false>(options?: Options<GetSessionData, ThrowOnError>) => (options?.client ?? client).get<GetSessionResponses, unknown, ThrowOnError>({
     responseType: 'json',
@@ -368,7 +368,7 @@ export const getSession = <ThrowOnError extends boolean = false>(options?: Optio
 /**
  * List Systems
  *
- * Return the system names for which a metadata cache exists.
+ * Return the plugin names for which synced schema rows exist.
  */
 export const listSystems = <ThrowOnError extends boolean = false>(options?: Options<ListSystemsData, ThrowOnError>) => (options?.client ?? client).get<ListSystemsResponses, unknown, ThrowOnError>({
     responseType: 'json',

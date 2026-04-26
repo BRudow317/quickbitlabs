@@ -1,15 +1,7 @@
 import { Box, Card, Container, Flex, Grid, Heading, Section, Text } from '@radix-ui/themes';
-import { Navigate } from 'react-router';
-import { useAuth } from '@/auth/AuthContext';
 import { Database, ArrowRightLeft, Shield } from 'lucide-react';
 
 export function HomePage() {
-  const { isAuthenticated, isLoading } = useAuth();
-
-  if (!isLoading && isAuthenticated) {
-    return <Navigate to="/datamart" replace />;
-  }
-
   return (
     <Box>
       {/* Hero */}

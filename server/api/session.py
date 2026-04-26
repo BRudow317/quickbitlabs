@@ -15,7 +15,7 @@ router = APIRouter(prefix="/api/session", tags=["Session"])
 @router.get("/", operation_id="get_session", response_model=Catalog)
 def get_session(current_user: Annotated[UserBase, Depends(get_current_user)]) -> Catalog:
     """Return the full metadata catalog from CATALOG_REGISTRY."""
-    return session_service.load_session()
+    return session_service.load_session(username=current_user.username)
 
 
 @router.get("/systems", operation_id="list_systems")

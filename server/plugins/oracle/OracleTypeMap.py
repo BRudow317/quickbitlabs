@@ -1,8 +1,7 @@
 from typing import Any, Literal
 import oracledb
-from server.plugins.PluginModels import Column, ARROW_TYPE, arrow_type_literal
-from typing import Any
-import oracledb
+from server.plugins.PluginModels import Column, ARROW_TYPE, arrow_type_literal, pa_type_to_literal
+import pyarrow as pa
 
 def map_oracle_to_arrow(raw_type: str, scale: int | None = None) -> arrow_type_literal:
     raw_upper = raw_type.upper()
@@ -16,14 +15,60 @@ def map_oracle_to_arrow(raw_type: str, scale: int | None = None) -> arrow_type_l
     if raw_upper in ("BLOB", "BFILE"): return "large_binary"
     return "string"
 
+ARROW_TO_ORACLE_DDL: dict[arrow_type_literal, str] = {
+    "null":             "VARCHAR2(255 CHAR)",
+    "bool":             "NUMBER(1, 0)",
+    "int8":             "NUMBER",
+    "int16":            "NUMBER",
+    "int32":            "NUMBER",
+    "int64":            "NUMBER",
+    "uint8":            "NUMBER",
+    "uint16":           "NUMBER",
+    "uint32":           "NUMBER",
+    "uint64":           "NUMBER",
+    "float16":          "NUMBER",
+    "float32":          "NUMBER",
+    "float64":          "NUMBER",
+    "decimal128":       "NUMBER",
+    "decimal256":       "NUMBER",
+    "string":           "VARCHAR2(255 CHAR)",
+    "utf8":             "VARCHAR2(255 CHAR)",
+    "string_view":      "VARCHAR2(255 CHAR)",
+    "large_string":     "CLOB",
+    "binary":           "BLOB",
+    "large_binary":     "BLOB",
+    "date32":           "DATE",
+    "date64":           "DATE",
+    "timestamp_s":      "TIMESTAMP",
+    "timestamp_ms":     "TIMESTAMP",
+    "timestamp_us":     "TIMESTAMP",
+    "timestamp_ns":     "TIMESTAMP",
+    "time32_s":         "TIMESTAMP",
+    "time32_ms":        "TIMESTAMP",
+    "time64_us":        "TIMESTAMP",
+    "time64_ns":        "TIMESTAMP",
+    "duration_s":       "NUMBER",
+    "duration_ms":      "NUMBER",
+    "duration_us":      "NUMBER",
+    "duration_ns":      "NUMBER",
+    "list":             "JSON",
+    "large_list":       "JSON",
+    "list_view":        "JSON",
+    "large_list_view":  "JSON",
+    "struct":           "JSON",
+    "map":              "JSON",
+    "dictionary":       "VARCHAR2(4000 CHAR)",
+    "json":             "JSON",
+    "uuid":             "VARCHAR2(36 CHAR)",
+}
+
+
 def map_arrow_to_oracle_ddl(column: Column) -> str:
     atype = column.arrow_type_id
     if atype is None: raise ValueError(f"Column {column.name} is missing 'arrow_type_id'.")
-    if atype in ("string", "utf8"):
+    if atype in ("string", "utf8", "string_view"):
         length = column.max_length or 255
-        if length > 4000:
-            return "CLOB"
-        return f"VARCHAR2({length} CHAR)"
+        return "CLOB" if length > 4000 else f"VARCHAR2({length} CHAR)"
     if atype == "large_string": return "CLOB"
     if atype.startswith("int") or atype.startswith("uint"): return "NUMBER"
     if atype.startswith("float") or atype.startswith("decimal"):
@@ -31,25 +76,39 @@ def map_arrow_to_oracle_ddl(column: Column) -> str:
     if atype == "bool": return "NUMBER(1, 0)"
     if atype.startswith("timestamp"): return "TIMESTAMP WITH TIME ZONE" if column.timezone else "TIMESTAMP"
     if atype.startswith("date"): return "DATE"
-    if atype.startswith("time"): return "TIMESTAMP"
+    if atype.startswith("time") or atype.startswith("duration"): return "TIMESTAMP"
     if atype in ("binary", "large_binary"): return "BLOB"
+    if atype in ("list", "large_list", "list_view", "large_list_view", "struct", "map", "json"):
+        return "JSON"
+    if atype == "dictionary": return f"VARCHAR2({column.max_length or 4000} CHAR)"
+    if atype == "uuid": return "VARCHAR2(36 CHAR)"
     return "VARCHAR2(255 CHAR)"
 
 def map_column_to_oracledb_input_size(column: Column) -> Any:
     atype = column.arrow_type_id
     if atype is None: raise ValueError(f"Column {column.name} is missing 'arrow_type_id'.")
-    if atype in ("string", "utf8"):
+    if atype in ("string", "utf8", "string_view"):
         length = column.max_length or 4000
-        if length > 4000:
-            return oracledb.DB_TYPE_CLOB
-        return length
+        return oracledb.DB_TYPE_CLOB if length > 4000 else length
     if atype == "large_string": return oracledb.DB_TYPE_CLOB
-    if atype.startswith("int") or atype.startswith("uint") or atype.startswith("float") or atype.startswith("decimal") or atype == "bool": return oracledb.DB_TYPE_NUMBER
-    if atype.startswith("timestamp"): return getattr(oracledb, "DB_TYPE_TIMESTAMP_TZ", oracledb.DB_TYPE_TIMESTAMP) if column.timezone else getattr(oracledb, "DB_TYPE_TIMESTAMP")
+    if atype.startswith("int") or atype.startswith("uint") or atype.startswith("float") or atype.startswith("decimal") or atype == "bool":
+        return oracledb.DB_TYPE_NUMBER
+    if atype.startswith("timestamp"):
+        return getattr(oracledb, "DB_TYPE_TIMESTAMP_TZ", oracledb.DB_TYPE_TIMESTAMP) if column.timezone else oracledb.DB_TYPE_TIMESTAMP
     if atype.startswith("date"): return oracledb.DB_TYPE_DATE
-    if atype.startswith("time"): return getattr(oracledb, "DB_TYPE_TIMESTAMP")
+    if atype.startswith("time") or atype.startswith("duration"): return oracledb.DB_TYPE_TIMESTAMP
     if atype in ("binary", "large_binary"): return oracledb.DB_TYPE_BLOB
+    if atype in ("list", "large_list", "list_view", "large_list_view", "struct", "map", "json"):
+        return getattr(oracledb, "DB_TYPE_JSON", oracledb.DB_TYPE_CLOB)
+    if atype in ("dictionary", "uuid"): return column.max_length or 4000
     return None
+
+
+def arrow_to_oracle_ddl(t: pa.DataType, column: Column | None = None) -> str:
+    """Map any pa.DataType to its Oracle DDL string. Delegates to map_arrow_to_oracle_ddl when a Column is available."""
+    if column is not None:
+        return map_arrow_to_oracle_ddl(column)
+    return ARROW_TO_ORACLE_DDL.get(pa_type_to_literal(t), "VARCHAR2(255 CHAR)")
 
 ORACLE_TO_ARROW_LITERALS: dict[str, arrow_type_literal] = {
     "DB_TYPE_BINARY_DOUBLE": "float64",

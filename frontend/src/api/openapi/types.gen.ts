@@ -141,6 +141,14 @@ export type CatalogInput = {
      */
     namespace?: string | null;
     /**
+     * Version
+     */
+    version?: number;
+    /**
+     * Description
+     */
+    description?: string | null;
+    /**
      * Scope
      */
     scope?: 'SYSTEM' | 'TEAM' | 'USER';
@@ -169,9 +177,13 @@ export type CatalogInput = {
      */
     limit?: number | null;
     /**
-     * Owner User Id
+     * Offset
      */
-    owner_user_id?: string | null;
+    offset?: number | null;
+    /**
+     * Owner Username
+     */
+    owner_username?: string | null;
     /**
      * Team Id
      */
@@ -205,6 +217,14 @@ export type CatalogOutput = {
      */
     namespace?: string | null;
     /**
+     * Version
+     */
+    version?: number;
+    /**
+     * Description
+     */
+    description?: string | null;
+    /**
      * Scope
      */
     scope?: 'SYSTEM' | 'TEAM' | 'USER';
@@ -233,9 +253,13 @@ export type CatalogOutput = {
      */
     limit?: number | null;
     /**
-     * Owner User Id
+     * Offset
      */
-    owner_user_id?: string | null;
+    offset?: number | null;
+    /**
+     * Owner Username
+     */
+    owner_username?: string | null;
     /**
      * Team Id
      */
@@ -268,7 +292,13 @@ export type Column = {
     /**
      * Arrow Type Id
      */
-    arrow_type_id?: 'null' | 'bool' | 'int8' | 'int16' | 'int32' | 'int64' | 'uint8' | 'uint16' | 'uint32' | 'uint64' | 'float16' | 'float32' | 'float64' | 'string' | 'utf8' | 'large_string' | 'binary' | 'large_binary' | 'date32' | 'date64' | 'timestamp_s' | 'timestamp_ms' | 'timestamp_us' | 'timestamp_ns' | 'time32_s' | 'time32_ms' | 'time64_us' | 'time64_ns' | 'duration_s' | 'decimal128' | 'decimal256' | 'json' | 'uuid' | 'string_view' | 'list' | 'large_list' | 'struct' | 'map' | 'list_view' | 'large_list_view' | 'dictionary' | null;
+    arrow_type_id?: 'null' | 'bool' | 'int8' | 'int16' | 'int32' | 'int64' | 'uint8' | 'uint16' | 'uint32' | 'uint64' | 'float16' | 'float32' | 'float64' | 'string' | 'utf8' | 'large_string' | 'binary' | 'large_binary' | 'date32' | 'date64' | 'timestamp_s' | 'timestamp_ms' | 'timestamp_us' | 'timestamp_ns' | 'time32_s' | 'time32_ms' | 'time64_us' | 'time64_ns' | 'duration_s' | 'duration_ms' | 'duration_us' | 'duration_ns' | 'decimal128' | 'decimal256' | 'json' | 'uuid' | 'string_view' | 'list' | 'large_list' | 'struct' | 'map' | 'list_view' | 'large_list_view' | 'dictionary' | null;
+    /**
+     * Arrow Type Meta
+     */
+    arrow_type_meta?: {
+        [key: string]: unknown;
+    } | null;
     /**
      * Primary Key
      */
@@ -301,6 +331,10 @@ export type Column = {
      * Foreign Key Column
      */
     foreign_key_column?: string | null;
+    /**
+     * Is Foreign Key Enforced
+     */
+    is_foreign_key_enforced?: boolean;
     /**
      * Max Length
      */
@@ -335,6 +369,26 @@ export type Column = {
     properties?: {
         [key: string]: unknown;
     };
+    /**
+     * Ordinal Position
+     */
+    ordinal_position?: number | null;
+    /**
+     * Is Computed
+     */
+    is_computed?: boolean;
+    /**
+     * Is Deprecated
+     */
+    is_deprecated?: boolean;
+    /**
+     * Is Hidden
+     */
+    is_hidden?: boolean;
+    /**
+     * Description
+     */
+    description?: string | null;
 };
 
 /**
@@ -353,6 +407,22 @@ export type Entity = {
      * Namespace
      */
     namespace?: string | null;
+    /**
+     * Description
+     */
+    description?: string | null;
+    /**
+     * Entity Type
+     */
+    entity_type?: 'table' | 'view' | 'materialized_view' | 'external' | 'api_endpoint' | 'procedure' | 'file' | 'unknown';
+    /**
+     * Plugin
+     */
+    plugin?: 'salesforce' | 'oracle' | 'reader' | 'excel' | null;
+    /**
+     * Row Count Estimate
+     */
+    row_count_estimate?: number | null;
     /**
      * Columns
      */
@@ -399,6 +469,14 @@ export type Locator = {
      * Plugin
      */
     plugin?: 'salesforce' | 'oracle' | 'reader' | 'excel' | null;
+    /**
+     * Url
+     */
+    url?: string | null;
+    /**
+     * Is File
+     */
+    is_file?: boolean;
     /**
      * Environment
      */
@@ -495,7 +573,7 @@ export type Operation = {
     /**
      * Operator
      */
-    operator: '=' | '==' | '!=' | '>' | '<' | '>=' | '<=' | 'IN' | 'LIKE' | 'IS NULL' | 'IS NOT NULL';
+    operator: '=' | '==' | '!=' | '>' | '<' | '>=' | '<=' | 'IN' | 'NOT IN' | 'LIKE' | 'NOT LIKE' | 'BETWEEN' | 'NOT BETWEEN' | 'IS NULL' | 'IS NOT NULL';
     /**
      * Dependent
      */
@@ -539,6 +617,10 @@ export type Sort = {
      * Direction
      */
     direction?: 'ASC' | 'DESC';
+    /**
+     * Nulls First
+     */
+    nulls_first?: boolean | null;
 };
 
 /**

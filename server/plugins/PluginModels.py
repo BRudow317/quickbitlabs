@@ -77,20 +77,17 @@ ARROW_TYPE: dict[arrow_type_literal, pa.DataType] = {
     "decimal128": pa.decimal128(38, 9),
     "decimal256": pa.decimal256(76, 18),
 
-    # Complex Types (parameterized - resolved at Column.arrow_type call time)
-    # "json": pa.json_(),
-    # "uuid": pa.uuid(),
-    # "list": pa.list_(),
-    # "large_list": pa.large_list(),
-    # "list_view": pa.list_view(),
-    # "large_list_view": pa.large_list_view(),
-    # "dictionary": pa.dictionary(),
-    # "struct": pa.struct(),
-    # "map": pa.map_(),
+    # Complex types — default parameterizations for schema inference.
+    # Use Column.arrow_type_meta to store and reconstruct the specific inner types.
+    "list": pa.list_(pa.utf8()),
+    "large_list": pa.large_list(pa.utf8()),
+    "struct": pa.struct([]),
+    "map": pa.map_(pa.utf8(), pa.utf8()),
+    "dictionary": pa.dictionary(pa.int32(), pa.utf8()),
 }
 
 def pa_type_to_literal(t: pa.DataType) -> arrow_type_literal:
-    """Map a PyArrow DataType to its arrow_type_literal string."""
+    """Map a PyArrow DataType to its arrow_type_literal string (predicate-based, parameter-agnostic)."""
     if pa.types.is_null(t):         return "null"
     if pa.types.is_boolean(t):      return "bool"
     if pa.types.is_int8(t):         return "int8"
@@ -123,6 +120,39 @@ def pa_type_to_literal(t: pa.DataType) -> arrow_type_literal:
     return "string"
 
 
+def pa_type_to_meta(t: pa.DataType) -> dict[str, Any] | None:
+    """Extract inner-type parameters from a complex PyArrow type for storage in Column.arrow_type_meta.
+    Returns None for scalar types that carry no inner-type metadata.
+    """
+    if pa.types.is_list(t) or pa.types.is_large_list(t):
+        return {"value_type": pa_type_to_literal(t.value_type)}  # type: ignore[attr-defined]
+    if pa.types.is_struct(t):
+        return {
+            "fields": [
+                {"name": t.field(i).name, "type": pa_type_to_literal(t.field(i).type)}
+                for i in range(t.num_fields)  # type: ignore[attr-defined]
+            ]
+        }
+    if pa.types.is_map(t):
+        return {
+            "key_type": pa_type_to_literal(t.key_type),    # type: ignore[attr-defined]
+            "value_type": pa_type_to_literal(t.item_type), # type: ignore[attr-defined]
+        }
+    if pa.types.is_dictionary(t):
+        return {
+            "index_type": pa_type_to_literal(t.index_type),  # type: ignore[attr-defined]
+            "value_type": pa_type_to_literal(t.value_type),  # type: ignore[attr-defined]
+        }
+    return None
+
+
+def _meta_to_pa_type(type_str: str | None) -> pa.DataType | None:
+    """Resolve a stored arrow_type_literal string back to a pa.DataType for use inside meta reconstruction."""
+    if not type_str:
+        return None
+    return ARROW_TYPE.get(type_str)  # type: ignore[arg-type]
+
+
 class Locator(BaseModel):
     """The strict contract defining the absolute origin of a scalar"""
     plugin: PLUGIN | None = None # 'oracle', 'salesforce', 'excel', 'parquet', 'feather', 'frontend', etc..
@@ -139,6 +169,7 @@ class Column(BaseModel):
     locator: Locator | None = None
     raw_type: str | None = None
     arrow_type_id: arrow_type_literal | None = None
+    arrow_type_meta: dict[str, Any] | None = None
     primary_key: bool = False
     is_unique: bool = False
     is_nullable: bool = True
@@ -163,9 +194,11 @@ class Column(BaseModel):
     description: str | None = None
     @property
     def arrow_type(self) -> pa.DataType | None:
-        """Dynamically build the C++ object, accounting for parameterized types."""
+        """Dynamically build the pa.DataType, accounting for parameterized and complex types."""
         if not self.arrow_type_id: return None
         arrow_type = self.arrow_type_id
+        meta = self.arrow_type_meta or {}
+
         if arrow_type == "decimal256":
             p = self.precision if self.precision is not None else 76
             s = self.scale if self.scale is not None else 18
@@ -177,6 +210,26 @@ class Column(BaseModel):
         if arrow_type.startswith("timestamp"):
             unit = arrow_type.split("_")[1]
             return pa.timestamp(unit, tz=self.timezone)
+
+        if arrow_type == "list":
+            return pa.list_(_meta_to_pa_type(meta.get("value_type")) or pa.utf8())
+        if arrow_type == "large_list":
+            return pa.large_list(_meta_to_pa_type(meta.get("value_type")) or pa.utf8())
+        if arrow_type == "struct":
+            fields = [
+                pa.field(f["name"], _meta_to_pa_type(f.get("type")) or pa.utf8())
+                for f in meta.get("fields", [])
+            ]
+            return pa.struct(fields)
+        if arrow_type == "map":
+            kt = _meta_to_pa_type(meta.get("key_type")) or pa.utf8()
+            vt = _meta_to_pa_type(meta.get("value_type")) or pa.utf8()
+            return pa.map_(kt, vt)
+        if arrow_type == "dictionary":
+            it = _meta_to_pa_type(meta.get("index_type")) or pa.int32()
+            vt = _meta_to_pa_type(meta.get("value_type")) or pa.utf8()
+            return pa.dictionary(it, vt)
+
         return ARROW_TYPE.get(arrow_type)
     @property
     def qualified_name(self) -> str:

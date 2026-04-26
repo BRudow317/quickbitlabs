@@ -5,8 +5,17 @@ import pyarrow as pa
 from server.plugins.PluginModels import Catalog, ArrowReader
 from server.plugins.PluginRegistry import get_plugin, PLUGIN
 from server.core.federation import duckdb_orchestrator
+from server.configs.settings import settings
 
 router = APIRouter(prefix="/api/data", tags=["Federated Data Execution"])
+
+
+def _get_plugin(source_type: PLUGIN):
+    """Instantiate a plugin, injecting reader-specific credentials from settings."""
+    if source_type == "reader":
+        enc_key = settings.upload_encryption_key.get_secret_value() or None
+        return get_plugin(source_type, encryption_key=enc_key)
+    return get_plugin(source_type)
 
 
 def _single_child(catalog: Catalog):
@@ -19,7 +28,7 @@ def _single_child(catalog: Catalog):
     child = children[0]
     if not child.source_type:
         raise HTTPException(status_code=500, detail="Child catalog is missing source_type.")
-    return child, get_plugin(cast(PLUGIN, child.source_type))
+    return child, _get_plugin(cast(PLUGIN, child.source_type))
 
 
 # ---------------------------------------
@@ -39,7 +48,7 @@ def get_data(catalog: Catalog = Body(...)):
         child = children[0]
         if not child.source_type:
             raise HTTPException(status_code=500, detail="Child catalog is missing source_type.")
-        plugin = get_plugin(cast(PLUGIN, child.source_type))
+        plugin = _get_plugin(cast(PLUGIN, child.source_type))
         resp = plugin.get_data(child)
         if not resp.ok:
             raise HTTPException(status_code=500, detail=resp.message)
@@ -55,7 +64,7 @@ def get_data(catalog: Catalog = Body(...)):
     for child in children:
         if not child.source_type:
             raise HTTPException(status_code=500, detail="Child catalog is missing source_type.")
-        plugin = get_plugin(cast(PLUGIN, child.source_type))
+        plugin = _get_plugin(cast(PLUGIN, child.source_type))
         resp = plugin.get_data(child)
         if not resp.ok:
             raise HTTPException(status_code=500, detail=f"Plugin '{child.source_type}' failed: {resp.message}")

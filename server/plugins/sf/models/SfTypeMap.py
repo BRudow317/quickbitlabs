@@ -2,8 +2,7 @@ from __future__ import annotations
 import datetime, json, re
 from decimal import Decimal
 from typing import Any, Literal, TypeVar
-# from server.plugins.PluginModels import PythonTypes
-from server.plugins.PluginModels import Catalog, Entity, Column, ArrowReader, Records, arrow_type_literal
+from server.plugins.PluginModels import Catalog, Entity, Column, ArrowReader, Records, arrow_type_literal, pa_type_to_literal
 import pyarrow as pa
 
 SF_TYPE_TO_ARROW = {
@@ -170,6 +169,59 @@ def _to_time(v: str) -> datetime.time:
     if isinstance(v, str) and v.endswith('Z'):
         v = v[:-1]
     return datetime.time.fromisoformat(v)
+
+
+ARROW_TO_SF_TYPE: dict[arrow_type_literal, str] = {
+    "null":         "anyType",
+    "bool":         "boolean",
+    "int8":         "int",
+    "int16":        "int",
+    "int32":        "int",
+    "int64":        "long",
+    "uint8":        "int",
+    "uint16":       "int",
+    "uint32":       "long",
+    "uint64":       "long",
+    "float16":      "double",
+    "float32":      "double",
+    "float64":      "double",
+    "decimal128":   "currency",
+    "decimal256":   "currency",
+    "string":       "string",
+    "utf8":         "string",
+    "large_string": "textarea",
+    "string_view":  "string",
+    "binary":       "base64",
+    "large_binary": "base64",
+    "date32":       "date",
+    "date64":       "date",
+    "timestamp_s":  "datetime",
+    "timestamp_ms": "datetime",
+    "timestamp_us": "datetime",
+    "timestamp_ns": "datetime",
+    "time32_s":     "time",
+    "time32_ms":    "time",
+    "time64_us":    "time",
+    "time64_ns":    "time",
+    "duration_s":   "string",
+    "duration_ms":  "string",
+    "duration_us":  "string",
+    "duration_ns":  "string",
+    "list":         "multipicklist",
+    "large_list":   "multipicklist",
+    "list_view":    "multipicklist",
+    "large_list_view": "multipicklist",
+    "struct":       "anyType",
+    "map":          "anyType",
+    "dictionary":   "picklist",
+    "json":         "anyType",
+    "uuid":         "string",
+}
+
+
+def arrow_to_sf_type(t: pa.DataType) -> str:
+    """Map any pa.DataType to its closest Salesforce field type string."""
+    return ARROW_TO_SF_TYPE.get(pa_type_to_literal(t), "anyType")
 
 
 def _to_decimal(v: Any) -> Decimal:

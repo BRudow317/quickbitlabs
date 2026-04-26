@@ -1,15 +1,21 @@
-import React from 'react';
-import { Box, Container } from '@radix-ui/themes';
-import { Navigate, Outlet } from 'react-router';
+import { Navigate } from 'react-router';
 import { useAuth } from '@/auth/AuthContext';
-import { Navbar } from '@/components/Navbar';
+import { useBreakpoint } from '@/context/BreakpointContext';
+import { SmallLayout } from './SmallLayout';
+import { MediumLayout } from './MediumLayout';
+import { LargeLayout } from './LargeLayout';
 
 interface LayoutProps {
   requireAuth?: boolean;
 }
 
-export function Layout({ requireAuth = false }: LayoutProps): React.JSX.Element {
+/**
+ * Layout: Orchestrator that switches between responsive sub-layouts
+ * based on the BreakpointContext.
+ */
+export function Layout({ requireAuth = false }: LayoutProps) {
   const { isAuthenticated, isLoading } = useAuth();
+  const screenSize = useBreakpoint();
 
   if (isLoading) return <></>;
 
@@ -17,16 +23,22 @@ export function Layout({ requireAuth = false }: LayoutProps): React.JSX.Element 
     return <Navigate to="/" replace />;
   }
 
-  return (
-    <Box style={{ minHeight: '100vh', background: 'var(--gray-a1)' }}>
-      <Navbar />
-      {requireAuth ? (
-        <Container size="4" p="5">
-          <Outlet />
-        </Container>
-      ) : (
-        <Outlet />
-      )}
-    </Box>
-  );
+  // Switch layouts based on breakpoint mapping
+  // small: xsm, sm
+  // medium: md, lg
+  // large: xl, xxl
+  switch (screenSize) {
+    case 'xsm':
+    case 'sm':
+      return <SmallLayout requireAuth={requireAuth} />;
+    case 'md':
+    case 'lg':
+      return <MediumLayout requireAuth={requireAuth} />;
+    case 'xl':
+    case 'xxl':
+      return <LargeLayout requireAuth={requireAuth} />;
+    default:
+      // Fallback to Medium if unknown
+      return <MediumLayout requireAuth={requireAuth} />;
+  }
 }

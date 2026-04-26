@@ -68,12 +68,29 @@ def create_app() -> FastAPI:
 
     frontend = Path(settings.frontend)
     if frontend.exists():
-        _app.mount("/", StaticFiles(directory=str(frontend), html=True), name="static")
+        from fastapi.responses import FileResponse, JSONResponse
+
+        @_app.get("/{full_path:path}")
+        async def spa_fallback(full_path: str):
+            # 1. API 404s should stay as JSON 404s
+            if full_path.startswith("api/"):
+                return JSONResponse(status_code=404, content={"detail": "Not Found"})
+
+            # 2. Check if the path points to a real file (assets, favicons, etc.)
+            file_path = frontend / full_path
+            if full_path and file_path.is_file():
+                return FileResponse(str(file_path))
+
+            # 3. Everything else (SPA routes) serves index.html
+            index_path = frontend / "index.html"
+            if index_path.exists():
+                return FileResponse(str(index_path))
+            
+            return JSONResponse(status_code=404, content={"detail": "Frontend not built"})
 
     return _app
 
 
-# Module-level app instance - required for uvicorn string import ("server.start_app:app")
 app = create_app()
 
 

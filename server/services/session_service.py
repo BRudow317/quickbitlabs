@@ -38,16 +38,21 @@ class SessionService:
     # Catalog session bootstrap
     # ------------------------------------------------------------------
 
-    def load_session(self) -> Catalog:
+    def load_session(self, username: str | None = None) -> Catalog:
         """
-        Read all SYSTEM-owned entries from CATALOG_REGISTRY and return a
-        unified Catalog containing every entity from every plugin.
+        Read SYSTEM-owned entries from CATALOG_REGISTRY (shared schema) plus,
+        when *username* is provided, that user's own uploaded-file entries.
         Returns an empty Catalog if no rows exist yet.
         """
-        sql = "SELECT CATALOG_JSON FROM CATALOG_REGISTRY WHERE OWNER = 'SYSTEM'"
+        if username:
+            sql = "SELECT CATALOG_JSON FROM CATALOG_REGISTRY WHERE OWNER = 'SYSTEM' OR OWNER = :u"
+            params: dict = {"u": username}
+        else:
+            sql = "SELECT CATALOG_JSON FROM CATALOG_REGISTRY WHERE OWNER = 'SYSTEM'"
+            params = {}
         entities: list[Entity] = []
         with self._server_db.connect().cursor() as cur:
-            cur.execute(sql)
+            cur.execute(sql, **params)
             for (json_val,) in cur:
                 if json_val is None:
                     continue
