@@ -6,11 +6,15 @@ import { MigrationPage } from '@/pages/MigrationPage';
 import { ImportPage } from '@/pages/ImportPage';
 import { ContactsPage } from '@/pages/ContactsPage';
 import { ProfilePage } from '@/pages/ProfilePage';
+import { PrototypePage } from '@/pages/PrototypePage';
 import { Layout } from '@/layouts/Layout';
 import { ThemeProvider } from '@/context/ThemeContext';
 import { BreakpointProvider } from '@/context/BreakpointContext';
 import { DataProvider } from '@/context/DataContext';
 import { AuthProvider } from '@/auth/AuthContext';
+import { ToastProvider } from '@/context/ToastContext';
+import { Toaster } from '@/components/AlertToaster';
+import { ApiErrorInterceptor } from '@/components/ApiErrorInterceptor';
 import '@/styles/fonts.css';
 import { client } from '@/api/openapi/client.gen';
 import { queryClient } from '@/context/QueryClientContext';
@@ -36,25 +40,30 @@ export function App() {
           <QueryClientProvider client={queryClient}>
             <DataProvider>
               <Theme>
-                <ThemeProvider>
-                  <Routes>
-                    {/* Public */}
-                    <Route element={<Layout />}>
-                      <Route index element={<HomePage />} />
-                    </Route>
+                <ToastProvider>
+                  <ApiErrorInterceptor />
+                  <Toaster />
+                  <ThemeProvider>
+                    <Routes>
+                      {/* Public */}
+                      <Route element={<Layout />}>
+                        <Route index element={<HomePage />} />
+                      </Route>
 
-                    {/* Authenticated */}
-                    <Route element={<Layout requireAuth />}>
-                      <Route path="/datamart" element={<DataMartPage />} />
-                      <Route path="/migration" element={<MigrationPage />} />
-                      <Route path="/import" element={<ImportPage />} />
-                      <Route path="/contacts" element={<ContactsPage />} />
-                      <Route path="/profile" element={<ProfilePage />} />
-                    </Route>
+                      {/* Authenticated */}
+                      <Route element={<Layout requireAuth />}>
+                        <Route path="/datamart" element={<DataMartPage />} />
+                        <Route path="/migration" element={<MigrationPage />} />
+                        <Route path="/import" element={<ImportPage />} />
+                        <Route path="/contacts" element={<ContactsPage />} />
+                        <Route path="/profile" element={<ProfilePage />} />
+                        <Route path="/prototype" element={<PrototypePage />} />
+                      </Route>
 
-                    <Route path="*" element={<Navigate to="/" replace />} />
-                  </Routes>
-                </ThemeProvider>
+                      <Route path="*" element={<Navigate to="/" replace />} />
+                    </Routes>
+                  </ThemeProvider>
+                </ToastProvider>
               </Theme>
             </DataProvider>
           </QueryClientProvider>

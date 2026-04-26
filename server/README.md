@@ -59,8 +59,6 @@ See **Q:\quickbitlabs\Plugin Framework Rules.md**
 - [Arrow Flight Spec:](https://arrow.apache.org/docs/format/Flight.html)
 
 ## Legacy & Removed:
-- [Alembic](https://alembic.sqlalchemy.org/)
-- [SQLAlchemy](https://www.sqlalchemy.org/)
 - [Pandas](https://pandas.pydata.org/docs/reference/index.html)
 
 ## Bugs & Edge Cases Found

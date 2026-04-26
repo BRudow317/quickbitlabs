@@ -555,6 +555,4 @@ PluginProtocol aka Plugin dictates the universal interface for any data system.
 - [LanceDB](https://lancedb.com/)
 
 ### Being Removed:
-- [Alembic](https://alembic.sqlalchemy.org/)
-- [SQLAlchemy](https://www.sqlalchemy.org/)
 - [Pandas API Reference:](https://pandas.pydata.org/docs/reference/index.html)

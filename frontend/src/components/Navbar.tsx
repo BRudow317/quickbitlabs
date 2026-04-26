@@ -5,7 +5,9 @@ import {
 } from '@radix-ui/themes';
 import { useLocation, useNavigate, Link } from 'react-router';
 import { useAuth } from '@/auth/AuthContext';
-import { Database, ArrowRightLeft, Upload, Users, LogOut, User } from 'lucide-react';
+import { useBreakpoint } from '@/context/BreakpointContext';
+import { useToast } from '@/context/ToastContext';
+import { Database, ArrowRightLeft, Upload, Users, LogOut, User, FlaskConical } from 'lucide-react';
 
 type AuthDialog = 'none' | 'login' | 'register';
 
@@ -14,23 +16,26 @@ const NAV_ITEMS = [
   { path: '/migration', label: 'Migration', Icon: ArrowRightLeft },
   { path: '/import',    label: 'Import',    Icon: Upload },
   { path: '/contacts',  label: 'Contacts',  Icon: Users },
+  { path: '/prototype', label: 'Prototype', Icon: FlaskConical },
 ];
 
 export function Navbar() {
   const { user, login, register, logout, isAuthenticated } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
+  const screenSize = useBreakpoint();
+  const { toast } = useToast();
+
+  const isSmallScreen = ['xsm', 'sm', 'md'].includes(screenSize);
 
   const [dialog, setDialog]         = useState<AuthDialog>('none');
-  const [authError, setAuthError]   = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
-  const openDialog = (d: AuthDialog) => { setAuthError(null); setDialog(d); };
+  const openDialog = (d: AuthDialog) => { setDialog(d); };
   const closeDialog = () => setDialog('none');
 
   const handleLogin = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    setAuthError(null);
     setSubmitting(true);
     const fd = new FormData(e.currentTarget);
     const result = await login({
@@ -38,13 +43,21 @@ export function Navbar() {
       password: fd.get('password') as string,
     });
     setSubmitting(false);
-    if (result.success) { closeDialog(); navigate('/datamart'); }
-    else setAuthError(result.error || 'Login failed');
+    if (result.success) {
+      toast.success(`Welcome back, ${fd.get('username')}!`);
+      closeDialog();
+      navigate('/datamart');
+    } else {
+      // API errors are handled by ApiErrorInterceptor
+      // We only toast here if it's a manual/frontend error
+      if (result.error && !result.error.toLowerCase().includes('axios')) {
+        toast.error(result.error);
+      }
+    }
   };
 
   const handleRegister = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    setAuthError(null);
     setSubmitting(true);
     const fd = new FormData(e.currentTarget);
     const result = await register({
@@ -53,8 +66,15 @@ export function Navbar() {
       password: fd.get('password') as string,
     });
     setSubmitting(false);
-    if (result.success) { closeDialog(); navigate('/datamart'); }
-    else setAuthError(result.error || 'Registration failed');
+    if (result.success) {
+      toast.success('Account created successfully!');
+      closeDialog();
+      navigate('/datamart');
+    } else {
+      if (result.error && !result.error.toLowerCase().includes('axios')) {
+        toast.error(result.error);
+      }
+    }
   };
 
   return (
@@ -81,35 +101,39 @@ export function Navbar() {
                     <Database size={18} color="white" />
                   </Box>
                   <Heading size="4" weight="bold" style={{ letterSpacing: '-0.5px' }}>
-                    QuickBit
+                    QBL
                   </Heading>
                 </Flex>
               </Link>
 
-              <TabNav.Root>
-                {NAV_ITEMS.map(({ path, label, Icon }) =>
-                  isAuthenticated ? (
-                    <TabNav.Link key={path} asChild active={location.pathname === path}>
-                      <Link to={path}>
+              {isSmallScreen ? (
+                <NavSelector items={NAV_ITEMS} />
+              ) : (
+                <TabNav.Root>
+                  {NAV_ITEMS.map(({ path, label, Icon }) =>
+                    isAuthenticated ? (
+                      <TabNav.Link key={path} asChild active={location.pathname === path}>
+                        <Link to={path}>
+                          <Flex align="center" gap="2">
+                            <Icon size={14} />
+                            {label}
+                          </Flex>
+                        </Link>
+                      </TabNav.Link>
+                    ) : (
+                      <TabNav.Link
+                        key={path}
+                        style={{ opacity: 0.38, cursor: 'not-allowed', pointerEvents: 'none' }}
+                      >
                         <Flex align="center" gap="2">
                           <Icon size={14} />
                           {label}
                         </Flex>
-                      </Link>
-                    </TabNav.Link>
-                  ) : (
-                    <TabNav.Link
-                      key={path}
-                      style={{ opacity: 0.38, cursor: 'not-allowed', pointerEvents: 'none' }}
-                    >
-                      <Flex align="center" gap="2">
-                        <Icon size={14} />
-                        {label}
-                      </Flex>
-                    </TabNav.Link>
-                  )
-                )}
-              </TabNav.Root>
+                      </TabNav.Link>
+                    )
+                  )}
+                </TabNav.Root>
+              )}
             </Flex>
 
             {/* Right side */}
@@ -173,7 +197,6 @@ export function Navbar() {
               <TextField.Root name="username" placeholder="Username" required autoComplete="username" />
               <TextField.Root name="password" type="password" placeholder="Password" required
                 autoComplete="current-password" />
-              {authError && <Text size="2" color="red">{authError}</Text>}
               <Flex gap="2" justify="end" mt="1">
                 <Button variant="ghost" type="button" onClick={closeDialog} style={{ cursor: 'pointer' }}>
                   Cancel
@@ -205,7 +228,6 @@ export function Navbar() {
               <TextField.Root name="email" type="email" placeholder="Email" required autoComplete="email" />
               <TextField.Root name="password" type="password" placeholder="Password (min 8 chars)" required
                 autoComplete="new-password" />
-              {authError && <Text size="2" color="red">{authError}</Text>}
               <Flex gap="2" justify="end" mt="1">
                 <Button variant="ghost" type="button" onClick={closeDialog} style={{ cursor: 'pointer' }}>
                   Cancel
