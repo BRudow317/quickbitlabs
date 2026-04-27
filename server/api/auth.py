@@ -1,11 +1,12 @@
 from __future__ import annotations
 
-from datetime import timedelta
+import secrets
+from datetime import datetime, timedelta, timezone
 from typing import Annotated
 
 import jwt
 import oracledb
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from pydantic import BaseModel
 
@@ -26,7 +27,8 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="api/auth/login")
 def _get_credentials(username: str) -> dict | None:
     """Return the USER row for *username*, or None if not found."""
     sql = """
-        SELECT EXTERNAL_ID, USERNAME, EMAIL, HASHED_PASSWORD, IS_ACTIVE
+        SELECT EXTERNAL_ID, USERNAME, EMAIL, HASHED_PASSWORD, IS_ACTIVE,
+               NVL(ROLE, 'user')
           FROM "USER"
          WHERE USERNAME = :username
     """
@@ -42,6 +44,7 @@ def _get_credentials(username: str) -> dict | None:
         "email": row[2],
         "hashed_password": row[3],
         "is_active": bool(row[4]),
+        "role": row[5] or "user",
     }
 
 
@@ -93,13 +96,55 @@ def register(user_in: UserCreate):
 
     return UserOut(username=user_in.username, email=user_in.email)
 
+
 class Token(BaseModel):
     access_token: str
+    refresh_token: str
     token_type: str
+
+
+class RefreshRequest(BaseModel):
+    refresh_token: str | None = None
+
+
+class SessionInfo(BaseModel):
+    session_id: int
+    ip_address: str | None
+    user_agent: str | None
+    issued_at: str
+    expires_at: str
+
+
+def _set_refresh_cookie(response: Response, token: str) -> None:
+    response.set_cookie(
+        key="refresh_token",
+        value=token,
+        httponly=True,
+        samesite="lax",
+        max_age=settings.refresh_token_expire_days * 86400,
+        path="/api/auth",
+    )
+
+
+def _build_access_token(username: str) -> str:
+    creds = _get_credentials(username)
+    if not creds:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+    return create_access_token(
+        data={
+            "sub": username,
+            "eid": creds["external_id"],
+            "email": creds["email"],
+            "role": creds["role"],
+        },
+        expires_delta=timedelta(minutes=settings.access_token_expire_minutes),
+    )
+
 
 @router.post("/login", response_model=Token, operation_id="login")
 def login(
     request: Request,
+    response: Response,
     form_data: Annotated[OAuth2PasswordRequestForm, Depends()],
 ):
     """
@@ -149,25 +194,35 @@ def login(
     if not creds["is_active"]:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Account is disabled")
 
-    # --- Issue token -------------------------------------------------------
-    expires_delta = timedelta(minutes=settings.access_token_expire_minutes)
+    # --- Issue tokens ------------------------------------------------------
+    access_expires = timedelta(minutes=settings.access_token_expire_minutes)
     access_token = create_access_token(
         data={
             "sub": username,
-            "eid": creds["external_id"],   # Salesforce EXTERNAL_ID - may be None
+            "eid": creds["external_id"],
             "email": creds["email"],
+            "role": creds["role"],
         },
-        expires_delta=expires_delta,
+        expires_delta=access_expires,
     )
+    refresh_token_value = secrets.token_urlsafe(32)
+    refresh_expires_at = datetime.now(timezone.utc) + timedelta(days=settings.refresh_token_expire_days)
 
     # --- Persist session and audit -----------------------------------------
-    from datetime import datetime, timezone
-    expires_at = datetime.now(timezone.utc) + expires_delta
+    access_expires_at = datetime.now(timezone.utc) + access_expires
     try:
-        session_service.create_session(
+        session_id = session_service.create_session(
             username=username,
             token=access_token,
-            expires_at=expires_at,
+            expires_at=access_expires_at,
+            ip_address=ip,
+            user_agent=ua,
+        )
+        session_service.create_refresh_token(
+            username=username,
+            token=refresh_token_value,
+            session_id=session_id,
+            expires_at=refresh_expires_at,
             ip_address=ip,
             user_agent=ua,
         )
@@ -176,7 +231,8 @@ def login(
         import logging
         logging.getLogger(__name__).exception("Failed to persist session/sign-in record for '%s'", username)
 
-    return {"access_token": access_token, "token_type": "bearer"}
+    _set_refresh_cookie(response, refresh_token_value)
+    return Token(access_token=access_token, refresh_token=refresh_token_value, token_type="bearer")
 
 
 def get_current_user(token: str = Depends(oauth2_scheme)) -> User:
@@ -197,13 +253,103 @@ def get_current_user(token: str = Depends(oauth2_scheme)) -> User:
         username=username,
         email=payload.get("email", ""),
         external_id=payload.get("eid"),
+        role=payload.get("role", "user"),
     )
+
+
+def require_admin(user: User = Depends(get_current_user)) -> User:
+    if user.role != "admin":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin access required")
+    return user
 
 
 @router.post("/logout", status_code=status.HTTP_204_NO_CONTENT, operation_id="logout")
 def logout(
-    _: Annotated[User, Depends(get_current_user)],
+    response: Response,
+    user: Annotated[User, Depends(get_current_user)],
     token: Annotated[str, Depends(oauth2_scheme)],
 ):
-    """Invalidate the current session token server-side."""
+    """Invalidate the current session and all refresh tokens for the user."""
     session_service.invalidate_session(token)
+    session_service.revoke_all_refresh_tokens(user.username)
+    response.delete_cookie("refresh_token", path="/api/auth")
+
+
+@router.post("/refresh", response_model=Token, operation_id="refresh_token")
+def refresh_token_endpoint(body: RefreshRequest, request: Request, response: Response):
+    """
+    Exchange a valid refresh token for a new access token + rotated refresh token.
+
+    The refresh token is read from the HttpOnly cookie first; the request body
+    value is used as a fallback for clients that cannot use cookies.
+    If the refresh token is expired but the request carries a valid JWT in the
+    Authorization header, the JWT is used to re-issue both tokens (allowing
+    seamless re-issuance when the refresh token expires while the JWT is still live).
+    If neither is valid, returns 401.
+    """
+    ip = request.client.host if request.client else None
+    ua = request.headers.get("user-agent")
+    refresh_expires_at = datetime.now(timezone.utc) + timedelta(days=settings.refresh_token_expire_days)
+
+    raw_refresh = request.cookies.get("refresh_token") or body.refresh_token
+
+    if raw_refresh:
+        row = session_service.validate_refresh_token(raw_refresh)
+
+        if row and row["is_active"] and row["not_expired"]:
+            username: str = row["username"]
+            new_refresh = secrets.token_urlsafe(32)
+            session_service.rotate_refresh_token(raw_refresh, username, new_refresh, refresh_expires_at, ip, ua)
+            _set_refresh_cookie(response, new_refresh)
+            return Token(
+                access_token=_build_access_token(username),
+                refresh_token=new_refresh,
+                token_type="bearer",
+            )
+
+    # Refresh token is expired or not found — require a valid JWT to re-issue.
+    auth_header = request.headers.get("authorization", "")
+    if not auth_header.startswith("Bearer "):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Refresh token expired; re-authenticate to obtain a new token.",
+        )
+
+    jwt_token = auth_header.split(" ", 1)[1]
+    try:
+        payload = jwt.decode(
+            jwt_token,
+            settings.jwt_secret.get_secret_value(),
+            algorithms=[settings.jwt_algorithm],
+        )
+        username = payload.get("sub")
+        if not username:
+            raise ValueError("missing sub claim")
+    except (jwt.PyJWTError, ValueError):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Refresh token expired and the provided access token is invalid.",
+        )
+
+    new_refresh = secrets.token_urlsafe(32)
+    session_service.create_refresh_token(username, new_refresh, None, refresh_expires_at, ip, ua)
+    _set_refresh_cookie(response, new_refresh)
+    return Token(
+        access_token=_build_access_token(username),
+        refresh_token=new_refresh,
+        token_type="bearer",
+    )
+
+
+@router.get("/sessions", response_model=list[SessionInfo], operation_id="list_sessions")
+def list_sessions(user: Annotated[User, Depends(get_current_user)]):
+    """List all active, non-expired sessions for the current user."""
+    return session_service.list_active_sessions(user.username)
+
+
+@router.delete("/sessions/{session_id}", status_code=status.HTTP_204_NO_CONTENT, operation_id="revoke_session")
+def revoke_session(session_id: int, user: Annotated[User, Depends(get_current_user)]):
+    """Revoke a specific session by ID. Only the owning user can revoke their own sessions."""
+    revoked = session_service.revoke_session_by_id(session_id, user.username)
+    if not revoked:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Session not found")

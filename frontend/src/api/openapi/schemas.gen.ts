@@ -1275,6 +1275,20 @@ export const OperatorGroup_OutputSchema = {
     title: 'OperatorGroup'
 } as const;
 
+export const RefreshRequestSchema = {
+    properties: {
+        refresh_token: {
+            type: 'string',
+            title: 'Refresh Token'
+        }
+    },
+    type: 'object',
+    required: [
+        'refresh_token'
+    ],
+    title: 'RefreshRequest'
+} as const;
+
 export const SortSchema = {
     properties: {
         column: {
@@ -1314,6 +1328,10 @@ export const TokenSchema = {
             type: 'string',
             title: 'Access Token'
         },
+        refresh_token: {
+            type: 'string',
+            title: 'Refresh Token'
+        },
         token_type: {
             type: 'string',
             title: 'Token Type'
@@ -1322,6 +1340,7 @@ export const TokenSchema = {
     type: 'object',
     required: [
         'access_token',
+        'refresh_token',
         'token_type'
     ],
     title: 'Token'

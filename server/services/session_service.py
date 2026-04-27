@@ -174,6 +174,44 @@ class SessionService:
             con.commit()
         return count
 
+    def list_active_sessions(self, username: str) -> list[dict]:
+        """Return all non-expired, active sessions for *username*, newest first."""
+        sql = """
+            SELECT USER_SESSION_ID, IP_ADDRESS, USER_AGENT, ISSUED_AT, EXPIRES_AT
+              FROM USER_SESSION
+             WHERE USERNAME = :username
+               AND IS_ACTIVE = 1
+               AND EXPIRES_AT > CURRENT_TIMESTAMP
+             ORDER BY ISSUED_AT DESC
+        """
+        with self._server_db.connect().cursor() as cur:
+            cur.execute(sql, username=username)
+            rows = cur.fetchall()
+        return [
+            {
+                "session_id": int(r[0]),
+                "ip_address": r[1],
+                "user_agent": r[2],
+                "issued_at": str(r[3]),
+                "expires_at": str(r[4]),
+            }
+            for r in rows
+        ]
+
+    def revoke_session_by_id(self, session_id: int, username: str) -> bool:
+        """Deactivate a specific session, verifying ownership via *username*."""
+        sql = """
+            UPDATE USER_SESSION
+               SET IS_ACTIVE = 0, UPDATED_DATE = CURRENT_TIMESTAMP, UPDATED_BY = 'SYSTEM'
+             WHERE USER_SESSION_ID = :sid AND USERNAME = :username AND IS_ACTIVE = 1
+        """
+        con = self._server_db.connect()
+        with con.cursor() as cur:
+            cur.execute(sql, sid=session_id, username=username)
+            updated = cur.rowcount > 0
+            con.commit()
+        return updated
+
     def is_session_active(self, token: str) -> bool:
         """Return True if the session exists, is marked active, and has not expired.
         If the session is found but has expired, opportunistically deactivates it.
@@ -358,6 +396,121 @@ class SessionService:
             row = cur.fetchone()
         count = row[0] if row else 0
         return count >= max_failures
+
+    # ------------------------------------------------------------------
+    # Refresh tokens
+    # ------------------------------------------------------------------
+
+    def create_refresh_token(
+        self,
+        username: str,
+        token: str,
+        session_id: int | None,
+        expires_at: datetime,
+        ip_address: str | None = None,
+        user_agent: str | None = None,
+    ) -> int:
+        """Persist a new refresh-token row and return the generated ID."""
+        import oracledb
+        token_hash = _hash_token(token)
+        sql = """
+            INSERT INTO USER_REFRESH_TOKEN
+                (USERNAME, TOKEN_HASH, PARENT_SESSION_ID, ISSUED_AT, EXPIRES_AT, IS_ACTIVE,
+                 IP_ADDRESS, USER_AGENT,
+                 CREATED_DATE, CREATED_BY, UPDATED_DATE, UPDATED_BY)
+            VALUES
+                (:username, :token_hash, :session_id, CURRENT_TIMESTAMP, :expires_at, 1,
+                 :ip_address, :user_agent,
+                 CURRENT_TIMESTAMP, :username, CURRENT_TIMESTAMP, :username)
+            RETURNING USER_REFRESH_TOKEN_ID INTO :token_id
+        """
+        con = self._server_db.connect()
+        with con.cursor() as cur:
+            token_id_var = cur.var(oracledb.NUMBER)
+            cur.execute(
+                sql,
+                username=username,
+                token_hash=token_hash,
+                session_id=session_id,
+                expires_at=expires_at,
+                ip_address=ip_address,
+                user_agent=user_agent,
+                token_id=token_id_var,
+            )
+            con.commit()
+        raw = token_id_var.getvalue()
+        return int(raw[0]) if raw else -1
+
+    def validate_refresh_token(self, token: str) -> dict | None:
+        """
+        Return a dict with username/is_active/not_expired, or None if the token
+        does not exist in USER_REFRESH_TOKEN.
+        """
+        token_hash = _hash_token(token)
+        sql = """
+            SELECT USERNAME, IS_ACTIVE, EXPIRES_AT > CURRENT_TIMESTAMP
+              FROM USER_REFRESH_TOKEN
+             WHERE TOKEN_HASH = :th
+        """
+        with self._server_db.connect().cursor() as cur:
+            cur.execute(sql, th=token_hash)
+            row = cur.fetchone()
+        if row is None:
+            return None
+        username, is_active, not_expired = row
+        return {
+            "username": username,
+            "is_active": bool(is_active),
+            "not_expired": bool(not_expired),
+        }
+
+    def rotate_refresh_token(
+        self,
+        old_token: str,
+        username: str,
+        new_token: str,
+        expires_at: datetime,
+        ip_address: str | None = None,
+        user_agent: str | None = None,
+    ) -> int:
+        """Invalidate *old_token* and persist *new_token*. Returns new row ID."""
+        self.revoke_refresh_token(old_token)
+        return self.create_refresh_token(username, new_token, None, expires_at, ip_address, user_agent)
+
+    def revoke_refresh_token(self, token: str) -> bool:
+        """Deactivate a single refresh token. Returns True if a row was updated."""
+        token_hash = _hash_token(token)
+        sql = """
+            UPDATE USER_REFRESH_TOKEN
+               SET IS_ACTIVE    = 0,
+                   UPDATED_DATE = CURRENT_TIMESTAMP,
+                   UPDATED_BY   = 'SYSTEM'
+             WHERE TOKEN_HASH = :th
+               AND IS_ACTIVE  = 1
+        """
+        con = self._server_db.connect()
+        with con.cursor() as cur:
+            cur.execute(sql, th=token_hash)
+            updated = cur.rowcount > 0
+            con.commit()
+        return updated
+
+    def revoke_all_refresh_tokens(self, username: str) -> int:
+        """Deactivate every active refresh token for *username*. Returns count updated."""
+        sql = """
+            UPDATE USER_REFRESH_TOKEN
+               SET IS_ACTIVE    = 0,
+                   UPDATED_DATE = CURRENT_TIMESTAMP,
+                   UPDATED_BY   = 'SYSTEM'
+             WHERE USERNAME  = :username
+               AND IS_ACTIVE = 1
+        """
+        con = self._server_db.connect()
+        with con.cursor() as cur:
+            cur.execute(sql, username=username)
+            count = cur.rowcount
+            con.commit()
+        return count
 
     def failed_attempt_count(
         self,

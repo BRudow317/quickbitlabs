@@ -2,7 +2,7 @@
 
 import { type Client, formDataBodySerializer, type Options as Options2, type TDataShape, urlSearchParamsBodySerializer } from './client';
 import { client } from './client.gen';
-import type { CreateCatalogApiCatalogInsertPutData, CreateCatalogApiCatalogInsertPutErrors, CreateCatalogApiCatalogInsertPutResponses, CreateColumnApiColumnInsertPutData, CreateColumnApiColumnInsertPutErrors, CreateColumnApiColumnInsertPutResponses, CreateDataApiDataInsertPutData, CreateDataApiDataInsertPutErrors, CreateDataApiDataInsertPutResponses, CreateEntityApiEntityInsertPutData, CreateEntityApiEntityInsertPutErrors, CreateEntityApiEntityInsertPutResponses, DeleteCatalogApiCatalogDeleteData, DeleteCatalogApiCatalogDeleteErrors, DeleteCatalogApiCatalogDeleteResponses, DeleteColumnApiColumnDeleteData, DeleteColumnApiColumnDeleteErrors, DeleteColumnApiColumnDeleteResponses, DeleteDataApiDataDeleteData, DeleteDataApiDataDeleteErrors, DeleteDataApiDataDeleteResponses, DeleteEntityApiEntityDeleteData, DeleteEntityApiEntityDeleteErrors, DeleteEntityApiEntityDeleteResponses, DeleteRegistryEntryData, DeleteRegistryEntryErrors, DeleteRegistryEntryResponses, GetCatalogApiCatalogPostData, GetCatalogApiCatalogPostErrors, GetCatalogApiCatalogPostResponses, GetColumnApiColumnPostData, GetColumnApiColumnPostErrors, GetColumnApiColumnPostResponses, GetDataApiDataPostData, GetDataApiDataPostErrors, GetDataApiDataPostResponses, GetEntityApiEntityPostData, GetEntityApiEntityPostErrors, GetEntityApiEntityPostResponses, GetRegistryEntryData, GetRegistryEntryErrors, GetRegistryEntryResponses, GetSessionData, GetSessionResponses, GetUserData, GetUserResponses, ListMigrationPluginsData, ListMigrationPluginsResponses, ListRegistryData, ListRegistryResponses, ListSystemsData, ListSystemsResponses, LoginData, LoginErrors, LoginResponses, LogoutData, LogoutResponses, RegisterData, RegisterErrors, RegisterResponses, RunMigrationData, RunMigrationErrors, RunMigrationResponses, SaveRegistryEntryData, SaveRegistryEntryErrors, SaveRegistryEntryResponses, UpdateCatalogApiCatalogPatchData, UpdateCatalogApiCatalogPatchErrors, UpdateCatalogApiCatalogPatchResponses, UpdateColumnApiColumnPatchData, UpdateColumnApiColumnPatchErrors, UpdateColumnApiColumnPatchResponses, UpdateDataApiDataPatchData, UpdateDataApiDataPatchErrors, UpdateDataApiDataPatchResponses, UpdateEntityApiEntityPatchData, UpdateEntityApiEntityPatchErrors, UpdateEntityApiEntityPatchResponses, UpdateUserData, UpdateUserErrors, UpdateUserResponses, UploadFileData, UploadFileErrors, UploadFileResponses, UpsertCatalogApiCatalogPutData, UpsertCatalogApiCatalogPutErrors, UpsertCatalogApiCatalogPutResponses, UpsertColumnApiColumnPutData, UpsertColumnApiColumnPutErrors, UpsertColumnApiColumnPutResponses, UpsertDataApiDataPutData, UpsertDataApiDataPutErrors, UpsertDataApiDataPutResponses, UpsertEntityApiEntityPutData, UpsertEntityApiEntityPutErrors, UpsertEntityApiEntityPutResponses } from './types.gen';
+import type { CreateCatalogApiCatalogInsertPutData, CreateCatalogApiCatalogInsertPutErrors, CreateCatalogApiCatalogInsertPutResponses, CreateColumnApiColumnInsertPutData, CreateColumnApiColumnInsertPutErrors, CreateColumnApiColumnInsertPutResponses, CreateDataApiDataInsertPutData, CreateDataApiDataInsertPutErrors, CreateDataApiDataInsertPutResponses, CreateEntityApiEntityInsertPutData, CreateEntityApiEntityInsertPutErrors, CreateEntityApiEntityInsertPutResponses, DeleteCatalogApiCatalogDeleteData, DeleteCatalogApiCatalogDeleteErrors, DeleteCatalogApiCatalogDeleteResponses, DeleteColumnApiColumnDeleteData, DeleteColumnApiColumnDeleteErrors, DeleteColumnApiColumnDeleteResponses, DeleteDataApiDataDeleteData, DeleteDataApiDataDeleteErrors, DeleteDataApiDataDeleteResponses, DeleteEntityApiEntityDeleteData, DeleteEntityApiEntityDeleteErrors, DeleteEntityApiEntityDeleteResponses, DeleteRegistryEntryData, DeleteRegistryEntryErrors, DeleteRegistryEntryResponses, GetCatalogApiCatalogPostData, GetCatalogApiCatalogPostErrors, GetCatalogApiCatalogPostResponses, GetColumnApiColumnPostData, GetColumnApiColumnPostErrors, GetColumnApiColumnPostResponses, GetDataApiDataPostData, GetDataApiDataPostErrors, GetDataApiDataPostResponses, GetEntityApiEntityPostData, GetEntityApiEntityPostErrors, GetEntityApiEntityPostResponses, GetRegistryEntryData, GetRegistryEntryErrors, GetRegistryEntryResponses, GetSessionData, GetSessionResponses, GetUserData, GetUserResponses, ListMigrationPluginsData, ListMigrationPluginsResponses, ListRegistryData, ListRegistryResponses, ListSystemsData, ListSystemsResponses, LoginData, LoginErrors, LoginResponses, LogoutData, LogoutResponses, RefreshTokenData, RefreshTokenErrors, RefreshTokenResponses, RegisterData, RegisterErrors, RegisterResponses, RunMigrationData, RunMigrationErrors, RunMigrationResponses, SaveRegistryEntryData, SaveRegistryEntryErrors, SaveRegistryEntryResponses, SpaFallbackFullPathGetData, SpaFallbackFullPathGetErrors, SpaFallbackFullPathGetResponses, UpdateCatalogApiCatalogPatchData, UpdateCatalogApiCatalogPatchErrors, UpdateCatalogApiCatalogPatchResponses, UpdateColumnApiColumnPatchData, UpdateColumnApiColumnPatchErrors, UpdateColumnApiColumnPatchResponses, UpdateDataApiDataPatchData, UpdateDataApiDataPatchErrors, UpdateDataApiDataPatchResponses, UpdateEntityApiEntityPatchData, UpdateEntityApiEntityPatchErrors, UpdateEntityApiEntityPatchResponses, UpdateUserData, UpdateUserErrors, UpdateUserResponses, UploadFileData, UploadFileErrors, UploadFileResponses, UpsertCatalogApiCatalogPutData, UpsertCatalogApiCatalogPutErrors, UpsertCatalogApiCatalogPutResponses, UpsertColumnApiColumnPutData, UpsertColumnApiColumnPutErrors, UpsertColumnApiColumnPutResponses, UpsertDataApiDataPutData, UpsertDataApiDataPutErrors, UpsertDataApiDataPutResponses, UpsertEntityApiEntityPutData, UpsertEntityApiEntityPutErrors, UpsertEntityApiEntityPutResponses } from './types.gen';
 
 export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends boolean = boolean> = Options2<TData, ThrowOnError> & {
     /**
@@ -58,12 +58,32 @@ export const login = <ThrowOnError extends boolean = false>(options: Options<Log
 /**
  * Logout
  *
- * Invalidate the current session token server-side.
+ * Invalidate the current session and all refresh tokens for the user.
  */
 export const logout = <ThrowOnError extends boolean = false>(options?: Options<LogoutData, ThrowOnError>) => (options?.client ?? client).post<LogoutResponses, unknown, ThrowOnError>({
     security: [{ scheme: 'bearer', type: 'http' }],
     url: '/api/auth/logout',
     ...options
+});
+
+/**
+ * Refresh Token Endpoint
+ *
+ * Exchange a valid refresh token for a new access token + rotated refresh token.
+ *
+ * If the refresh token is expired but the request carries a valid JWT in the
+ * Authorization header, the JWT is used to re-issue both tokens (allowing
+ * seamless re-issuance when the refresh token expires while the JWT is still live).
+ * If neither is valid, returns 401.
+ */
+export const refreshToken = <ThrowOnError extends boolean = false>(options: Options<RefreshTokenData, ThrowOnError>) => (options.client ?? client).post<RefreshTokenResponses, RefreshTokenErrors, ThrowOnError>({
+    responseType: 'json',
+    url: '/api/auth/refresh',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
 });
 
 /**
@@ -468,4 +488,13 @@ export const runMigration = <ThrowOnError extends boolean = false>(options: Opti
         'Content-Type': 'application/json',
         ...options.headers
     }
+});
+
+/**
+ * Spa Fallback
+ */
+export const spaFallbackFullPathGet = <ThrowOnError extends boolean = false>(options: Options<SpaFallbackFullPathGetData, ThrowOnError>) => (options.client ?? client).get<SpaFallbackFullPathGetResponses, SpaFallbackFullPathGetErrors, ThrowOnError>({
+    responseType: 'json',
+    url: '/{full_path}',
+    ...options
 });

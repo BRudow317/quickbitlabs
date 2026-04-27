@@ -609,6 +609,16 @@ export type OperatorGroupOutput = {
 };
 
 /**
+ * RefreshRequest
+ */
+export type RefreshRequest = {
+    /**
+     * Refresh Token
+     */
+    refresh_token: string;
+};
+
+/**
  * Sort
  */
 export type Sort = {
@@ -631,6 +641,10 @@ export type Token = {
      * Access Token
      */
     access_token: string;
+    /**
+     * Refresh Token
+     */
+    refresh_token: string;
     /**
      * Token Type
      */
@@ -778,6 +792,31 @@ export type LogoutResponses = {
 };
 
 export type LogoutResponse = LogoutResponses[keyof LogoutResponses];
+
+export type RefreshTokenData = {
+    body: RefreshRequest;
+    path?: never;
+    query?: never;
+    url: '/api/auth/refresh';
+};
+
+export type RefreshTokenErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type RefreshTokenError = RefreshTokenErrors[keyof RefreshTokenErrors];
+
+export type RefreshTokenResponses = {
+    /**
+     * Successful Response
+     */
+    200: Token;
+};
+
+export type RefreshTokenResponse = RefreshTokenResponses[keyof RefreshTokenResponses];
 
 export type GetUserData = {
     body?: never;
@@ -1497,3 +1536,31 @@ export type RunMigrationResponses = {
 };
 
 export type RunMigrationResponse = RunMigrationResponses[keyof RunMigrationResponses];
+
+export type SpaFallbackFullPathGetData = {
+    body?: never;
+    path: {
+        /**
+         * Full Path
+         */
+        full_path: string;
+    };
+    query?: never;
+    url: '/{full_path}';
+};
+
+export type SpaFallbackFullPathGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type SpaFallbackFullPathGetError = SpaFallbackFullPathGetErrors[keyof SpaFallbackFullPathGetErrors];
+
+export type SpaFallbackFullPathGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: unknown;
+};

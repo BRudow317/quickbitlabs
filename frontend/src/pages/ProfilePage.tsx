@@ -6,6 +6,7 @@ import {
 import { useAuth } from '@/auth/AuthContext';
 import { client } from '@/api/openapi/client.gen';
 import { CheckCircle } from 'lucide-react';
+import { ActiveSessionsSection } from '@/sections/ActiveSessionsSection';
 
 const getErrorMessage = (err: unknown): string => {
   if (
@@ -48,7 +49,7 @@ export function ProfilePage() {
   };
 
   return (
-    <Box style={{ maxWidth: 480 }}>
+    <Box style={{ maxWidth: 720 }}>
       <Flex direction="column" gap="5">
         <Heading size="5">Profile</Heading>
 
@@ -102,6 +103,9 @@ export function ProfilePage() {
             </Flex>
           </form>
         </Card>
+        <Separator size="4" />
+
+        <ActiveSessionsSection />
       </Flex>
     </Box>
   );

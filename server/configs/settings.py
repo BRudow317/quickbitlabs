@@ -70,5 +70,6 @@ class Settings(BaseSettings):
     allow_headers: list[str] = ["*"]
     login_rate_limit_window_minutes: int = 10
     login_rate_limit_max_failures: int = 10
+    refresh_token_expire_days: int = 7
 
 settings = Settings() # type: ignore[call-arg]

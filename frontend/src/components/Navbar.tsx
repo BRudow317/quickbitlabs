@@ -7,21 +7,22 @@ import { useLocation, useNavigate, Link } from 'react-router';
 import { useAuth } from '@/auth/AuthContext';
 import { useBreakpoint } from '@/context/BreakpointContext';
 import { useToast } from '@/context/ToastContext';
-import { Database, ArrowRightLeft, Upload, Users, LogOut, User, FlaskConical } from 'lucide-react';
+import { Database, ArrowRightLeft, Upload, Users, LogOut, User, FlaskConical, ShieldCheck, Rocket } from 'lucide-react';
 import { NavSelector } from '@/components/NavSelector';
 
 type AuthDialog = 'none' | 'login' | 'register';
 
 const NAV_ITEMS = [
-  { path: '/datamart',  label: 'DataMart',  Icon: Database },
-  { path: '/migration', label: 'Migration', Icon: ArrowRightLeft },
-  { path: '/import',    label: 'Import',    Icon: Upload },
-  { path: '/contacts',  label: 'Contacts',  Icon: Users },
-  { path: '/prototype', label: 'Prototype', Icon: FlaskConical },
+  { path: '/datamart',         label: 'DataMart',   Icon: Database },
+  { path: '/migration',        label: 'Migration',  Icon: ArrowRightLeft },
+  { path: '/import',           label: 'Import',     Icon: Upload },
+  { path: '/contacts',         label: 'Contacts',   Icon: Users },
+  { path: '/prototype',        label: 'Radix Lab',  Icon: FlaskConical },
+  { path: '/prototype-shadcn', label: 'Shadcn Lab', Icon: Rocket },
 ];
 
 export function Navbar() {
-  const { user, login, register, logout, isAuthenticated } = useAuth();
+  const { user, login, register, logout, isAuthenticated, isAdmin } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const screenSize = useBreakpoint();
@@ -161,6 +162,11 @@ export function Navbar() {
                     <DropdownMenu.Item onClick={() => navigate('/profile')} style={{ cursor: 'pointer' }}>
                       <User size={14} style={{ marginRight: 8 }} /> Profile
                     </DropdownMenu.Item>
+                    {isAdmin && (
+                      <DropdownMenu.Item onClick={() => navigate('/admin')} style={{ cursor: 'pointer' }}>
+                        <ShieldCheck size={14} style={{ marginRight: 8 }} /> Admin
+                      </DropdownMenu.Item>
+                    )}
                     <DropdownMenu.Separator />
                     <DropdownMenu.Item color="red" onClick={() => { logout(); navigate('/'); }}
                       style={{ cursor: 'pointer' }}>
