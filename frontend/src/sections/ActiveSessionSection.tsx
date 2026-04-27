@@ -5,7 +5,7 @@ import {
 import { createColumnHelper } from '@tanstack/react-table';
 import { Trash2, RefreshCw, ShieldAlert } from 'lucide-react';
 import { useAuth } from '@/auth/AuthContext';
-import { DataTable } from '@/components/DataTable';
+import { DataTable } from '@/components/radix/DataTable';
 import { client } from '@/api/openapi/client.gen';
 
 interface SessionRow {

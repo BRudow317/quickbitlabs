@@ -1,6 +1,6 @@
 import { Section, Flex, Heading, Text, Box, Card, Badge } from '@radix-ui/themes';
 import { useAuth } from '@/auth/AuthContext';
-import { DataTable } from '@/components/DataTable';
+import { DataTable } from '@/components/radix/DataTable';
 import { Table, Shield } from 'lucide-react';
 
 // Mock data for demonstration

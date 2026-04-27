@@ -61,6 +61,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setIsLoading(false);
     };
     initializeAuth();
+
+    // The ApiErrorInterceptor dispatches this when a token refresh fails mid-session
+    const handleSessionExpired = () => {
+      setUser(null);
+      setRole('user');
+    };
+    window.addEventListener('auth:session-expired', handleSessionExpired);
+    return () => window.removeEventListener('auth:session-expired', handleSessionExpired);
   }, []);
 
   const login = async (credentials: LoginData['body']) => {

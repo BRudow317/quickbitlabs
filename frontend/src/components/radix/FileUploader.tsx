@@ -3,7 +3,7 @@ import {
   Flex, Heading, Text, Card, Button, Spinner, Box 
 } from '@radix-ui/themes';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { FileDropzone } from '@/components/FileDropzone';
+import { FileDropzone } from '@/components/radix/FileDropzone';
 import { uploadFile } from '@/api/openapi';
 import type { CatalogOutput } from '@/api/openapi';
 import { useToast } from '@/context/ToastContext';

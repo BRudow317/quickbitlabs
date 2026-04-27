@@ -1,6 +1,6 @@
 import { Box, Container } from '@radix-ui/themes';
 import { Outlet } from 'react-router';
-import { Navbar } from '@/components/Navbar';
+import { Navbar } from '@/components/radix/Navbar';
 import type { LayoutBaseProps } from './SmallLayout';
 
 /**

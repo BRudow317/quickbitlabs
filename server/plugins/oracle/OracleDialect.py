@@ -8,6 +8,16 @@ from server.plugins.PluginModels import (
 )
 
 
+def _q(identifier: str) -> str:
+    """Double-quote each part of a possibly-dotted Oracle identifier.
+
+    Escapes Oracle reserved words (USER, DATE, LEVEL, etc.) that would
+    otherwise be interpreted as keywords rather than column/table names.
+    Handles schema.table and table.column patterns correctly.
+    """
+    return ".".join(f'"{part}"' for part in identifier.split("."))
+
+
 # ---------------------------------------------------------------------------
 # Entity resolution
 # ---------------------------------------------------------------------------
@@ -135,6 +145,7 @@ def _parse_operation(op: Operation, binds: dict[str, Any]) -> str:
     col = op.independent.name
     operator = op.operator
     dependent = op.dependent
+    sql_col = _q(col)
 
     if operator == "=":
         raise ValueError(
@@ -144,17 +155,17 @@ def _parse_operation(op: Operation, binds: dict[str, Any]) -> str:
         )
 
     if operator == "IS NULL":
-        return f"{col} IS NULL"
+        return f"{sql_col} IS NULL"
     if operator == "IS NOT NULL":
-        return f"{col} IS NOT NULL"
+        return f"{sql_col} IS NOT NULL"
 
     sql_op = "=" if operator == "==" else operator
 
     if isinstance(dependent, pa.Field):
-        return f"{col} {sql_op} :{getattr(dependent, 'name')}"
+        return f"{sql_col} {sql_op} :{getattr(dependent, 'name')}"
 
     if isinstance(dependent, Column):
-        return f"{col} {sql_op} {dependent.qualified_name}"
+        return f"{sql_col} {sql_op} {_q(dependent.qualified_name)}"
 
     if sql_op in ("IN", "NOT IN"):
         if not isinstance(dependent, list) or not dependent:
@@ -164,7 +175,7 @@ def _parse_operation(op: Operation, binds: dict[str, Any]) -> str:
             name = _bind_name(col, binds)
             placeholders.append(f":{name}")
             binds[name] = val
-        return f"{col} {sql_op} ({', '.join(placeholders)})"
+        return f"{sql_col} {sql_op} ({', '.join(placeholders)})"
 
     if sql_op in ("BETWEEN", "NOT BETWEEN"):
         if not isinstance(dependent, list) or len(dependent) != 2:
@@ -173,11 +184,11 @@ def _parse_operation(op: Operation, binds: dict[str, Any]) -> str:
         hi_name = _bind_name(f"{col}_hi", binds)
         binds[lo_name] = dependent[0]
         binds[hi_name] = dependent[1]
-        return f"{col} {sql_op} :{lo_name} AND :{hi_name}"
+        return f"{sql_col} {sql_op} :{lo_name} AND :{hi_name}"
 
     name = _bind_name(col, binds)
     binds[name] = dependent
-    return f"{col} {sql_op} :{name}"
+    return f"{sql_col} {sql_op} :{name}"
 
 
 def _parse_operator_group(group: OperatorGroup, binds: dict[str, Any]) -> str:
@@ -249,13 +260,13 @@ def build_select(catalog: Catalog) -> tuple[str, dict[str, Any]]:
     join_parts: list[str] = []
     for j in catalog.joins:
         join_parts.append(
-            f"{j.join_type} JOIN {j.right_entity.qualified_name} "
-            f"ON {j.left_column.qualified_name} = {j.right_column.qualified_name}"
+            f"{j.join_type} JOIN {_q(j.right_entity.qualified_name)} "
+            f"ON {_q(j.left_column.qualified_name)} = {_q(j.right_column.qualified_name)}"
         )
     join_clause = (" " + " ".join(join_parts)) if join_parts else ""
 
     # Column list
-    col_names = [c.qualified_name for e in catalog.entities for c in e.columns]
+    col_names = [_q(c.qualified_name) for e in catalog.entities for c in e.columns]
     cols_str = ", ".join(col_names) if col_names else "*"
 
     # WHERE
@@ -269,7 +280,7 @@ def build_select(catalog: Catalog) -> tuple[str, dict[str, Any]]:
             nulls = " NULLS FIRST"
         elif s.nulls_first is False:
             nulls = " NULLS LAST"
-        sort_parts.append(f"{s.column.qualified_name} {s.direction}{nulls}")
+        sort_parts.append(f"{_q(s.column.qualified_name)} {s.direction}{nulls}")
     sort_clause = (" ORDER BY " + ", ".join(sort_parts)) if sort_parts else ""
 
     # LIMIT / OFFSET (Oracle syntax)
@@ -283,7 +294,7 @@ def build_select(catalog: Catalog) -> tuple[str, dict[str, Any]]:
 
     sql = (
         f"SELECT {cols_str} "
-        f"FROM {root.qualified_name}"
+        f"FROM {_q(root.qualified_name)}"
         f"{join_clause}"
         f"{where_clause}"
         f"{sort_clause}"
@@ -312,25 +323,25 @@ def build_insert_dml(catalog: Catalog, entity: Entity) -> tuple[str, dict[str, A
         for op in assignments:
             col = op.independent.name
             dep = op.dependent
-            col_parts.append(col)
+            col_parts.append(_q(col))
             if isinstance(dep, pa.Field):
                 val_parts.append(f":{getattr(dep, 'name')}")
             elif isinstance(dep, Column):
-                val_parts.append(dep.qualified_name)
+                val_parts.append(_q(dep.qualified_name))
             else:
                 name = _bind_name(col, binds)
                 binds[name] = dep
                 val_parts.append(f":{name}")
         sql = (
-            f"INSERT INTO {entity.qualified_name} "
+            f"INSERT INTO {_q(entity.qualified_name)} "
             f"({', '.join(col_parts)}) VALUES ({', '.join(val_parts)})"
         )
         return sql, binds
 
     cols = [c.name for c in entity.columns]
     sql = (
-        f"INSERT INTO {entity.qualified_name} "
-        f"({', '.join(cols)}) VALUES ({', '.join(f':{c}' for c in cols)})"
+        f"INSERT INTO {_q(entity.qualified_name)} "
+        f"({', '.join(_q(c) for c in cols)}) VALUES ({', '.join(f':{c}' for c in cols)})"
     )
     return sql, {}
 
@@ -370,21 +381,21 @@ def build_update_dml(catalog: Catalog, entity: Entity) -> tuple[str, dict[str, A
             col = op.independent.name
             dep = op.dependent
             if isinstance(dep, pa.Field):
-                set_parts.append(f"{col} = :{getattr(dep, 'name')}")
+                set_parts.append(f"{_q(col)} = :{getattr(dep, 'name')}")
             elif isinstance(dep, Column):
-                set_parts.append(f"{col} = {dep.qualified_name}")
+                set_parts.append(f"{_q(col)} = {_q(dep.qualified_name)}")
             else:
                 # Covers None (→ NULL via bind) and any static scalar
                 name = _bind_name(col, set_binds)
                 set_binds[name] = dep
-                set_parts.append(f"{col} = :{name}")
+                set_parts.append(f"{_q(col)} = :{name}")
         all_binds = {**where_binds, **set_binds}
         set_str = ", ".join(set_parts)
     else:
-        set_str = ", ".join(f"{c.name} = :{c.name}" for c in entity.columns)
+        set_str = ", ".join(f"{_q(c.name)} = :{c.name}" for c in entity.columns)
         all_binds = where_binds
 
-    return f"UPDATE {entity.qualified_name} SET {set_str}{where_clause}", all_binds
+    return f"UPDATE {_q(entity.qualified_name)} SET {set_str}{where_clause}", all_binds
 
 
 # ---------------------------------------------------------------------------
@@ -408,21 +419,23 @@ def _build_merge_operation(
     operator = op.operator
     dependent = op.dependent
     sql_op = "=" if operator == "==" else operator
+    qcol = _q(col)
 
     if operator == "IS NULL":
-        return f"tgt.{col} IS NULL", col
+        return f"tgt.{qcol} IS NULL", col
     if operator == "IS NOT NULL":
-        return f"tgt.{col} IS NOT NULL", col
+        return f"tgt.{qcol} IS NOT NULL", col
 
     if isinstance(dependent, pa.Field):
-        return f"tgt.{col} {sql_op} src.{getattr(dependent, 'name')}", col
+        dep_name = getattr(dependent, 'name')
+        return f"tgt.{qcol} {sql_op} src.{_q(dep_name)}", col
 
     if isinstance(dependent, Column):
-        return f"tgt.{col} {sql_op} src.{dependent.name}", col
+        return f"tgt.{qcol} {sql_op} src.{_q(dependent.name)}", col
 
     name = _bind_name(col, binds)
     binds[name] = dependent
-    return f"tgt.{col} {sql_op} :{name}", col
+    return f"tgt.{qcol} {sql_op} :{name}", col
 
 
 def _build_merge_group(
@@ -504,18 +517,18 @@ def build_merge_dml(catalog: Catalog, entity: Entity) -> tuple[str, dict[str, An
     on_sql, binds, on_col_names = _build_merge_on(catalog.operator_groups)
 
     non_match = [c for c in entity.columns if c.name not in on_col_names]
-    bind_selects = ", ".join(f":{c.name} AS {c.name}" for c in entity.columns)
-    insert_cols = ", ".join(c.name for c in entity.columns)
-    src_vals = ", ".join(f"src.{c.name}" for c in entity.columns)
+    bind_selects = ", ".join(f":{c.name} AS {_q(c.name)}" for c in entity.columns)
+    insert_cols = ", ".join(_q(c.name) for c in entity.columns)
+    src_vals = ", ".join(f"src.{_q(c.name)}" for c in entity.columns)
 
     matched_part = (
         "WHEN MATCHED THEN UPDATE SET "
-        + ", ".join(f"tgt.{c.name} = src.{c.name}" for c in non_match)
+        + ", ".join(f"tgt.{_q(c.name)} = src.{_q(c.name)}" for c in non_match)
         if non_match else ""
     )
 
     sql = (
-        f"MERGE INTO {entity.qualified_name} tgt "
+        f"MERGE INTO {_q(entity.qualified_name)} tgt "
         f"USING (SELECT {bind_selects} FROM DUAL) src "
         f"ON ({on_sql}) "
         + (f"{matched_part} " if matched_part else "")
@@ -539,13 +552,13 @@ def build_delete_dml(catalog: Catalog, entity: Entity) -> tuple[str, dict[str, A
     """
     where_clause, binds = _build_where(catalog.operator_groups)
     if where_clause:
-        return f"DELETE FROM {entity.qualified_name}{where_clause}", binds
+        return f"DELETE FROM {_q(entity.qualified_name)}{where_clause}", binds
 
     if entity.columns:
-        predicates = " AND ".join(f"{c.name} = :{c.name}" for c in entity.columns)
-        return f"DELETE FROM {entity.qualified_name} WHERE {predicates}", {}
+        predicates = " AND ".join(f"{_q(c.name)} = :{c.name}" for c in entity.columns)
+        return f"DELETE FROM {_q(entity.qualified_name)} WHERE {predicates}", {}
 
-    return f"DELETE FROM {entity.qualified_name}", {}
+    return f"DELETE FROM {_q(entity.qualified_name)}", {}
 
 
 # ---------------------------------------------------------------------------
@@ -572,43 +585,44 @@ def build_rebuild_select(entity: Entity, existing_names: set[str]) -> str:
         col_exists = col.name.upper() in existing_names
         atype = col.arrow_type_id or ""
 
+        qname = _q(col.name)
         if col_exists:
             if is_lob or is_temporal:
                 # Oracle handles LOB and temporal internal moves without CAST
-                parts.append(f"{col.name} AS {col.name}")
+                parts.append(f"{qname} AS {qname}")
             elif atype == "bool":
                 # Salesforce string booleans → Oracle NUMBER(1,0)
                 expr = (
-                    f"CASE WHEN {col.name} IN ('true', '1', 'Y') THEN 1 "
-                    f"WHEN {col.name} IN ('false', '0', 'N') THEN 0 "
+                    f"CASE WHEN {qname} IN ('true', '1', 'Y') THEN 1 "
+                    f"WHEN {qname} IN ('false', '0', 'N') THEN 0 "
                     f"ELSE NULL END"
                 )
-                parts.append(f"CAST({expr} AS {ddl_type}) AS {col.name}")
+                parts.append(f"CAST({expr} AS {ddl_type}) AS {qname}")
             else:
-                parts.append(f"CAST({col.name} AS {ddl_type}) AS {col.name}")
+                parts.append(f"CAST({qname} AS {ddl_type}) AS {qname}")
         else:
             # New column — provide a type-correct default
             if is_lob:
                 if col.default_value is not None:
-                    parts.append(f"TO_CLOB('{col.default_value}') AS {col.name}")
+                    parts.append(f"TO_CLOB('{col.default_value}') AS {qname}")
                 elif not col.is_nullable:
-                    parts.append(f"EMPTY_CLOB() AS {col.name}")
+                    parts.append(f"EMPTY_CLOB() AS {qname}")
                 else:
-                    parts.append(f"NULL AS {col.name}")
+                    parts.append(f"NULL AS {qname}")
 
             elif is_temporal:
                 if col.default_value is not None:
                     parts.append(
                         f"TO_TIMESTAMP('{col.default_value}', "
-                        f"'YYYY-MM-DD HH24:MI:SS') AS {col.name}"
+                        f"'YYYY-MM-DD HH24:MI:SS') AS {qname}"
                     )
                 elif not col.is_nullable:
                     parts.append(
                         f"TO_TIMESTAMP('1970-01-01 00:00:00', "
-                        f"'YYYY-MM-DD HH24:MI:SS') AS {col.name}"
+                        f"'YYYY-MM-DD HH24:MI:SS') AS {qname}"
                     )
                 else:
-                    parts.append(f"CAST(NULL AS {ddl_type}) AS {col.name}")
+                    parts.append(f"CAST(NULL AS {ddl_type}) AS {qname}")
 
             else:
                 if col.default_value is not None:
@@ -617,7 +631,7 @@ def build_rebuild_select(entity: Entity, existing_names: set[str]) -> str:
                         if isinstance(col.default_value, str)
                         else str(col.default_value)
                     )
-                    parts.append(f"CAST({val} AS {ddl_type}) AS {col.name}")
+                    parts.append(f"CAST({val} AS {ddl_type}) AS {qname}")
                 elif not col.is_nullable:
                     if atype in ("string", "utf8", "large_string"):
                         dummy = "' '"
@@ -628,8 +642,8 @@ def build_rebuild_select(entity: Entity, existing_names: set[str]) -> str:
                         dummy = "0"
                     else:
                         dummy = "NULL"
-                    parts.append(f"CAST({dummy} AS {ddl_type}) AS {col.name}")
+                    parts.append(f"CAST({dummy} AS {ddl_type}) AS {qname}")
                 else:
-                    parts.append(f"CAST(NULL AS {ddl_type}) AS {col.name}")
+                    parts.append(f"CAST(NULL AS {ddl_type}) AS {qname}")
 
     return ", ".join(parts)

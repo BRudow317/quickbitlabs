@@ -7,15 +7,13 @@ import { useLocation, useNavigate, Link } from 'react-router';
 import { useAuth } from '@/auth/AuthContext';
 import { useBreakpoint } from '@/context/BreakpointContext';
 import { useToast } from '@/context/ToastContext';
-import { Database, ArrowRightLeft, Upload, Users, LogOut, User, FlaskConical, ShieldCheck, Rocket } from 'lucide-react';
-import { NavSelector } from '@/components/NavSelector';
+import { Database, ArrowRightLeft, Users, LogOut, User, FlaskConical, ShieldCheck, Rocket } from 'lucide-react';
+import { NavSelector } from '@/components/radix/NavSelector';
 
 type AuthDialog = 'none' | 'login' | 'register';
 
 const NAV_ITEMS = [
-  { path: '/datamart',         label: 'DataMart',   Icon: Database },
   { path: '/migration',        label: 'Migration',  Icon: ArrowRightLeft },
-  { path: '/import',           label: 'Import',     Icon: Upload },
   { path: '/contacts',         label: 'Contacts',   Icon: Users },
   { path: '/prototype',        label: 'Radix Lab',  Icon: FlaskConical },
   { path: '/prototype-shadcn', label: 'Shadcn Lab', Icon: Rocket },
@@ -48,7 +46,7 @@ export function Navbar() {
     if (result.success) {
       toast.success(`Welcome back, ${fd.get('username')}!`);
       closeDialog();
-      navigate('/datamart');
+      navigate('/migration');
     } else {
       // API errors are handled by ApiErrorInterceptor
       // We only toast here if it's a manual/frontend error
@@ -71,7 +69,7 @@ export function Navbar() {
     if (result.success) {
       toast.success('Account created successfully!');
       closeDialog();
-      navigate('/datamart');
+      navigate('/migration');
     } else {
       if (result.error && !result.error.toLowerCase().includes('axios')) {
         toast.error(result.error);

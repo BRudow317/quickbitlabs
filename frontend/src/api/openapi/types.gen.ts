@@ -615,7 +615,33 @@ export type RefreshRequest = {
     /**
      * Refresh Token
      */
-    refresh_token: string;
+    refresh_token?: string | null;
+};
+
+/**
+ * SessionInfo
+ */
+export type SessionInfo = {
+    /**
+     * Session Id
+     */
+    session_id: number;
+    /**
+     * Ip Address
+     */
+    ip_address: string | null;
+    /**
+     * User Agent
+     */
+    user_agent: string | null;
+    /**
+     * Issued At
+     */
+    issued_at: string;
+    /**
+     * Expires At
+     */
+    expires_at: string;
 };
 
 /**
@@ -687,6 +713,10 @@ export type UserOut = {
      * External Id
      */
     external_id?: string | null;
+    /**
+     * Role
+     */
+    role?: string;
 };
 
 /**
@@ -817,6 +847,54 @@ export type RefreshTokenResponses = {
 };
 
 export type RefreshTokenResponse = RefreshTokenResponses[keyof RefreshTokenResponses];
+
+export type ListSessionsData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/auth/sessions';
+};
+
+export type ListSessionsResponses = {
+    /**
+     * Response List Sessions
+     *
+     * Successful Response
+     */
+    200: Array<SessionInfo>;
+};
+
+export type ListSessionsResponse = ListSessionsResponses[keyof ListSessionsResponses];
+
+export type RevokeSessionData = {
+    body?: never;
+    path: {
+        /**
+         * Session Id
+         */
+        session_id: number;
+    };
+    query?: never;
+    url: '/api/auth/sessions/{session_id}';
+};
+
+export type RevokeSessionErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type RevokeSessionError = RevokeSessionErrors[keyof RevokeSessionErrors];
+
+export type RevokeSessionResponses = {
+    /**
+     * Successful Response
+     */
+    204: void;
+};
+
+export type RevokeSessionResponse = RevokeSessionResponses[keyof RevokeSessionResponses];
 
 export type GetUserData = {
     body?: never;

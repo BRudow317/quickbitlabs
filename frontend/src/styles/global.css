@@ -2,6 +2,19 @@
   box-sizing: border-box;
 }
 
+body,
+html {
+  isolation: isolate;
+  margin: 0;
+  padding: 0;
+  min-height: 100dvh;
+  width: 100%;
+}
+#root {
+  min-height: 100dvh;
+  width: 100%;
+}
+
 /* Ensure pointer cursor on all interactive elements */
 button, [role="button"], [role="tab"], [role="menuitem"],
 .rt-Button, .rt-TabNavLink, .rt-DropdownMenuItem {
@@ -9,37 +22,18 @@ button, [role="button"], [role="tab"], [role="menuitem"],
 }
 
 /* Ghost button hover */
-.rt-Button[data-variant="ghost"]:hover:not(:disabled) {
+/* .rt-Button[data-variant="ghost"]:hover:not(:disabled) {
   background-color: var(--gray-a3);
-}
+} */
 
 /* Surface tab nav link hover */
-.rt-TabNavLink:not([aria-disabled]):hover {
+/* .rt-TabNavLink:not([aria-disabled]):hover {
   background-color: var(--gray-a2);
-}
+} */
 
 /* Card hover for clickable cards */
-.rt-Card[data-clickable]:hover {
+/* .rt-Card[data-clickable]:hover {
   box-shadow: var(--shadow-3);
   transform: translateY(-1px);
   transition: box-shadow 0.15s ease, transform 0.15s ease;
-}
-
-body,
-html {
-  isolation: isolate;
-  margin: 0;
-  padding: 0;
-  /* height: 100dvh; */
-  min-height: 100dvh;
-  width: 100%;
-  /* width: 100dvw;
-  min-width: 100dvw; */
-}
-#root {
-  /* height: 100dvh; */
-  min-height: 100dvh;
-  width: 100%;
-  /* width: 100dvw;
-  min-width: 100dvw; */
-}
+} */

@@ -218,7 +218,8 @@ class SessionService:
         """
         token_hash = _hash_token(token)
         sql = """
-            SELECT IS_ACTIVE, EXPIRES_AT > CURRENT_TIMESTAMP
+            SELECT IS_ACTIVE,
+                   CASE WHEN EXPIRES_AT > CURRENT_TIMESTAMP THEN 1 ELSE 0 END
               FROM USER_SESSION
              WHERE TOKEN_HASH = :th
         """
@@ -448,7 +449,8 @@ class SessionService:
         """
         token_hash = _hash_token(token)
         sql = """
-            SELECT USERNAME, IS_ACTIVE, EXPIRES_AT > CURRENT_TIMESTAMP
+            SELECT USERNAME, IS_ACTIVE,
+                   CASE WHEN EXPIRES_AT > CURRENT_TIMESTAMP THEN 1 ELSE 0 END
               FROM USER_REFRESH_TOKEN
              WHERE TOKEN_HASH = :th
         """

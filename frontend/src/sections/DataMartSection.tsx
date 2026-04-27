@@ -12,9 +12,9 @@ import { getData, getSession, type Catalog, type Entity, type QueryResult } from
 import { useToast } from '@/context/ToastContext';
 import { useData } from '@/context/DataContext';
 import { useBreakpoint } from '@/context/BreakpointContext';
-import { EntityBrowser } from '@/components/EntityBrowser';
-import { QueryBuilder } from '@/components/QueryBuilder';
-import { DataTable } from '@/components/DataTable';
+import { EntityBrowser } from '@/components/radix/EntityBrowser';
+import { QueryBuilder } from '@/components/radix/QueryBuilder';
+import { DataTable } from '@/components/radix/DataTable';
 
 export function DataMartSection() {
   const { 

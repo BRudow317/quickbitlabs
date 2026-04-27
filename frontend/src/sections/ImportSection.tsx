@@ -1,7 +1,7 @@
 import { Section, Flex, Heading, Text, Box, Card } from '@radix-ui/themes';
 import { useAuth } from '@/auth/AuthContext';
-import { FileUploader } from '@/components/FileUploader';
-import { RegistryList } from '@/components/RegistryList';
+import { FileUploader } from '@/components/radix/FileUploader';
+import { RegistryList } from '@/components/radix/RegistryList';
 import { UploadCloud, Shield } from 'lucide-react';
 
 export function ImportSection() {

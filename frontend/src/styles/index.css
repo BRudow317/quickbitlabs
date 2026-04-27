@@ -2,6 +2,7 @@
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
 @import "@fontsource-variable/geist";
+@import "./ColorTokens.css";
 
 @custom-variant dark (&:is(.dark *));
 
@@ -115,6 +116,56 @@
     --sidebar-accent-foreground: oklch(0.985 0 0);
     --sidebar-border: oklch(1 0 0 / 10%);
     --sidebar-ring: oklch(0.556 0 0);
+}
+
+.qbl-theme {
+      /* Cloud Voyages Theme Colors */
+    --cv-deep-blue: #041221;
+    --cv-dark-blue: #062438;
+    --cv-deep-azure: #143f56;
+    --cv-dark-azure: #2a5d75;
+    --cv-azure: #1a72a2;
+    --cv-light-azure: #4eacc8;
+    --cv-sky: #32b8d8;
+    --cv-dark-sky: #9acce0;
+    --cv-dark-cloud: #4a7084;
+    --cv-grey-cloud: #6195ad;
+    --cv-storm-cloud: #59889e;
+    --cv-cloud: #d7f1f6;
+
+
+    --background: var(--cv-deep-blue);
+    --foreground: var(--cv-cloud);
+    --card: var(--cv-dark-blue);
+    --card-foreground: var(--cv-cloud);
+    --popover: var(--cv-dark-blue);
+    --popover-foreground: var(--cv-cloud);
+    --primary: var(--cv-cloud);
+    --primary-foreground: var(--cv-deep-blue);
+    --secondary: var(--cv-dark-azure);
+    --secondary-foreground: var(--cv-cloud);
+    --muted: var(--cv-grey-cloud);
+    --muted-foreground: var(--cv-dark-cloud);
+    --accent: var(--cv-light-azure);
+    --accent-foreground: var(--cv-dark-blue);
+    --destructive: var(--cv-dark-sky);
+    --border: var(--cv-dark-azure);
+    --input: var(--cv-dark-azure);
+    --ring: var(--cv-dark-azure);
+    --chart-1: var(--cv-light-azure);
+    --chart-2: var(--cv-dark-azure);
+    --chart-3: var(--cv-dark-sky);
+    --chart-4: var(--cv-dark-cloud);
+    --chart-5: var(--cv-grey-cloud);
+    --radius: 0.625rem;
+    --sidebar: var(--cv-dark-blue);
+    --sidebar-foreground: var(--cv-cloud);
+    --sidebar-primary: var(--cv-dark-azure);
+    --sidebar-primary-foreground: var(--cv-cloud);
+    --sidebar-accent: var(--cv-light-azure);
+    --sidebar-accent-foreground: var(--cv-dark-blue);
+    --sidebar-border: var(--cv-dark-azure);
+    --sidebar-ring: var(--cv-dark-azure);
 }
 
 @layer base {

@@ -3,7 +3,7 @@ import { client } from '@/api/openapi/client.gen';
 import { useToast } from '@/context/ToastContext';
 import axios, { type InternalAxiosRequestConfig } from 'axios';
 
-// Shared refresh promise — ensures concurrent 401s reuse the same refresh call
+// Shared refresh promise — concurrent 401s reuse the same refresh call
 let refreshPromise: Promise<string> | null = null;
 
 async function attemptRefresh(): Promise<string> {
@@ -38,9 +38,11 @@ export function ApiErrorInterceptor() {
 
         const status = error.response?.status;
         const originalConfig = error.config as InternalAxiosRequestConfig & { _retry?: boolean };
+        const isRefreshUrl = originalConfig.url?.includes('/api/auth/refresh');
 
-        // --- 401: attempt silent token refresh then retry ---
-        if (status === 401 && !originalConfig._retry) {
+        // --- 401: attempt silent refresh then retry ---
+        // Never retry the refresh endpoint itself to avoid infinite loops.
+        if (status === 401 && !originalConfig._retry && !isRefreshUrl) {
           originalConfig._retry = true;
           try {
             const newToken = await attemptRefresh();
@@ -49,9 +51,10 @@ export function ApiErrorInterceptor() {
             }
             return client.instance(originalConfig);
           } catch {
+            // Refresh failed — clear token and signal the app to log out
             localStorage.removeItem('access_token');
             delete client.instance.defaults.headers.common.Authorization;
-            window.location.href = '/';
+            window.dispatchEvent(new CustomEvent('auth:session-expired'));
             return Promise.reject(error);
           }
         }

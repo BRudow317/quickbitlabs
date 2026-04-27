@@ -1,0 +1,125 @@
+.qbl-globe-root {
+  --qbl-globe-size: 220px;
+  --qbl-globe-bg: transparent;
+  --qbl-globe-color: #2a2820;
+  --qbl-globe-grid: #f4f3ef;
+  --qbl-globe-orbit: #d9d6cb;
+  --qbl-globe-ring: #2a2820;
+  --qbl-glow-color: rgba(42, 40, 32, 0.18);
+  --qbl-rotate-duration: 16s;
+}
+
+.qbl-globe-stage {
+  position: relative;
+  width: var(--qbl-globe-size);
+  height: var(--qbl-globe-size);
+  display: grid;
+  place-items: center;
+  background: var(--qbl-globe-bg);
+}
+
+.qbl-globe-glow {
+  position: absolute;
+  width: 74%;
+  height: 74%;
+  border-radius: 999px;
+  background: radial-gradient(circle at 50% 50%, var(--qbl-glow-color) 0%, transparent 72%);
+  filter: blur(12px);
+}
+
+.qbl-globe-svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.qbl-globe-core {
+  fill: var(--qbl-globe-color);
+  transform-origin: 50% 50%;
+}
+
+.qbl-globe-ring {
+  stroke: var(--qbl-globe-ring);
+}
+
+.qbl-globe-grid {
+  stroke: var(--qbl-globe-grid);
+}
+
+.qbl-globe-orbit {
+  stroke: var(--qbl-globe-orbit);
+  opacity: 0.65;
+}
+
+.qbl-globe-orbit.orbit-2 {
+  opacity: 0.45;
+}
+
+.qbl-globe-orbit.orbit-3 {
+  opacity: 0.3;
+}
+
+.qbl-globe-spin .qbl-globe-rotor {
+  transform-origin: 50% 50%;
+  animation: qbl-globe-rotate var(--qbl-rotate-duration) linear infinite;
+}
+
+.qbl-globe-pulse .qbl-globe-core {
+  animation: qbl-globe-pulse 3s ease-in-out infinite;
+}
+
+.qbl-globe-shimmer .orbit-1 {
+  animation: qbl-orbit-glow 2.6s ease-in-out infinite;
+}
+
+.qbl-globe-shimmer .orbit-2 {
+  animation: qbl-orbit-glow 2.6s ease-in-out infinite 0.3s;
+}
+
+.qbl-globe-shimmer .orbit-3 {
+  animation: qbl-orbit-glow 2.6s ease-in-out infinite 0.6s;
+}
+
+.qbl-globe-status {
+  color: var(--gray-11);
+  letter-spacing: 0.02em;
+}
+
+@keyframes qbl-globe-rotate {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes qbl-globe-pulse {
+  0%,
+  100% {
+    transform: scale(1);
+    filter: brightness(1);
+  }
+  50% {
+    transform: scale(1.02);
+    filter: brightness(1.08);
+  }
+}
+
+@keyframes qbl-orbit-glow {
+  0%,
+  100% {
+    opacity: 0.28;
+  }
+  50% {
+    opacity: 0.78;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .qbl-globe-spin .qbl-globe-rotor,
+  .qbl-globe-pulse .qbl-globe-core,
+  .qbl-globe-shimmer .qbl-globe-orbit {
+    animation: none;
+  }
+}

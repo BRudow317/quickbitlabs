@@ -1278,15 +1278,67 @@ export const OperatorGroup_OutputSchema = {
 export const RefreshRequestSchema = {
     properties: {
         refresh_token: {
-            type: 'string',
+            anyOf: [
+                {
+                    type: 'string'
+                },
+                {
+                    type: 'null'
+                }
+            ],
             title: 'Refresh Token'
         }
     },
     type: 'object',
-    required: [
-        'refresh_token'
-    ],
     title: 'RefreshRequest'
+} as const;
+
+export const SessionInfoSchema = {
+    properties: {
+        session_id: {
+            type: 'integer',
+            title: 'Session Id'
+        },
+        ip_address: {
+            anyOf: [
+                {
+                    type: 'string'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Ip Address'
+        },
+        user_agent: {
+            anyOf: [
+                {
+                    type: 'string'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'User Agent'
+        },
+        issued_at: {
+            type: 'string',
+            title: 'Issued At'
+        },
+        expires_at: {
+            type: 'string',
+            title: 'Expires At'
+        }
+    },
+    type: 'object',
+    required: [
+        'session_id',
+        'ip_address',
+        'user_agent',
+        'issued_at',
+        'expires_at'
+    ],
+    title: 'SessionInfo'
 } as const;
 
 export const SortSchema = {
@@ -1392,6 +1444,11 @@ export const UserOutSchema = {
                 }
             ],
             title: 'External Id'
+        },
+        role: {
+            type: 'string',
+            title: 'Role',
+            default: 'user'
         }
     },
     type: 'object',
