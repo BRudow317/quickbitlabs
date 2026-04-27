@@ -6,7 +6,8 @@ import {
 import { useAuth } from '@/auth/AuthContext';
 import { client } from '@/api/openapi/client.gen';
 import { CheckCircle } from 'lucide-react';
-import { ActiveSessionsSection } from '@/sections/ActiveSessionsSection';
+import { ActiveSessionsSection } from '@/sections/ActiveSessionSection';
+import { ShadcnThemeSection } from '@/sections/ShadcnThemeSection';
 
 const getErrorMessage = (err: unknown): string => {
   if (
@@ -103,6 +104,9 @@ export function ProfilePage() {
             </Flex>
           </form>
         </Card>
+
+        <ShadcnThemeSection />
+
         <Separator size="4" />
 
         <ActiveSessionsSection />

@@ -6,10 +6,11 @@ export { ThemeProvider, useTheme };
 export type ThemeValue = {
   theme: string;
   toggleTheme: () => void;
+  setTheme: (theme: string) => void;
 };
 
 const ThemeContext = createContext<ThemeValue | undefined>(undefined);
-const THEMES = ["my-theme", "dark", "light", "git"] as const;
+const THEMES = ["qbl-theme", "dark", "light", "my-theme"] as const;
 
 type ThemeDomSyncProps = {
   theme: string;
@@ -17,7 +18,15 @@ type ThemeDomSyncProps = {
 
 function ThemeDomSync({ theme }: ThemeDomSyncProps) {
   useEffect(() => {
+    // 1. Sync data attribute
     document.documentElement.setAttribute("data-theme", theme);
+    
+    // 2. Sync CSS classes
+    // Remove all possible theme classes first
+    THEMES.forEach(t => document.documentElement.classList.remove(t));
+    
+    // Add the current theme class
+    document.documentElement.classList.add(theme);
   }, [theme]);
 
   return null;
@@ -28,7 +37,7 @@ type ThemeProviderProps = {
 };
 
 function ThemeProvider({ children }: ThemeProviderProps) {
-  const [theme, setTheme] = useState<string>("git");
+  const [theme, setTheme] = useState<string>("qbl-theme");
 
   const toggleTheme = () => {
     setTheme((curr) => {
@@ -37,8 +46,9 @@ function ThemeProvider({ children }: ThemeProviderProps) {
       return THEMES[nextIndex];
     });
   };
-// Memoize the context value to optimize performance
-  const value = useMemo(() => ({ theme, toggleTheme }), [theme]);
+
+  // Memoize the context value to optimize performance
+  const value = useMemo(() => ({ theme, toggleTheme, setTheme }), [theme]);
 
   return (
     <ThemeContext.Provider value={value}>
