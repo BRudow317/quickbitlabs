@@ -29,9 +29,8 @@ To maintain consistent density and readability, we follow the **Col-Row-Col** pa
 - **Portability:** Sections must be "Drop-in Ready." They should wrap content in a Radix `<Section>` or `<Box>` and fill the width of their parent.
 
 ## 3. Styling & Theming
-- **Radix UI Themes:** Prefer Radix primitives (`Flex`, `Grid`, `Box`, `Section`, `Container`) for all layout and spacing.
-- **Color Tokens:** Use Radix CSS variables (e.g., `var(--accent-9)`, `var(--gray-a2)`) for consistency.
-- **Prop Policy:** Use Context for business state; use Props only for local UI overrides (titles, variants).
+- **Radix UI Themes:** Shadcn should be used as the default for all components, radix is a fall back but will ideally be removed.
+- **Color Tokens:** Use Shadcn theme tokens for coloring and styling.
 
 ## 4. Security & Safety
 - **Auth Interceptors:** All API calls via `client.gen` must include the bearer token from `localStorage`.
@@ -41,3 +40,12 @@ To maintain consistent density and readability, we follow the **Col-Row-Col** pa
 ## 5. Build & Performance
 - **Vite Config:** `chunkSizeWarningLimit` is set to 10MB to accommodate large library bundles (like Apache Arrow).
 - **Zero-Copy Data:** When handling data from the backend, maintain the `ArrowReader` / IPC stream integrity as long as possible before converting to UI-ready objects.
+
+## 6. Code Quality & Maintenance
+- **TypeScript Strictness:** All code must be written with `strict` mode enabled.
+- **Component Reusability:** If a component is used in more than one place, it should be moved to `src/components` and made generic.
+- **Documentation:** All sections and components must have JSDoc comments explaining their purpose, props, and any important implementation details.
+
+## 7. Building Rules
+- **Build Command:** Use `npm run build` after every change to ensure the frontend compiles correctly.
+- **Linting:** Run `npm run lint` to catch any code style issues before committing.

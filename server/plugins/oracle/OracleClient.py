@@ -59,7 +59,16 @@ class OracleClient:
     
     def __call__(self):
         return self.get_con()
-    
+
+    def get_current_user(self) -> str:
+        """Query the database for the actual connected user."""
+        con = self.get_con()
+        with con.cursor() as cur:
+            cur.execute("SELECT USER FROM DUAL")
+            user = cur.fetchone()[0]
+            logger.info(f"Connected Oracle user: {user}")
+            return user
+
     def close(self) -> None:
         try:
             self._current_connection.close()

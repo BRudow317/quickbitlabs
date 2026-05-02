@@ -19,46 +19,52 @@ def _bind_name(col: str, binds: dict[str, Any]) -> str:
         n += 1
     return f"{base}_{n}"
 
+def _col_ref(col: Column) -> str:
+    """Produce a proper DuckDB double-quoted reference: "Entity"."Col" or just "Col"."""
+    entity = col.locator.entity_name if col.locator else None
+    return f'"{entity}"."{col.name}"' if entity else f'"{col.name}"'
+
 def _parse_operation(op: Operation, binds: dict[str, Any]) -> str:
-    col = op.independent.qualified_name
+    col_sql = _col_ref(op.independent)
+    bind_key = op.independent.name  # stable key for the binds dict
     operator = op.operator
     dependent = op.dependent
 
     if operator == "IS NULL":
-        return f'"{col}" IS NULL'
+        return f"{col_sql} IS NULL"
     if operator == "IS NOT NULL":
-        return f'"{col}" IS NOT NULL'
+        return f"{col_sql} IS NOT NULL"
 
     sql_op = "=" if operator == "==" else operator
 
     if isinstance(dependent, pa.Field):
-        return f'"{col}" {sql_op} ?' # DuckDB uses ? for prepared statements in some contexts, but here we might just use literals or named binds if supported
-    
+        return f"{col_sql} {sql_op} ?"
+
     if isinstance(dependent, Column):
-        return f'"{col}" {sql_op} "{dependent.qualified_name}"'
+        return f"{col_sql} {sql_op} {_col_ref(dependent)}"
 
     if sql_op in ("IN", "NOT IN"):
         if not isinstance(dependent, list) or not dependent:
             return "1=0" if sql_op == "IN" else "1=1"
         placeholders: list[str] = []
         for val in dependent:
-            name = _bind_name(col, binds)
+            name = _bind_name(bind_key, binds)
             placeholders.append(f"${name}")
             binds[name] = val
-        return f'"{col}" {sql_op} ({", ".join(placeholders)})'
+        return f"{col_sql} {sql_op} ({', '.join(placeholders)})"
 
     if sql_op in ("BETWEEN", "NOT BETWEEN"):
         if not isinstance(dependent, list) or len(dependent) != 2:
             raise ValueError(f"{sql_op} requires a 2-element list [low, high], got: {dependent!r}")
-        lo_name = _bind_name(f"{col}_lo", binds)
-        hi_name = _bind_name(f"{col}_hi", binds)
+        lo_name = _bind_name(f"{bind_key}_lo", binds)
+        hi_name = _bind_name(f"{bind_key}_hi", binds)
         binds[lo_name] = dependent[0]
         binds[hi_name] = dependent[1]
-        return f'"{col}" {sql_op} ${lo_name} AND ${hi_name}'
+        return f"{col_sql} {sql_op} ${lo_name} AND ${hi_name}"
 
-    name = _bind_name(col, binds)
+    name = _bind_name(bind_key, binds)
     binds[name] = dependent
-    return f'"{col}" {sql_op} ${name}'
+    return f"{col_sql} {sql_op} ${name}"
 
 def _parse_operator_group(group: OperatorGroup, binds: dict[str, Any]) -> str:
     if not group.operation_group:

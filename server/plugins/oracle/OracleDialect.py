@@ -313,6 +313,11 @@ def build_insert_dml(catalog: Catalog, entity: Entity) -> tuple[str, dict[str, A
     Column/value list is driven by Operation(operator='=') assignments in
     catalog.operator_groups — the same mechanism as build_update_dml's SET clause.
     Falls back to all entity.columns as stream binds when no assignments exist.
+
+    TODO: Callers must strip identity/managed columns from entity.columns before calling
+    this function. The identity PK ({TABLE}_ID) and audit columns must not appear in the
+    INSERT column list — Oracle generates them automatically. There is currently no guard
+    here; the strip responsibility falls entirely on OracleServices.create_data.
     """
     assignments = _collect_assignments(catalog.operator_groups)
 
@@ -507,6 +512,24 @@ def build_merge_dml(catalog: Catalog, entity: Entity) -> tuple[str, dict[str, An
     Columns not referenced in the ON clause are SET in WHEN MATCHED.
     Static binds (non-pa.Field dependents in operator_groups) are merged
     with each stream row by execute_many.
+
+    TODO: The USING SELECT clause is built from entity.columns. If entity.columns contains
+    the identity PK ({TABLE}_ID) or audit columns, they will appear in the USING SELECT
+    and the INSERT column list. This causes ORA-32795 for identity columns and overrides
+    Oracle DEFAULT expressions for audit columns. Callers must strip these before calling
+    this function (OracleServices.upsert_data currently handles audit cols but not identity PK).
+
+    TODO: The WHEN NOT MATCHED INSERT branch does not exclude identity columns. Once the
+    managed entity boilerplate is implemented, this function needs an `identity_cols` parameter
+    (or reads a marker from Column.is_computed / Column.properties) to omit those columns
+    from the INSERT list so Oracle's sequence generates the value.
+
+    TODO: The WHEN MATCHED UPDATE SET clause updates ALL non-ON columns unconditionally.
+    For managed entities, UPDATED_DATE and UPDATED_BY should be set via SYSTIMESTAMP/USER
+    expressions injected by _inject_merge_audit in OracleServices, not from source values.
+    This coupling (build_merge_dml builds raw SQL, OracleServices patches it via string
+    manipulation) is fragile. Consider a `managed_cols` parameter here so the expressions
+    are generated cleanly rather than injected via string surgery post-hoc.
     """
     if not catalog.operator_groups:
         raise ValueError(
@@ -574,6 +597,23 @@ def build_rebuild_select(entity: Entity, existing_names: set[str]) -> str:
     - Existing columns: CAST to target DDL type (with special handling for LOBs,
       timestamps, and booleans which cannot be CAST in the normal sense).
     - New columns: fill with a type-safe default or NULL.
+
+    TODO: Exclude the identity PK column from the SELECT entirely. The identity column
+    in TABLE_TMP will auto-generate a new value — it must not appear in the INSERT
+    column list or the SELECT. Currently entity.columns is used verbatim, so the caller
+    in OracleServices._rebuild_copy_swap must strip identity columns before calling this.
+
+    TODO: Exclude audit columns from the CAST path and instead inject Oracle expressions
+    (SYSTIMESTAMP for dates, USER for by-cols) for UPDATED_DATE/UPDATED_BY, and preserve
+    the existing CREATED_DATE/CREATED_BY values with a plain column reference (no CAST).
+    Currently audit columns are CAST like regular columns which may coerce stored timestamps.
+
+    TODO: Type promotion mapping for the CAST expressions. When a column's arrow_type_id
+    maps to a wider Oracle type than what's currently in the table (e.g. the existing column
+    is VARCHAR2(100) but the target DDL type is VARCHAR2(500)), the CAST is correct.
+    But when the types are incompatible (e.g. NUMBER → VARCHAR2), the CAST will fail at
+    runtime. This should be detected in upsert_entity before calling _rebuild_copy_swap
+    and a TO_CHAR / TO_NUMBER conversion expression used instead of a bare CAST.
     """
     from server.plugins.oracle.OracleTypeMap import map_arrow_to_oracle_ddl
 
@@ -585,44 +625,44 @@ def build_rebuild_select(entity: Entity, existing_names: set[str]) -> str:
         col_exists = col.name.upper() in existing_names
         atype = col.arrow_type_id or ""
 
-        qname = _q(col.name)
+        col_name = col.name
         if col_exists:
             if is_lob or is_temporal:
                 # Oracle handles LOB and temporal internal moves without CAST
-                parts.append(f"{qname} AS {qname}")
+                parts.append(f"{col_name} AS {col_name}")
             elif atype == "bool":
                 # Salesforce string booleans → Oracle NUMBER(1,0)
                 expr = (
-                    f"CASE WHEN {qname} IN ('true', '1', 'Y') THEN 1 "
-                    f"WHEN {qname} IN ('false', '0', 'N') THEN 0 "
+                    f"CASE WHEN {col_name} IN ('true', '1', 'Y') THEN 1 "
+                    f"WHEN {col_name} IN ('false', '0', 'N') THEN 0 "
                     f"ELSE NULL END"
                 )
-                parts.append(f"CAST({expr} AS {ddl_type}) AS {qname}")
+                parts.append(f"CAST({expr} AS {ddl_type}) AS {col_name}")
             else:
-                parts.append(f"CAST({qname} AS {ddl_type}) AS {qname}")
+                parts.append(f"CAST({col_name} AS {ddl_type}) AS {col_name}")
         else:
             # New column — provide a type-correct default
             if is_lob:
                 if col.default_value is not None:
-                    parts.append(f"TO_CLOB('{col.default_value}') AS {qname}")
+                    parts.append(f"TO_CLOB('{col.default_value}') AS {col_name}")
                 elif not col.is_nullable:
-                    parts.append(f"EMPTY_CLOB() AS {qname}")
+                    parts.append(f"EMPTY_CLOB() AS {col_name}")
                 else:
-                    parts.append(f"NULL AS {qname}")
+                    parts.append(f"NULL AS {col_name}")
 
             elif is_temporal:
                 if col.default_value is not None:
                     parts.append(
                         f"TO_TIMESTAMP('{col.default_value}', "
-                        f"'YYYY-MM-DD HH24:MI:SS') AS {qname}"
+                        f"'YYYY-MM-DD HH24:MI:SS') AS {col_name}"
                     )
                 elif not col.is_nullable:
                     parts.append(
                         f"TO_TIMESTAMP('1970-01-01 00:00:00', "
-                        f"'YYYY-MM-DD HH24:MI:SS') AS {qname}"
+                        f"'YYYY-MM-DD HH24:MI:SS') AS {col_name}"
                     )
                 else:
-                    parts.append(f"CAST(NULL AS {ddl_type}) AS {qname}")
+                    parts.append(f"CAST(NULL AS {ddl_type}) AS {col_name}")
 
             else:
                 if col.default_value is not None:
@@ -631,7 +671,7 @@ def build_rebuild_select(entity: Entity, existing_names: set[str]) -> str:
                         if isinstance(col.default_value, str)
                         else str(col.default_value)
                     )
-                    parts.append(f"CAST({val} AS {ddl_type}) AS {qname}")
+                    parts.append(f"CAST({val} AS {ddl_type}) AS {col_name}")
                 elif not col.is_nullable:
                     if atype in ("string", "utf8", "large_string"):
                         dummy = "' '"
@@ -642,8 +682,8 @@ def build_rebuild_select(entity: Entity, existing_names: set[str]) -> str:
                         dummy = "0"
                     else:
                         dummy = "NULL"
-                    parts.append(f"CAST({dummy} AS {ddl_type}) AS {qname}")
+                    parts.append(f"CAST({dummy} AS {ddl_type}) AS {col_name}")
                 else:
-                    parts.append(f"CAST(NULL AS {ddl_type}) AS {qname}")
+                    parts.append(f"CAST(NULL AS {ddl_type}) AS {col_name}")
 
     return ", ".join(parts)

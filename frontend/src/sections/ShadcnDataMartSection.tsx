@@ -1,25 +1,29 @@
 import * as React from "react"
 import { Database } from "lucide-react"
 import { useMutation, useQuery } from "@tanstack/react-query"
-import { getData, getSession, type Catalog, type Entity, type QueryResult } from "@/api/sessionApi"
+import {
+  getData, getSession,
+  type Catalog, type Entity, type Join, type OperatorGroup, type QueryResult, type Sort,
+} from "@/api/sessionApi"
 import { useToast } from "@/context/ToastContext"
 import { useData } from "@/context/DataContext"
-import { useBreakpoint } from "@/context/BreakpointContext"
-import { ShadcnEntityBrowser } from "@/components/ShadcnEntityBrowser"
 import { ShadcnQueryBuilder } from "@/components/ShadcnQueryBuilder"
-import { ShadcnDataTable } from "@/components/ShadcnDataTable"
+import { CrudDataTable } from "@/components/CrudDataTable"
 import { Section } from "@radix-ui/themes"
 import { Separator } from "@/components/ui/separator"
 
 export function ShadcnDataMartSection() {
-  const { 
-    selectedEntities, setSelectedEntities, 
+  const {
+    selectedEntities, setSelectedEntities,
     queryResults, setQueryResults,
-    queryLimit, setQueryLimit 
+    queryLimit, setQueryLimit,
   } = useData()
-  
+
   const { toast } = useToast()
-  const screenSize = useBreakpoint()
+  const [joins, setJoins]               = React.useState<Join[]>([])
+  const [filterGroups, setFilterGroups] = React.useState<OperatorGroup[]>([])
+  const [sortColumns, setSortColumns]   = React.useState<Sort[]>([])
+  const [queryVersion, setQueryVersion] = React.useState(0)
 
   const { data: session, isLoading: sessionLoading } = useQuery({
     queryKey: ['session'],
@@ -28,99 +32,93 @@ export function ShadcnDataMartSection() {
 
   const allEntities = React.useMemo(() => session?.entities ?? [], [session])
   const selectedNames = React.useMemo(
-    () => new Set(selectedEntities.map((e) => e.name)),
-    [selectedEntities]
+    () => new Set(selectedEntities.map(e => e.name)),
+    [selectedEntities],
   )
 
   const toggleEntity = (entity: Entity) => {
-    setSelectedEntities((prev) =>
+    setSelectedEntities(prev =>
       selectedNames.has(entity.name)
-        ? prev.filter((e) => e.name !== entity.name)
-        : [...prev, entity]
+        ? prev.filter(e => e.name !== entity.name)
+        : [...prev, entity],
     )
     setQueryResults(null)
+  }
+
+  const clearAll = () => {
+    setSelectedEntities([])
+    setQueryResults(null)
+    setJoins([])
+    setFilterGroups([])
+    setSortColumns([])
   }
 
   const queryMutation = useMutation({
     mutationFn: (): Promise<QueryResult> => {
       const catalog: Catalog = {
         entities: selectedEntities,
+        joins,
+        operator_groups: filterGroups,
+        sort_columns: sortColumns,
         limit: parseInt(queryLimit) || 500,
       }
       return getData(catalog)
     },
-    onSuccess: (data) => {
+    onSuccess: data => {
       setQueryResults(data)
+      setQueryVersion(v => v + 1)
     },
     onError: (err: unknown) => {
-      if (err instanceof Error && !('isAxiosError' in err)) {
-        toast.error(err.message)
-      }
+      if (err instanceof Error && !('isAxiosError' in err)) toast.error(err.message)
       setQueryResults(null)
-    }
+    },
   })
-
-  const isStacked = ["xsm", "sm"].includes(screenSize)
-  const layoutDirection = isStacked ? "flex-col" : "flex-row"
 
   return (
     <Section size="2" className="w-full">
       <div className="flex flex-col gap-6 w-full">
-        {/* Section Header */}
+        {/* Header */}
         <div className="flex items-center gap-4">
           <div className="bg-primary p-2.5 rounded-lg shadow-sm">
             <Database className="h-5 w-5 text-primary-foreground" />
           </div>
           <div>
-            <h2 className="text-xl font-semibold tracking-tight">Shadcn DataMart</h2>
-            <p className="text-sm text-muted-foreground">Modern interface for federated metadata discovery</p>
+            <h2 className="text-xl font-semibold tracking-tight">DataMart</h2>
+            <p className="text-sm text-muted-foreground">Federated metadata discovery &amp; query</p>
           </div>
         </div>
 
         <Separator />
 
-        {/* FLEX-STANDARD: Row on Desktop, Column on Mobile */}
-        <div className={`flex ${layoutDirection} gap-6 items-start w-full`}>
-          {/* Col 1: Browser */}
-          <ShadcnEntityBrowser 
-            entities={allEntities}
-            selectedNames={selectedNames}
+        <div className="flex flex-col gap-4 w-full">
+          <ShadcnQueryBuilder
+            allEntities={allEntities}
+            selectedEntities={selectedEntities}
             onToggleEntity={toggleEntity}
-            isLoading={sessionLoading}
+            onClear={clearAll}
+            limit={queryLimit}
+            onLimitChange={setQueryLimit}
+            onRunQuery={() => queryMutation.mutate()}
+            isPending={queryMutation.isPending}
+            isLoadingEntities={sessionLoading}
+            onJoinsChange={setJoins}
+            onFilterGroupsChange={setFilterGroups}
+            onSortColumnsChange={setSortColumns}
           />
 
-          {/* Col 2: Query & Results */}
-          <div className="flex flex-col gap-4 flex-1 min-w-0 w-full">
-            <ShadcnQueryBuilder 
-              selectedEntities={selectedEntities}
-              onToggleEntity={toggleEntity}
-              onClear={() => {
-                setSelectedEntities([])
-                setQueryResults(null)
-              }}
-              limit={queryLimit}
-              onLimitChange={setQueryLimit}
-              onRunQuery={() => queryMutation.mutate()}
-              isPending={queryMutation.isPending}
-            />
-
-            {queryResults && (
-              <div className="mt-2 w-full space-y-2">
-                <div className="flex justify-between items-center px-1">
-                  <span className="text-xs font-medium text-muted-foreground">
-                    {queryResults.total} row{queryResults.total !== 1 ? 's' : ''} returned
-                  </span>
-                </div>
-                <ShadcnDataTable 
-                  columns={queryResults.columns.map(col => ({
-                    accessorKey: col,
-                    header: col,
-                  }))}
-                  data={queryResults.rows} 
-                />
-              </div>
-            )}
-          </div>
+          {queryResults && (
+            <div className="w-full space-y-2">
+              <span className="px-1 text-xs font-medium text-muted-foreground">
+                {queryResults.total} row{queryResults.total !== 1 ? 's' : ''} returned
+              </span>
+              <CrudDataTable
+                key={queryVersion}
+                columns={queryResults.columns}
+                data={queryResults.rows}
+                availableEntities={selectedEntities}
+              />
+            </div>
+          )}
         </div>
       </div>
     </Section>

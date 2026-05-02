@@ -1,17 +1,21 @@
-"""
-python "Q:/scripts/boot.py" -l ./.logs -config
-"""
+"""python "Q:/scripts/boot.py" -l ./.logs -config"""
 from __future__ import annotations
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Literal
+import logging
+import time
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.routing import APIRoute
 from fastapi.staticfiles import StaticFiles
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.requests import Request
 
 from configs.settings import settings
+
+logger = logging.getLogger(__name__)
 from api import auth, users
 from api import (
     catalog,
@@ -30,6 +34,16 @@ from server.db.setup_tables import create_tables
 
 def _generate_unique_id(route: APIRoute) -> str:
     return route.name
+
+
+class LoggingMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
+        start = time.time()
+        logger.info(f"→ {request.method} {request.url.path}")
+        response = await call_next(request)
+        elapsed = time.time() - start
+        logger.info(f"← {request.method} {request.url.path} | {response.status_code} | {elapsed:.3f}s")
+        return response
 
 
 @asynccontextmanager
@@ -96,4 +110,5 @@ app = create_app()
 
 def start_app(mode: Literal["development", "staging", "production"]) -> None:
     import uvicorn
-    uvicorn.run("server.start_app:app", host="0.0.0.0", port=8000, reload=mode == "development")
+    reload = True if mode == "development" else False
+    uvicorn.run("server.start_app:app", host="0.0.0.0", port=8000, reload=reload, access_log=True)

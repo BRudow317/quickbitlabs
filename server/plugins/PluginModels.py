@@ -77,7 +77,7 @@ ARROW_TYPE: dict[arrow_type_literal, pa.DataType] = {
     "decimal128": pa.decimal128(38, 9),
     "decimal256": pa.decimal256(76, 18),
 
-    # Complex types — default parameterizations for schema inference.
+    # Complex types - default parameterizations for schema inference.
     # Use Column.arrow_type_meta to store and reconstruct the specific inner types.
     "list": pa.list_(pa.utf8()),
     "large_list": pa.large_list(pa.utf8()),
@@ -455,9 +455,12 @@ class Catalog(BaseModel):
                 writer.write_batch(batch)
         return sink.getvalue().to_pybytes()
 
+
     @staticmethod
     def stream_arrow_ipc(reader: ArrowReader | pa.RecordBatchReader) -> Iterator[bytes]:
-        """Stream Arrow IPC incrementally: yields schema header, then one chunk per batch. This is a broken function and should not be used.
+        """
+        !!! This is a broken function and should not be used. !!!
+        Stream Arrow IPC incrementally: yields schema header, then one chunk per batch. 
         """
         sink = pa.BufferOutputStream()
         pos = 0

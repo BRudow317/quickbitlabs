@@ -14,6 +14,7 @@ type AuthDialog = 'none' | 'login' | 'register';
 
 const NAV_ITEMS = [
   { path: '/migration',        label: 'Migration',  Icon: ArrowRightLeft },
+  { path: '/query-builder',    label: 'Builder',    Icon: Database },
   { path: '/contacts',         label: 'Contacts',   Icon: Users },
   { path: '/prototype',        label: 'Radix Lab',  Icon: FlaskConical },
   { path: '/prototype-shadcn', label: 'Shadcn Lab', Icon: Rocket },

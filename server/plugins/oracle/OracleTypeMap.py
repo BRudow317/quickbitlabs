@@ -15,6 +15,105 @@ def map_oracle_to_arrow(raw_type: str, scale: int | None = None) -> arrow_type_l
     if raw_upper in ("BLOB", "BFILE"): return "large_binary"
     return "string"
 
+_INT_ORDER:   list[arrow_type_literal] = ["int8",   "int16",  "int32",  "int64"]
+_UINT_ORDER:  list[arrow_type_literal] = ["uint8",  "uint16", "uint32", "uint64"]
+_FLOAT_ORDER: list[arrow_type_literal] = ["float16","float32","float64"]
+_TEMPORAL_ORDER: list[arrow_type_literal] = [
+    "date32","date64","timestamp_s","timestamp_ms","timestamp_us","timestamp_ns"
+]
+_INT_SET   = frozenset(_INT_ORDER)
+_UINT_SET  = frozenset(_UINT_ORDER)
+_FLOAT_SET = frozenset(_FLOAT_ORDER)
+_DECIMAL_SET  = frozenset({"decimal128", "decimal256"})
+_TEMPORAL_SET = frozenset(_TEMPORAL_ORDER)
+_BINARY_SET   = frozenset({"binary", "large_binary"})
+_STRING_SET   = frozenset({"string", "utf8", "string_view", "large_string", "json", "uuid", "dictionary"})
+_NUMERIC_SET  = _INT_SET | _UINT_SET | _FLOAT_SET | _DECIMAL_SET | frozenset({"bool"})
+
+
+def promote_arrow_types(a: arrow_type_literal, b: arrow_type_literal) -> arrow_type_literal:
+    """Return the widest compatible arrow_type_literal that can hold values of both a and b.
+
+    Rules (widest wins, large_string / CLOB is the final fallback for incompatible types):
+      - Same type            → identity
+      - null + anything      → the other type
+      - large_string + any   → large_string  (CLOB is a one-way door)
+      - Within int family    → wider int
+      - Within uint family   → wider uint
+      - Int + uint           → wider signed int (promote to avoid overflow)
+      - Int/uint + float     → float64
+      - Numeric + decimal    → decimal128
+      - bool + numeric       → the numeric type
+      - Within float family  → wider float
+      - Within temporal      → wider temporal (timestamp_ns is widest)
+      - date + timestamp     → timestamp_ns
+      - binary + large_bin   → large_binary
+      - string variants      → large_string if either is large_string, else string
+      - numeric + string     → large_string  (VARCHAR2 can store formatted numbers as last resort)
+      - temporal + string    → large_string
+      - anything else        → large_string
+    """
+    if a == b:
+        return a
+    if a == "null":
+        return b
+    if b == "null":
+        return a
+    if "large_string" in (a, b):
+        return "large_string"
+
+    # Within string family
+    if a in _STRING_SET and b in _STRING_SET:
+        for t in ("large_string", "json", "string", "utf8", "string_view", "dictionary", "uuid"):
+            if t in (a, b):
+                return t  # type: ignore[return-value]
+
+    # Within int family
+    if a in _INT_SET and b in _INT_SET:
+        return _INT_ORDER[max(_INT_ORDER.index(a), _INT_ORDER.index(b))]
+
+    # Within uint family
+    if a in _UINT_SET and b in _UINT_SET:
+        return _UINT_ORDER[max(_UINT_ORDER.index(a), _UINT_ORDER.index(b))]
+
+    # Int + uint → promote to next wider signed int to safely cover both ranges
+    if (a in _INT_SET and b in _UINT_SET) or (a in _UINT_SET and b in _INT_SET):
+        ia = a if a in _INT_SET else b
+        ub = b if b in _UINT_SET else a
+        idx = min(max(_INT_ORDER.index(ia), _UINT_ORDER.index(ub)) + 1, len(_INT_ORDER) - 1)
+        return _INT_ORDER[idx]
+
+    # Within float family
+    if a in _FLOAT_SET and b in _FLOAT_SET:
+        return _FLOAT_ORDER[max(_FLOAT_ORDER.index(a), _FLOAT_ORDER.index(b))]
+
+    # Int/uint + float → float64
+    if (a in _INT_SET | _UINT_SET and b in _FLOAT_SET) or \
+       (b in _INT_SET | _UINT_SET and a in _FLOAT_SET):
+        return "float64"
+
+    # Decimal + any numeric → decimal128
+    if (a in _DECIMAL_SET or b in _DECIMAL_SET) and \
+       (a in _NUMERIC_SET and b in _NUMERIC_SET):
+        return "decimal128"
+
+    # Bool + numeric → the numeric type
+    if "bool" in (a, b):
+        other = b if a == "bool" else a
+        if other in _NUMERIC_SET | _STRING_SET:
+            return other  # type: ignore[return-value]
+
+    # Within temporal family
+    if a in _TEMPORAL_SET and b in _TEMPORAL_SET:
+        return _TEMPORAL_ORDER[max(_TEMPORAL_ORDER.index(a), _TEMPORAL_ORDER.index(b))]
+
+    # Binary family
+    if a in _BINARY_SET and b in _BINARY_SET:
+        return "large_binary"
+
+    # Incompatible families → CLOB (safe universal container)
+    return "large_string"
+
 ARROW_TO_ORACLE_DDL: dict[arrow_type_literal, str] = {
     "null":             "VARCHAR2(255 CHAR)",
     "bool":             "NUMBER(1, 0)",
@@ -67,7 +166,8 @@ def map_arrow_to_oracle_ddl(column: Column) -> str:
     atype = column.arrow_type_id
     if atype is None: raise ValueError(f"Column {column.name} is missing 'arrow_type_id'.")
     if atype in ("string", "utf8", "string_view"):
-        length = column.max_length or 255
+        # max_length=0 means "unknown" per Column spec, not "short". 4000 CHAR is the safe default.
+        length = column.max_length or 4000
         return "CLOB" if length > 4000 else f"VARCHAR2({length} CHAR)"
     if atype == "large_string": return "CLOB"
     if atype.startswith("int") or atype.startswith("uint"): return "NUMBER"

@@ -1,4 +1,4 @@
-import { tableFromIPC } from 'apache-arrow';
+import { tableFromIPC, tableFromArrays, tableToIPC } from 'apache-arrow';
 import { client } from '@/api/openapi/client.gen';
 
 // ── TypeScript mirrors of server/plugins/PluginModels.py ─────────────────────
@@ -25,14 +25,60 @@ export interface Entity {
   name: string;
   alias?: string | null;
   namespace?: string | null;
+  plugin?: string | null;
   columns?: Column[];
   properties?: Record<string, unknown>;
 }
 
+// ── Filter AST ────────────────────────────────────────────────────────────────
+// Mirrors PluginModels.py Operation / OperatorGroup exactly.
+// "=" is an assignment operator (upsert/update); "==" is a comparison operator (filters).
+
+export type OperatorLiteral =
+  | "=" | "==" | "!=" | ">" | "<" | ">=" | "<="
+  | "IN" | "NOT IN"
+  | "LIKE" | "NOT LIKE"
+  | "BETWEEN" | "NOT BETWEEN"
+  | "IS NULL" | "IS NOT NULL"
+
+export interface Operation {
+  independent: Column;
+  operator: OperatorLiteral;
+  dependent?: string | unknown[] | Column | null;
+}
+
+export interface OperatorGroup {
+  condition: "AND" | "OR" | "NOT";
+  operation_group: Array<Operation | OperatorGroup>;
+}
+
+// ── Join / Sort ───────────────────────────────────────────────────────────────
+// Mirrors PluginModels.py Join / Sort exactly.
+
+export interface Join {
+  left_entity: Entity;
+  left_column: Column;
+  right_entity: Entity;
+  right_column: Column;
+  join_type: "INNER" | "LEFT" | "OUTER";
+}
+
+export interface Sort {
+  column: Column;
+  direction: "ASC" | "DESC";
+  nulls_first?: boolean | null;
+}
+
+// ── Catalog ───────────────────────────────────────────────────────────────────
+
 export interface Catalog {
   name?: string | null;
   entities?: Entity[];
+  operator_groups?: OperatorGroup[];
+  joins?: Join[];
+  sort_columns?: Sort[];
   limit?: number | null;
+  offset?: number | null;
   properties?: Record<string, unknown>;
 }
 
@@ -63,7 +109,84 @@ export async function getData(catalog: Catalog): Promise<QueryResult> {
   return _decodeArrowIPC(res.data);
 }
 
+// ── Write operations (multipart: catalog_json + Arrow IPC file) ───────────────
+
+export async function insertData(
+  catalog: Catalog,
+  rows: Record<string, unknown>[],
+  cols: string[],
+): Promise<QueryResult> {
+  const res = await client.instance.put<ArrayBuffer>(
+    '/api/data/insert',
+    _makeWriteForm(catalog, rows, cols),
+    { responseType: 'arraybuffer' },
+  );
+  return _decodeArrowIPC(res.data);
+}
+
+export async function upsertData(
+  catalog: Catalog,
+  rows: Record<string, unknown>[],
+  cols: string[],
+): Promise<QueryResult> {
+  const res = await client.instance.put<ArrayBuffer>(
+    '/api/data/',
+    _makeWriteForm(catalog, rows, cols),
+    { responseType: 'arraybuffer' },
+  );
+  return _decodeArrowIPC(res.data);
+}
+
+export async function updateData(
+  catalog: Catalog,
+  rows: Record<string, unknown>[],
+  cols: string[],
+): Promise<QueryResult> {
+  const res = await client.instance.patch<ArrayBuffer>(
+    '/api/data/',
+    _makeWriteForm(catalog, rows, cols),
+    { responseType: 'arraybuffer' },
+  );
+  return _decodeArrowIPC(res.data);
+}
+
+export async function deleteData(
+  catalog: Catalog,
+  rows: Record<string, unknown>[],
+  cols: string[],
+): Promise<void> {
+  await client.instance.delete('/api/data/', {
+    data: _makeWriteForm(catalog, rows, cols),
+  });
+}
+
 // ── Internal ──────────────────────────────────────────────────────────────────
+
+function _makeWriteForm(
+  catalog: Catalog,
+  rows: Record<string, unknown>[],
+  cols: string[],
+): FormData {
+  const fd = new FormData();
+  fd.append('catalog_json', JSON.stringify(catalog));
+  fd.append('file', _rowsToArrowBlob(rows, cols), 'data.arrow');
+  return fd;
+}
+
+function _rowsToArrowBlob(rows: Record<string, unknown>[], cols: string[]): Blob {
+  // Coerce all values to strings so Arrow type-inference stays consistent
+  const data: Record<string, string[]> = {};
+  for (const col of cols) {
+    data[col] = rows.map((r) => {
+      const v = r[col];
+      return v == null ? '' : String(v);
+    });
+  }
+  const table = tableFromArrays(data);
+  const bytes = tableToIPC(table, 'stream');
+  // Arrow's tableToIPC always produces a plain ArrayBuffer; the TS type is overly broad.
+  return new Blob([bytes.buffer as ArrayBuffer], { type: 'application/vnd.apache.arrow.stream' });
+}
 
 function _decodeArrowIPC(buffer: ArrayBuffer): QueryResult {
   const table = tableFromIPC(new Uint8Array(buffer));

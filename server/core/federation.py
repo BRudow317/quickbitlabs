@@ -12,22 +12,35 @@ def duckdb_orchestrator(catalog: Catalog, children_streams: list[tuple[Catalog, 
     """
     Executes a federated join across multiple plugin streams using DuckDB.
     1. Registers each child stream as a unique temporary table.
-    2. Creates views for each entity to map 'Entity.Column' names back to 'Column'.
+    2. Creates a named view per entity, normalising whatever column naming the plugin used
+       (simple "Col" or qualified "Entity.Col") to simple names so the master SQL can use
+       table.column dot-notation against the view names.
     3. Builds and executes the master SQL query.
     """
     con = duckdb.connect()
-    
-    # 1. Register streams and create views
+
     for i, (child, reader) in enumerate(children_streams):
+        # Read schema metadata before handing the reader to DuckDB — schema access is non-consuming.
+        actual_cols: set[str] = set(reader.schema.names)
         stream_name = f"stream_{i}"
         con.register(stream_name, reader)
-        
+
         for entity in child.entities:
-            # Map the qualified names (e.g. "Table.Column") from the plugin stream back to simple names
-            cols = [f'"{entity.name}.{c.name}" AS "{c.name}"' for c in entity.columns]
-            con.execute(f'CREATE VIEW "{entity.name}" AS SELECT {", ".join(cols)} FROM {stream_name}')
-        
-    # 2. Build and execute master query
+            proj: list[str] = []
+            for c in entity.columns:
+                qual = f"{entity.name}.{c.name}"
+                if qual in actual_cols:
+                    # Plugin returned qualified names — alias back to simple.
+                    proj.append(f'"{qual}" AS "{c.name}"')
+                elif c.name in actual_cols:
+                    proj.append(f'"{c.name}"')
+                # Columns absent from the stream are silently skipped.
+            if proj:
+                con.execute(f'CREATE VIEW "{entity.name}" AS SELECT {", ".join(proj)} FROM {stream_name}')
+            else:
+                # Fallback: expose the whole stream — master query may still filter it down.
+                con.execute(f'CREATE VIEW "{entity.name}" AS SELECT * FROM {stream_name}')
+
     sql, binds = build_duckdb_select(catalog)
     arrow_reader: ArrowReader = con.execute(sql, binds).to_arrow_reader()
     return arrow_reader

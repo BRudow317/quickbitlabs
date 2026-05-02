@@ -35,7 +35,7 @@ export function ShadcnEntityBrowser({
   )
 
   return (
-    <Card className={cn("w-full md:w-[280px] shrink-0", className)}>
+    <Card className={cn("w-full md:w-70 shrink-0", className)}>
       <CardHeader className="pb-3">
         <CardTitle className="text-sm font-medium">Available Entities</CardTitle>
         <div className="relative mt-2">
@@ -60,7 +60,7 @@ export function ShadcnEntityBrowser({
             No metadata cached.
           </p>
         ) : (
-          <ScrollArea className="h-[400px] pr-3">
+          <ScrollArea className="h-100 pr-3">
             <div className="space-y-1">
               {filteredEntities.map((entity) => {
                 const isSelected = selectedNames.has(entity.name)

@@ -6,6 +6,7 @@ import { ContactsPage } from '@/pages/ContactsPage';
 import { ProfilePage } from '@/pages/ProfilePage';
 import { PrototypePage } from '@/pages/PrototypePage';
 import { PrototypeShadcnPage } from '@/pages/PrototypeShadcnPage';
+import { QueryBuilderPage } from '@/pages/QueryBuilderPage';
 import { AdminPage } from '@/pages/AdminPage';
 import { Layout } from '@/layouts/Layout';
 import { ThemeProvider } from '@/context/ThemeContext';
@@ -59,6 +60,7 @@ export function App() {
                         {/* Authenticated */}
                         <Route element={<Layout requireAuth />}>
                           <Route path="/migration" element={<MigrationPage />} />
+                          <Route path="/query-builder" element={<QueryBuilderPage />} />
                           <Route path="/contacts" element={<ContactsPage />} />
                           <Route path="/profile" element={<ProfilePage />} />
                           <Route path="/prototype" element={<PrototypePage />} />
