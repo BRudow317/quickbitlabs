@@ -56,7 +56,8 @@ CREATE TABLE catalog_registry (
     
     -- Complex Pydantic Lists/Dicts mapped to native JSON CLOBs
     entities CLOB CONSTRAINT check_entities_json CHECK (entities IS JSON),
-    operator_groups CLOB CONSTRAINT check_ops_json CHECK (operator_groups IS JSON),
+    filters CLOB CONSTRAINT check_filters_json CHECK (filters IS JSON),
+    assignments CLOB CONSTRAINT check_assignments_json CHECK (assignments IS JSON),
     joins CLOB CONSTRAINT check_joins_json CHECK (joins IS JSON),
     sort_columns CLOB CONSTRAINT check_sorts_json CHECK (sort_columns IS JSON),
     properties CLOB CONSTRAINT check_props_json CHECK (properties IS JSON),
@@ -67,7 +68,7 @@ CREATE TABLE catalog_registry (
 
 INSERT INTO catalog_registry (
     catalog_id, name, alias, namespace, scope, source_type, team_id, 
-    "LIMIT", entities, operator_groups, joins, sort_columns, properties
+    "LIMIT", entities, filters, assignments, joins, sort_columns, properties
 ) VALUES (
     'cat-3001', 
     'Q3 Actuary Risk Summary', 
@@ -78,6 +79,7 @@ INSERT INTO catalog_registry (
     'team-2001',
     5000,
     '[{"name": "risk_data", "columns": [{"name": "id", "locator": {"plugin": "oracle"}}]}]',
+    '[]',
     '[]',
     '[]',
     '[]',

@@ -30,12 +30,11 @@ export interface Entity {
   properties?: Record<string, unknown>;
 }
 
-// ── Filter AST ────────────────────────────────────────────────────────────────
-// Mirrors PluginModels.py Operation / OperatorGroup exactly.
-// "=" is an assignment operator (upsert/update); "==" is a comparison operator (filters).
+// ── Filter / Assignment AST ───────────────────────────────────────────────────
+// Mirrors PluginModels.py Operation / OperatorGroup / Assignment exactly.
 
 export type OperatorLiteral =
-  | "=" | "==" | "!=" | ">" | "<" | ">=" | "<="
+  | "=" | "!=" | ">" | "<" | ">=" | "<="
   | "IN" | "NOT IN"
   | "LIKE" | "NOT LIKE"
   | "BETWEEN" | "NOT BETWEEN"
@@ -50,6 +49,11 @@ export interface Operation {
 export interface OperatorGroup {
   condition: "AND" | "OR" | "NOT";
   operation_group: Array<Operation | OperatorGroup>;
+}
+
+export interface Assignment {
+  column: Column;
+  value: string | unknown[] | Column | null;
 }
 
 // ── Join / Sort ───────────────────────────────────────────────────────────────
@@ -74,7 +78,8 @@ export interface Sort {
 export interface Catalog {
   name?: string | null;
   entities?: Entity[];
-  operator_groups?: OperatorGroup[];
+  filters?: OperatorGroup[];
+  assignments?: Assignment[];
   joins?: Join[];
   sort_columns?: Sort[];
   limit?: number | null;

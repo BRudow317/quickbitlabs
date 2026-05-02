@@ -35,7 +35,7 @@ def _parse_operation(op: Operation, binds: dict[str, Any]) -> str:
     if operator == "IS NOT NULL":
         return f"{col_sql} IS NOT NULL"
 
-    sql_op = "=" if operator == "==" else operator
+    sql_op = operator
 
     if isinstance(dependent, pa.Field):
         return f"{col_sql} {sql_op} ?"
@@ -81,12 +81,12 @@ def _parse_operator_group(group: OperatorGroup, binds: dict[str, Any]) -> str:
         return f"NOT ({clauses[0]})" if clauses else ""
     return f" {group.condition} ".join(clauses)
 
-def _build_where(operator_groups: list[OperatorGroup]) -> tuple[str, dict[str, Any]]:
-    if not operator_groups:
+def _build_where(filters: list[OperatorGroup]) -> tuple[str, dict[str, Any]]:
+    if not filters:
         return "", {}
     binds: dict[str, Any] = {}
     clauses: list[str] = []
-    for group in operator_groups:
+    for group in filters:
         clause = _parse_operator_group(group, binds)
         if clause:
             clauses.append(f"({clause})")
@@ -120,7 +120,7 @@ def build_duckdb_select(catalog: Catalog) -> tuple[str, dict[str, Any]]:
     join_clause = (" " + " ".join(join_parts)) if join_parts else ""
 
     # WHERE
-    where_clause, binds = _build_where(catalog.operator_groups)
+    where_clause, binds = _build_where(catalog.filters)
 
     # ORDER BY
     sort_parts: list[str] = []

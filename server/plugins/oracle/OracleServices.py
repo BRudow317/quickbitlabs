@@ -652,7 +652,7 @@ class OracleService:
                 target if e.name == target.name else e for e in catalog.entities
             ]})
 
-            if not clean_catalog.operator_groups:
+            if not clean_catalog.filters:
                 pk_cols = target.primary_key_columns
                 if not pk_cols:
                     logger.warning(
@@ -661,11 +661,11 @@ class OracleService:
                     )
                     return self.create_data(catalog, data, **kwargs)
                 clean_catalog = clean_catalog.model_copy(update={
-                    "operator_groups": [
+                    "filters": [
                         OperatorGroup(
                             condition="AND",
                             operation_group=[
-                                Operation(independent=pk, operator="==", dependent=pa.field(pk.name))
+                                Operation(independent=pk, operator="=", dependent=pa.field(pk.name))
                                 for pk in pk_cols
                             ],
                         )

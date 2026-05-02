@@ -153,88 +153,82 @@ The Catalog Registry stores full serialized Catalogs. If any cached Catalog has 
 
 ### Phase 0 — Design (before any code changes)
 
-- [ ] Sketch the updated `Catalog.federate` fanout logic for both `filters` and `assignments` on paper. Confirm the connected-component algorithm still works with two separate lists.
+- [x] Sketch the updated `Catalog.federate` fanout logic for both `filters` and `assignments` on paper. Confirm the connected-component algorithm still works with two separate lists.
 - [ ] Audit the Catalog Registry: run a query to check if any persisted Catalogs have non-empty `operator_groups`. Document and decide whether to migrate or drop them.
 
 ### Phase 1 — Core Contract (`PluginModels.py`)
 
-> ⚠️ Requires explicit permission per the Core File Modification Rule.
-
-- [ ] Add `Assignment` model above `OperatorGroup`.
-- [ ] Remove `"=="` from `Operation.operator` literal union.
-- [ ] Remove the `"The single equal sign '=' is an assignment operator"` comment from `Operation`.
-- [ ] Replace `operator_groups: list[OperatorGroup]` with:
-  - `filters: list[OperatorGroup]`
-  - `assignments: list[Assignment]`
-- [ ] Update `Catalog.federate` to fan out `filters` and `assignments` independently into child catalogs.
-- [ ] Update the `operator_groups` filtering logic inside `federate` (currently uses `_collect_plugins_from_group`) to apply to `filters` only.
+- [x] Add `Assignment` model above `OperatorGroup`.
+- [x] Remove `"=="` from `Operation.operator` literal union.
+- [x] Remove the `"The single equal sign '=' is an assignment operator"` comment from `Operation`.
+- [x] Replace `operator_groups: list[OperatorGroup]` with `filters` and `assignments`.
+- [x] Update `Catalog.federate` to fan out `filters` and `assignments` independently into child catalogs.
+- [x] Update the `operator_groups` filtering logic inside `federate` to apply to `filters` only.
 
 ### Phase 2 — Backend Dialects & Services
 
-- [ ] **`server/core/DuckDBDialect.py`**
-  - Replace `_build_where(catalog.operator_groups)` with `_build_where(catalog.filters)`.
+- [x] **`server/core/DuckDBDialect.py`**
+  - [x] Replace `_build_where(catalog.operator_groups)` with `_build_where(catalog.filters)`.
+  - [x] Rename internal function parameter `operator_groups` to `filters` in `_build_where`.
 
-- [ ] **`server/plugins/oracle/OracleDialect.py`**
-  - Delete `_collect_assignments()` and `_strip_assignments()` — no longer needed.
-  - Delete the `"="` guard clause in `_parse_operation()`.
-  - Replace all `catalog.operator_groups` WHERE-building calls with `catalog.filters`.
-  - Replace all SET/MERGE-ON-building calls to use `catalog.assignments` (list of `Assignment`).
+- [x] **`server/plugins/oracle/OracleDialect.py`**
+  - [x] Delete `_collect_assignments()` and `_strip_assignments()` — no longer needed.
+  - [x] Delete the `"="` guard clause in `_parse_operation()`.
+  - [x] Replace all `catalog.operator_groups` WHERE-building calls with `catalog.filters`.
+  - [x] Replace all SET/MERGE-ON-building calls to use `catalog.assignments`.
+  - [x] Rename internal function parameters `operator_groups` to `filters` in `_build_where`, `_build_merge_on`, etc.
 
-- [ ] **`server/plugins/oracle/OracleServices.py`**
-  - Update `upsert_data()`: when no identity is provided, build identity ops into `catalog.filters` (not `operator_groups`).
-  - Update any write path that previously injected `operator="="` operations into `operator_groups`.
+- [x] **`server/plugins/oracle/OracleServices.py`**
+  - [x] Update `upsert_data()`: when no identity is provided, build identity ops into `catalog.filters`.
+  - [x] Update any write path that previously injected `operator="="` operations into `operator_groups`.
 
-- [ ] **`server/plugins/sf/models/SfDialect.py`**
-  - Replace `catalog.operator_groups` SOQL building with `catalog.filters`.
+- [x] **`server/plugins/sf/models/SfDialect.py`**
+  - [x] Replace `catalog.operator_groups` SOQL building with `catalog.filters`.
 
-- [ ] **`server/services/CatalogMigration.py`**
-  - Update MERGE ON construction to put primary key identity operations into `catalog.filters`.
+- [x] **`server/services/CatalogMigration.py`**
+  - [x] Update MERGE ON construction to put primary key identity operations into `catalog.filters`.
 
-- [ ] **`server/api/data.py`**
-  - Verify read/write paths reference `catalog.filters` and `catalog.assignments` appropriately (likely a pass-through — confirm no direct `operator_groups` access).
+- [x] **`server/api/data.py`**
+  - [x] Verify read/write paths reference `catalog.filters` and `catalog.assignments` appropriately.
 
 ### Phase 3 — Frontend
 
-- [ ] **`frontend/src/api/sessionApi.ts`**
-  - Add `Assignment` interface: `{ column: Column; value: string | any[] | Column | null }`.
-  - Remove `"=="` from `OperatorLiteral`.
-  - Remove the `"= is assignment; == is comparison"` comment.
-  - Replace `operator_groups?: OperatorGroup[]` on `Catalog` with:
-    - `filters?: OperatorGroup[]`
-    - `assignments?: Assignment[]`
+- [x] **`frontend/src/api/sessionApi.ts`**
+  - [x] Add `Assignment` interface.
+  - [x] Remove `"=="` from `OperatorLiteral`.
+  - [x] Remove the `"= is assignment; == is comparison"` comment.
+  - [x] Replace `operator_groups?: OperatorGroup[]` on `Catalog` with `filters` and `assignments`.
 
-- [ ] **`frontend/src/components/RQBQueryBuilder.tsx`**
-  - Delete the `rule.operator === '=' ? '==' : rule.operator` translation (line ~71).
-  - Wire RQB output directly to `catalog.filters`.
+- [x] **`frontend/src/components/RQBQueryBuilder.tsx`**
+  - [x] Delete the `rule.operator === '=' ? '==' : rule.operator` translation.
+  - [x] Wire RQB output directly to `catalog.filters`.
 
-### Phase 4 — Documentation
+- [x] **OpenAPI Client Generation**
+  - [x] Run `npm run openapi-ts` in `frontend/` to regenerate `src/api/openapi/` types.
 
-- [ ] **`Q:/quickbitlabs/Plugin Framework Rules.md`**
-  - Update `Catalog` model snippet: replace `operator_groups` with `filters` and `assignments`.
-  - Update `Operation` model snippet: remove `"=="` from the operator literal.
-  - Add `Assignment` model snippet alongside `Operation`.
-  - Update the AST Query System section: remove the `"=" is assignment, "==" is comparison` rule. Replace with: `"=" is the standard SQL equality operator inside `filters`; `assignments` carry column+value pairs with no operator field."
-  - Update the AST Upsert Rules section: match resolution via `catalog.filters`, SET clause via `catalog.assignments`.
+### Phase 4 — Infrastructure & Database
+
+- [x] **`scripts/MetaData.sql`**
+  - [x] Rename `operator_groups` column to `filters` in `CATALOG_DIRECTORY`.
+  - [x] Add `assignments` column to `CATALOG_DIRECTORY`.
+  - [x] Update `check_ops_json` constraint to include new columns.
+
+### Phase 5 — Documentation
+
+- [x] **`Q:/quickbitlabs/Plugin Framework Rules.md`**
+  - [x] Update `Catalog` model snippet.
+  - [x] Update `Operation` model snippet.
+  - [x] Add `Assignment` model snippet.
+  - [x] Update AST Query System and Upsert Rules sections.
 
 - [ ] **`Q:/quickbitlabs/server/README.md`**
-  - Update any mentions of `operator_groups`.
-  - Update the session → DataMart → federation flow if filters/assignments are referenced.
-
-- [ ] **`Q:/quickbitlabs/frontend/QBL Frontend Rules.md`** (if it exists)
-  - Update Catalog/Operation type documentation.
-  - Remove reference to the `=` → `==` translation hack.
+  - [ ] Update any mentions of `operator_groups`.
 
 - [ ] **`server/ProjectTree.md`**
-  - Update if `PluginModels.py` description mentions `operator_groups` or the `==` operator.
+  - [ ] Update `PluginModels.py` description.
 
-- [ ] **`C:/Users/rmedi/.claude/projects/q--quickbitlabs/memory/`**
-  - Update `project_datamart_session_arch.md` if it references `operator_groups`.
-  - Save a new memory entry capturing the `filters` / `assignments` split as settled architecture.
-
-- [ ] **Inline code comments**
-  - Remove the `# The single equal sign '=' is an assignment operator` comment from `Operation` in `PluginModels.py` (done in Phase 1, document here as a doc concern too).
-  - Remove the mirror comment in `sessionApi.ts` (done in Phase 3).
-  - Update docstrings in `OracleDialect.py` for any method that referenced `operator_groups` or the `==` convention.
+- [x] **Inline code comments**
+  - [x] Update docstrings in `OracleDialect.py` for any method that referenced `operator_groups` or the `==` convention.
 
 ---
 

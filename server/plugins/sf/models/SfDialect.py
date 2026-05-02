@@ -89,7 +89,7 @@ def _operator_to_soql(op: Operation) -> str:
     operator = op.operator
     if operator == "IS NULL": return f"{field} = null"
     if operator == "IS NOT NULL": return f"{field} != null"
-    if operator in ("=", "=="): return f"{field} = {_escape_soql_value(op.dependent)}"
+    if operator == "=": return f"{field} = {_escape_soql_value(op.dependent)}"
     if operator == "IN":
         values = ", ".join(_escape_soql_value(v) for v in (op.dependent or []))
         return f"{field} IN ({values})"
@@ -115,7 +115,7 @@ def build_soql(catalog: Catalog, entity: Entity) -> str:
     fields = ", ".join(c.name for c in queryable)
     soql = f"SELECT {fields} FROM {entity.name}"
     where_parts = [
-        p for g in catalog.operator_groups
+        p for g in catalog.filters
         if g.operation_group and (p := _group_to_soql(g))
     ]
     if where_parts: soql += f" WHERE {' AND '.join(where_parts)}"

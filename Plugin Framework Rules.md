@@ -217,13 +217,13 @@ While the Oracle Plugin is currently used for raw structural migrations, future 
 
 - **Plugin Contract Rule**: Plugins should never attempt to bypass the contract defined by the `Catalog` and the `Plugin Protocol`. This ensures that all plugins can be used interchangeably and that higher level services can rely on a consistent interface for interacting with any data source.
 
-- **AST Query System Rule**: "=" is an assignment operator for `update`, and `upsert` data operations. "==" is the comparison operator for filters.
+- **AST Query System Rule**: "=" is the standard SQL equality operator for `filters`. "==" is deprecated and should not be used. Assignments are handled via `catalog.assignments` and do not use an explicit operator field.
 
 - **AST Upsert Rules**:
   1. Match Resolution (The 'ON' Clause):
-     - Priority 1 (Explicit): If catalog.operator_groups is populated, use it to build 
+     - Priority 1 (Explicit): If catalog.filters is populated, use it to build 
       the MERGE ON clause. This supports flexible identity matching (e.g. email, username).
-     - Priority 2 (Metadata): If operator_groups is empty, autonomously derive the ON 
+     - Priority 2 (Metadata): If filters is empty, autonomously derive the ON 
       clause from the primary_key=True metadata in the Entity.columns, or a matching unique not null constraint column.
      - Priority 3 (Fallback): If no identity can be determined, degrade gracefully 
       to a standard INSERT (insert_data) to ensure "upsert" is never a hard failure.
@@ -235,6 +235,9 @@ While the Oracle Plugin is currently used for raw structural migrations, future 
 
   3. System Identity (INTERNAL_ID):
     - Support for system-generated primary keys. If the target entity defines a managed PK (e.g. via identity column), the MERGE must allow Oracle to generate the value during the INSERT branch.
+
+  4. Data Mutation:
+    - The SET clause (mutation) is driven by `catalog.assignments`. If assignments are missing, the plugin may fall back to using all provided columns in the ArrowReader.
 
 ---
 
@@ -428,7 +431,9 @@ class Catalog(BaseModel):
     scope: Literal["SYSTEM", "TEAM", "USER"] = "USER" # Required
     source_type: PLUGIN | Literal["federation"] | None = None # Hydration Required
     entities: list[Entity] = Field(default_factory=list) # Hydration Required, but may be empty for framework compliance to trigger discovery
-    operator_groups: list[OperatorGroup] = Field(default_factory=list) # Optional
+    filters: list[OperatorGroup] = Field(default_factory=list) # Optional
+    assignments: list[Assignment] = Field(default_factory=list) # Optional
+    joins: list[Join] = Field(default_factory=list)  # Optional
     joins: list[Join] = Field(default_factory=list)  # Optional
     sort_columns: list[Sort] = Field(default_factory=list)  # Optional
     limit: int | None = None # Optional
@@ -483,16 +488,26 @@ class Join(BaseModel):
     join_type: Literal["INNER", "LEFT", "OUTER"] = "INNER" # removed "RIGHT", 
 
 class Operation(BaseModel):
-    """The single equal sign '=' is an assignment operator, it is not an equality operator."""
     model_config = ConfigDict(arbitrary_types_allowed=True)
     independent: Column
-    operator: Literal["=", "==", "!=", ">", "<", ">=", "<=", "IN", "NOT IN", "LIKE", "NOT LIKE", "BETWEEN", "NOT BETWEEN", "IS NULL", "IS NOT NULL"]
+    operator: Literal["=", "!=", ">", "<", ">=", "<=", "IN", "NOT IN", "LIKE", "NOT LIKE", "BETWEEN", "NOT BETWEEN", "IS NULL", "IS NOT NULL"]
     dependent: str | list[Any] | pa.Field | Column | None
 
 class OperatorGroup(BaseModel):
     condition: Literal["AND", "OR", "NOT"]
     operation_group: list[Operation | OperatorGroup] = Field(default_factory=list)
+
+class Assignment(BaseModel):
+    """A scalar mutation: column = value. The operator is implicit — being in catalog.assignments means assignment."""
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+    column: Column
+    value: str | list[Any] | pa.Field | Column | None
 ```
+
+### AST Rules:
+- **Separation of Concerns**: Selection logic (WHERE) lives in `catalog.filters`. Mutation logic (SET) lives in `catalog.assignments`.
+- **Operator Equality**: In `filters`, the single equal sign `"="` is the standard SQL equality operator.
+- **Assignment Implicit**: `assignments` carry column-value pairs. No operator is needed because the intent is encoded in the model itself.
 
 ## Plugin Protocol Rules:
 ```python
@@ -556,3 +571,14 @@ PluginProtocol aka Plugin dictates the universal interface for any data system.
 
 ### Being Removed:
 - [Pandas API Reference:](https://pandas.pydata.org/docs/reference/index.html)
+](https://developer.salesforce.com/docs/atlas.en-us.api_rest.meta/api_rest/resources_query.htm)
+
+### Maybe Later:
+- [SQLGlot SQL Parser](https://github.com/tobymao/sqlglot)
+- [Arrow Flight SQL:](https://arrow.apache.org/blog/2022/02/16/introducing-arrow-flight-sql/)
+- [Arrow Flight Spec:](https://arrow.apache.org/docs/format/Flight.html)
+- [LanceDB](https://lancedb.com/)
+
+### Being Removed:
+- [Pandas API Reference:](https://pandas.pydata.org/docs/reference/index.html)
+ocs/reference/index.html)

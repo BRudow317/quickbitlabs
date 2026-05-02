@@ -167,7 +167,7 @@ class CatalogMigration:
                     merge_on = [OperatorGroup(
                         condition="AND",
                         operation_group=[
-                            Operation(independent=col, operator="==", dependent=pa.field(col.name))
+                            Operation(independent=col, operator="=", dependent=pa.field(col.name))
                             for col in on_cols
                         ],
                     )]
@@ -175,7 +175,7 @@ class CatalogMigration:
             # Target plugin gets its own catalog with its own entity + locators
             tgt_catalog = self.target_catalog.model_copy(update={
                 "entities": [target_entity],
-                "operator_groups": merge_on,
+                "filters": merge_on,
             })
             upsert_resp = self.target.upsert_data(tgt_catalog, source_resp.data)
 

@@ -58,7 +58,7 @@ export function ShadcnDataMartSection() {
       const catalog: Catalog = {
         entities: selectedEntities,
         joins,
-        operator_groups: filterGroups,
+        filters: filterGroups,
         sort_columns: sortColumns,
         limit: parseInt(queryLimit) || 500,
       }

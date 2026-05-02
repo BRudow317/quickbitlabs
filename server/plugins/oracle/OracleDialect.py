@@ -4,7 +4,7 @@ from typing import Any
 import pyarrow as pa
 
 from server.plugins.PluginModels import (
-    Catalog, Column, Entity, Operation, OperatorGroup,
+    Assignment, Catalog, Column, Entity, Operation, OperatorGroup,
 )
 
 
@@ -18,9 +18,9 @@ def _q(identifier: str) -> str:
     return ".".join(f'"{part}"' for part in identifier.split("."))
 
 
-# ---------------------------------------------------------------------------
+# ##########################################
 # Entity resolution
-# ---------------------------------------------------------------------------
+# ##########################################
 
 def _get_root_entity(catalog: Catalog) -> Entity:
     """Return the join-topology root: the entity never on a join's right side.
@@ -37,60 +37,13 @@ def _get_root_entity(catalog: Catalog) -> Entity:
     return roots[0]
 
 
-# ---------------------------------------------------------------------------
-# Assignment helpers — split operator_groups on "=" vs comparison operators
-# ---------------------------------------------------------------------------
-
-def _collect_assignments_from_group(
-    group: OperatorGroup, result: list[Operation]
-) -> None:
-    for item in group.operation_group:
-        if isinstance(item, OperatorGroup):
-            _collect_assignments_from_group(item, result)
-        elif item.operator == "=":
-            result.append(item)
-
-
-def _collect_assignments(groups: list[OperatorGroup]) -> list[Operation]:
-    """Collect all Operation(operator='=') assignment nodes from operator_groups."""
-    result: list[Operation] = []
-    for group in groups:
-        _collect_assignments_from_group(group, result)
-    return result
-
-
-def _strip_assignments_from_group(group: OperatorGroup) -> OperatorGroup | None:
-    new_ops: list[Operation | OperatorGroup] = []
-    for item in group.operation_group:
-        if isinstance(item, OperatorGroup):
-            stripped = _strip_assignments_from_group(item)
-            if stripped is not None:
-                new_ops.append(stripped)
-        elif item.operator != "=":
-            new_ops.append(item)
-    if not new_ops:
-        return None
-    return OperatorGroup(condition=group.condition, operation_group=new_ops)
-
-
-def _strip_assignments(groups: list[OperatorGroup]) -> list[OperatorGroup]:
-    """Return operator_groups with all '=' assignment operations removed."""
-    result: list[OperatorGroup] = []
-    for group in groups:
-        stripped = _strip_assignments_from_group(group)
-        if stripped is not None:
-            result.append(stripped)
-    return result
-
-
 def _get_target_entity(catalog: Catalog) -> Entity:
     """Return the DML write-target entity.
 
     For multi-entity (join) catalogs, the write target is the entity whose
-    column appears as 'independent' in an Operation(operator='=') assignment
-    within operator_groups.  A join catalog may carry read-only entities
-    purely for filtering — e.g. EMPLOYEES joined to filter by department
-    while the actual write target is PAYCHECKS.
+    column appears in catalog.assignments.  A join catalog may carry read-only
+    entities purely for filtering — e.g. EMPLOYEES joined to filter by
+    department while the actual write target is PAYCHECKS.
 
     Falls back to _get_root_entity (join-topology left side) only when no
     assignment operations are present in the catalog.
@@ -98,12 +51,11 @@ def _get_target_entity(catalog: Catalog) -> Entity:
     if len(catalog.entities) == 1:
         return catalog.entities[0]
 
-    assignments = _collect_assignments(catalog.operator_groups)
-    if assignments:
+    if catalog.assignments:
         target_names = {
-            op.independent.locator.entity_name.upper()
-            for op in assignments
-            if op.independent.locator and op.independent.locator.entity_name
+            a.column.locator.entity_name.upper()
+            for a in catalog.assignments
+            if a.column.locator and a.column.locator.entity_name
         }
         for entity in catalog.entities:
             if entity.name.upper() in target_names:
@@ -112,9 +64,9 @@ def _get_target_entity(catalog: Catalog) -> Entity:
     return _get_root_entity(catalog)
 
 
-# ---------------------------------------------------------------------------
+# ##########################################
 # WHERE clause builder (recursive OperatorGroup → SQL fragment)
-# ---------------------------------------------------------------------------
+# ##########################################
 
 def _bind_name(col: str, binds: dict[str, Any]) -> str:
     """Return a unique bind variable name based on the column name.
@@ -134,9 +86,7 @@ def _parse_operation(op: Operation, binds: dict[str, Any]) -> str:
     """Translate a single Operation into a SQL predicate fragment.
 
     Operator mapping:
-      "="                        → raises (assignment belongs in SET, not WHERE)
       "IS NULL" / "IS NOT NULL"  → SQL directly, no bind
-      "=="                       → Oracle "="
       "IN" with list             → IN (:col, :col_2, …)
       pa.Field dependent         → stream bind (:field_name), no static bind added
       Column dependent           → column reference, no bind
@@ -147,19 +97,12 @@ def _parse_operation(op: Operation, binds: dict[str, Any]) -> str:
     dependent = op.dependent
     sql_col = _q(col)
 
-    if operator == "=":
-        raise ValueError(
-            f"Assignment operator '=' on column '{col}' is not valid in a WHERE clause. "
-            f"Strip assignments with _strip_assignments() before calling _build_where(), "
-            f"or use '==' for equality comparison."
-        )
-
     if operator == "IS NULL":
         return f"{sql_col} IS NULL"
     if operator == "IS NOT NULL":
         return f"{sql_col} IS NOT NULL"
 
-    sql_op = "=" if operator == "==" else operator
+    sql_op = operator
 
     if isinstance(dependent, pa.Field):
         return f"{sql_col} {sql_op} :{getattr(dependent, 'name')}"
@@ -210,19 +153,19 @@ def _parse_operator_group(group: OperatorGroup, binds: dict[str, Any]) -> str:
     return f" {group.condition} ".join(clauses)
 
 
-def _build_where(operator_groups: list[OperatorGroup]) -> tuple[str, dict[str, Any]]:
+def _build_where(filters: list[OperatorGroup]) -> tuple[str, dict[str, Any]]:
     """Convert a list of OperatorGroups into a WHERE clause string + bind dict.
 
     Returns ("", {}) when the list is empty.
     Multiple top-level groups are joined with AND.
     """
-    if not operator_groups:
+    if not filters:
         return "", {}
 
     binds: dict[str, Any] = {}
     clauses: list[str] = []
 
-    for group in operator_groups:
+    for group in filters:
         clause = _parse_operator_group(group, binds)
         if clause:
             clauses.append(f"({clause})")
@@ -233,9 +176,9 @@ def _build_where(operator_groups: list[OperatorGroup]) -> tuple[str, dict[str, A
     return " WHERE " + " AND ".join(clauses), binds
 
 
-# ---------------------------------------------------------------------------
+# ##########################################
 # SELECT
-# ---------------------------------------------------------------------------
+# ##########################################
 
 def build_select(catalog: Catalog) -> tuple[str, dict[str, Any]]:
     """Build a full SELECT statement from a Catalog.
@@ -270,7 +213,7 @@ def build_select(catalog: Catalog) -> tuple[str, dict[str, Any]]:
     cols_str = ", ".join(col_names) if col_names else "*"
 
     # WHERE
-    where_clause, binds = _build_where(catalog.operator_groups)
+    where_clause, binds = _build_where(catalog.filters)
 
     # ORDER BY
     sort_parts: list[str] = []
@@ -303,31 +246,29 @@ def build_select(catalog: Catalog) -> tuple[str, dict[str, Any]]:
     return sql, binds
 
 
-# ---------------------------------------------------------------------------
+# ##########################################
 # INSERT
-# ---------------------------------------------------------------------------
+# ##########################################
 
 def build_insert_dml(catalog: Catalog, entity: Entity) -> tuple[str, dict[str, Any]]:
     """INSERT INTO schema.table (col, …) VALUES (:col, …)
 
-    Column/value list is driven by Operation(operator='=') assignments in
-    catalog.operator_groups — the same mechanism as build_update_dml's SET clause.
-    Falls back to all entity.columns as stream binds when no assignments exist.
+    Column/value list is driven by catalog.assignments — the same mechanism as
+    build_update_dml's SET clause.  Falls back to all entity.columns as stream
+    binds when no assignments exist.
 
     TODO: Callers must strip identity/managed columns from entity.columns before calling
     this function. The identity PK ({TABLE}_ID) and audit columns must not appear in the
     INSERT column list — Oracle generates them automatically. There is currently no guard
     here; the strip responsibility falls entirely on OracleServices.create_data.
     """
-    assignments = _collect_assignments(catalog.operator_groups)
-
-    if assignments:
+    if catalog.assignments:
         col_parts: list[str] = []
         val_parts: list[str] = []
         binds: dict[str, Any] = {}
-        for op in assignments:
-            col = op.independent.name
-            dep = op.dependent
+        for a in catalog.assignments:
+            col = a.column.name
+            dep = a.value
             col_parts.append(_q(col))
             if isinstance(dep, pa.Field):
                 val_parts.append(f":{getattr(dep, 'name')}")
@@ -351,40 +292,36 @@ def build_insert_dml(catalog: Catalog, entity: Entity) -> tuple[str, dict[str, A
     return sql, {}
 
 
-# ---------------------------------------------------------------------------
+# ##########################################
 # UPDATE
-# ---------------------------------------------------------------------------
+# ##########################################
 
 def build_update_dml(catalog: Catalog, entity: Entity) -> tuple[str, dict[str, Any]]:
     """UPDATE schema.table SET … WHERE …
 
-    SET clause: built from Operation(operator='=') assignments in
-    catalog.operator_groups.  The independent column is what gets written;
-    the dependent is the value — pa.Field for a stream bind, Column for a
-    column reference, None for NULL, or a static scalar for a literal.
+    SET clause: built from catalog.assignments. The column is what gets written;
+    the value is pa.Field for a stream bind, Column for a column reference,
+    None for NULL, or a static scalar for a literal.
 
-    If no assignment operations are present, falls back to streaming all
-    entity.columns (:col_name bind per column from the Arrow stream).
+    If no assignments are present, falls back to streaming all entity.columns
+    (:col_name bind per column from the Arrow stream).
 
-    WHERE clause: built from all non-'=' operations in operator_groups.
+    WHERE clause: built from catalog.filters.
     Requires at least one filter to prevent unbounded full-table updates.
     """
-    assignments = _collect_assignments(catalog.operator_groups)
-    filter_groups = _strip_assignments(catalog.operator_groups)
-
-    where_clause, where_binds = _build_where(filter_groups)
+    where_clause, where_binds = _build_where(catalog.filters)
     if not where_clause:
         raise ValueError(
             f"UPDATE on '{entity.name}' requires at least one filter "
-            f"in catalog.operator_groups to prevent full-table overwrites."
+            f"in catalog.filters to prevent full-table overwrites."
         )
 
-    if assignments:
+    if catalog.assignments:
         set_parts: list[str] = []
         set_binds: dict[str, Any] = {}
-        for op in assignments:
-            col = op.independent.name
-            dep = op.dependent
+        for a in catalog.assignments:
+            col = a.column.name
+            dep = a.value
             if isinstance(dep, pa.Field):
                 set_parts.append(f"{_q(col)} = :{getattr(dep, 'name')}")
             elif isinstance(dep, Column):
@@ -403,9 +340,9 @@ def build_update_dml(catalog: Catalog, entity: Entity) -> tuple[str, dict[str, A
     return f"UPDATE {_q(entity.qualified_name)} SET {set_str}{where_clause}", all_binds
 
 
-# ---------------------------------------------------------------------------
-# MERGE ON clause helpers (catalog.operator_groups → tgt.x = src.y)
-# ---------------------------------------------------------------------------
+# ##########################################
+# MERGE ON clause helpers (catalog.filters → tgt.x = src.y)
+# ##########################################
 
 def _build_merge_operation(
     op: Operation,
@@ -423,7 +360,7 @@ def _build_merge_operation(
     col = op.independent.name
     operator = op.operator
     dependent = op.dependent
-    sql_op = "=" if operator == "==" else operator
+    sql_op = operator
     qcol = _q(col)
 
     if operator == "IS NULL":
@@ -474,9 +411,9 @@ def _build_merge_group(
 
 
 def _build_merge_on(
-    operator_groups: list[OperatorGroup],
+    filters: list[OperatorGroup],
 ) -> tuple[str, dict[str, Any], set[str]]:
-    """Convert catalog.operator_groups into a MERGE ON clause.
+    """Convert catalog.filters into a MERGE ON clause.
 
     Returns (on_sql, binds, on_col_names).
     on_col_names: independent column names in the ON clause, excluded from
@@ -486,7 +423,7 @@ def _build_merge_on(
     clauses: list[str] = []
     on_cols: set[str] = set()
 
-    for group in operator_groups:
+    for group in filters:
         clause, cols = _build_merge_group(group, binds)
         on_cols |= cols
         if clause:
@@ -495,23 +432,23 @@ def _build_merge_on(
     return " AND ".join(clauses), binds, on_cols
 
 
-# ---------------------------------------------------------------------------
+# ##########################################
 # MERGE (upsert)
-# ---------------------------------------------------------------------------
+# ##########################################
 
 def build_merge_dml(catalog: Catalog, entity: Entity) -> tuple[str, dict[str, Any]]:
     """MERGE INTO schema.table tgt USING (SELECT :col AS col … FROM DUAL) src …
 
-    The ON clause is derived from catalog.operator_groups — no primary-key
-    metadata is required.  Use pa.Field as the dependent in an Operation to
-    reference a stream column on the src side, e.g.:
+    The ON clause is derived from catalog.filters — no primary-key metadata is
+    required.  Use pa.Field as the dependent in an Operation to reference a
+    stream column on the src side, e.g.:
 
-        Operation(independent=id_col, operator="==", dependent=pa.field("ID"))
+        Operation(independent=id_col, operator="=", dependent=pa.field("ID"))
         → ON (tgt.ID = src.ID)
 
     Columns not referenced in the ON clause are SET in WHEN MATCHED.
-    Static binds (non-pa.Field dependents in operator_groups) are merged
-    with each stream row by execute_many.
+    Static binds (non-pa.Field dependents in filters) are merged with each
+    stream row by execute_many.
 
     TODO: The USING SELECT clause is built from entity.columns. If entity.columns contains
     the identity PK ({TABLE}_ID) or audit columns, they will appear in the USING SELECT
@@ -531,13 +468,13 @@ def build_merge_dml(catalog: Catalog, entity: Entity) -> tuple[str, dict[str, An
     manipulation) is fragile. Consider a `managed_cols` parameter here so the expressions
     are generated cleanly rather than injected via string surgery post-hoc.
     """
-    if not catalog.operator_groups:
+    if not catalog.filters:
         raise ValueError(
-            f"MERGE on '{entity.name}' requires catalog.operator_groups "
+            f"MERGE on '{entity.name}' requires catalog.filters "
             f"to define the ON clause match condition."
         )
 
-    on_sql, binds, on_col_names = _build_merge_on(catalog.operator_groups)
+    on_sql, binds, on_col_names = _build_merge_on(catalog.filters)
 
     non_match = [c for c in entity.columns if c.name not in on_col_names]
     bind_selects = ", ".join(f":{c.name} AS {_q(c.name)}" for c in entity.columns)
@@ -560,20 +497,20 @@ def build_merge_dml(catalog: Catalog, entity: Entity) -> tuple[str, dict[str, An
     return sql, binds
 
 
-# ---------------------------------------------------------------------------
+# ##########################################
 # DELETE
-# ---------------------------------------------------------------------------
+# ##########################################
 
 def build_delete_dml(catalog: Catalog, entity: Entity) -> tuple[str, dict[str, Any]]:
     """DELETE FROM schema.table [WHERE …]
 
-    With operator_groups: static predicates → execute once; binds returned.
-    Without operator_groups: stream-based → WHERE uses entity column binds
+    With catalog.filters: static predicates → execute once; binds returned.
+    Without filters: stream-based → WHERE uses entity column binds
     (:col_name per column, values come from Arrow stream rows).  The caller
     controls which columns are in the entity — include only the key/filter
     columns needed (e.g. just ID for a key-based stream delete).
     """
-    where_clause, binds = _build_where(catalog.operator_groups)
+    where_clause, binds = _build_where(catalog.filters)
     if where_clause:
         return f"DELETE FROM {_q(entity.qualified_name)}{where_clause}", binds
 
@@ -584,9 +521,9 @@ def build_delete_dml(catalog: Catalog, entity: Entity) -> tuple[str, dict[str, A
     return f"DELETE FROM {_q(entity.qualified_name)}", {}
 
 
-# ---------------------------------------------------------------------------
+# ##########################################
 # Copy-Swap rebuild SELECT (for ALTER TABLE via Copy-Swap DDL strategy)
-# ---------------------------------------------------------------------------
+# ##########################################
 
 def build_rebuild_select(entity: Entity, existing_names: set[str]) -> str:
     """Build the SELECT expression list for a Copy-Swap table rebuild.

@@ -18,7 +18,7 @@ import type { Column, Entity, Operation, OperatorGroup } from "@/api/sessionApi"
 type Combinator = "AND" | "OR" | "NOT"
 
 type FilterOp =
-  | "==" | "!=" | ">" | "<" | ">=" | "<="
+  | "=" | "!=" | ">" | "<" | ">=" | "<="
   | "IN" | "NOT IN"
   | "LIKE" | "NOT LIKE"
   | "BETWEEN" | "NOT BETWEEN"
@@ -42,7 +42,7 @@ interface UIGroup {
 // ── Operator metadata ──────────────────────────────────────────────────────────
 
 const OPERATORS: { value: FilterOp; label: string }[] = [
-  { value: "==",          label: "equals" },
+  { value: "=",           label: "equals" },
   { value: "!=",          label: "not equals" },
   { value: ">",           label: "greater than" },
   { value: ">=",          label: "≥" },
@@ -69,7 +69,7 @@ const COMBINATORS: Combinator[] = ["AND", "OR", "NOT"]
 function uid() { return Math.random().toString(36).slice(2) }
 
 function makeCondition(): UICondition {
-  return { id: uid(), column: null, operator: "==", value: "", value2: "" }
+  return { id: uid(), column: null, operator: "=", value: "", value2: "" }
 }
 
 function makeGroup(combinator: Combinator = "AND"): UIGroup {

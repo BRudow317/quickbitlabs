@@ -10,7 +10,7 @@ export type ThemeValue = {
 };
 
 const ThemeContext = createContext<ThemeValue | undefined>(undefined);
-const THEMES = ["qbl-theme", "dark", "light", "my-theme"] as const;
+const THEMES = ["qbl-theme", "dark", "light"] as const;
 
 type ThemeDomSyncProps = {
   theme: string;
@@ -37,7 +37,7 @@ type ThemeProviderProps = {
 };
 
 function ThemeProvider({ children }: ThemeProviderProps) {
-  const [theme, setTheme] = useState<string>("qbl-theme");
+  const [theme, setTheme] = useState<string>("light");
 
   const toggleTheme = () => {
     setTheme((curr) => {

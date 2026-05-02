@@ -2,7 +2,7 @@ import { useState, useMemo } from 'react';
 import { QueryBuilder } from 'react-querybuilder';
 import type { RuleGroupType, Field } from 'react-querybuilder';
 import { Play, Eraser, Database, X } from 'lucide-react';
-import type { Entity, Catalog, OperatorGroup, Operation } from '@/api/sessionApi';
+import type { Entity, Catalog, OperatorGroup, Operation, OperatorLiteral } from '@/api/sessionApi';
 import { SourceEntitySelector } from './SourceEntitySelector';
 
 import { Button } from '@/components/ui/button';
@@ -68,7 +68,7 @@ export function RQBQueryBuilder({ allEntities, onRunQuery, isPending }: RQBQuery
 
       return {
         independent: col,
-        operator: rule.operator === '=' ? '==' : rule.operator as any,
+        operator: rule.operator as OperatorLiteral,
         dependent: rule.value,
       } as Operation;
     };
@@ -83,7 +83,7 @@ export function RQBQueryBuilder({ allEntities, onRunQuery, isPending }: RQBQuery
     const opGroup = transformToOperatorGroup(query);
     const catalog: Catalog = {
       entities: selectedEntities,
-      operator_groups: opGroup ? [opGroup] : [],
+      filters: opGroup ? [opGroup] : [],
       limit: 100,
     };
     onRunQuery(catalog);

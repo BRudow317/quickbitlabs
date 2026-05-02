@@ -52,13 +52,13 @@ def test_sf_to_oracle_live_migration():
     # Add MERGE ON clause (Framework requirement for Oracle upsert)
     if pk_col:
         from server.plugins.PluginModels import OperatorGroup, Operation
-        job.target_catalog.operator_groups = [
+        job.target_catalog.filters = [
             OperatorGroup(
                 condition="AND",
                 operation_group=[
                     Operation(
                         independent=pk_col,
-                        operator="==",
+                        operator="=",
                         dependent=pa.field(pk_col.name)
                     )
                 ]

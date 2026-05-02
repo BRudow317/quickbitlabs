@@ -281,15 +281,20 @@ class Join(BaseModel):
     join_type: Literal["INNER", "LEFT", "OUTER"] = "INNER" # removed "RIGHT", 
 
 class Operation(BaseModel):
-    """The single equal sign '=' is an assignment operator, it is not an equality operator."""
     model_config = ConfigDict(arbitrary_types_allowed=True)
     independent: Column
-    operator: Literal["=", "==", "!=", ">", "<", ">=", "<=", "IN", "NOT IN", "LIKE", "NOT LIKE", "BETWEEN", "NOT BETWEEN", "IS NULL", "IS NOT NULL"]
+    operator: Literal["=", "!=", ">", "<", ">=", "<=", "IN", "NOT IN", "LIKE", "NOT LIKE", "BETWEEN", "NOT BETWEEN", "IS NULL", "IS NOT NULL"]
     dependent: str | list[Any] | pa.Field | Column | None
 
 class OperatorGroup(BaseModel):
     condition: Literal["AND", "OR", "NOT"]
     operation_group: list[Operation | OperatorGroup] = Field(default_factory=list)
+
+class Assignment(BaseModel):
+    """A scalar mutation: column = value. The operator is implicit — being in catalog.assignments means assignment."""
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+    column: Column
+    value: str | list[Any] | pa.Field | Column | None
 
 def _collect_plugins_from_group(group: OperatorGroup) -> set[str]:
     """Recursively collect all plugin names referenced in an OperatorGroup tree."""
@@ -311,7 +316,8 @@ class Catalog(BaseModel):
     scope: Literal["SYSTEM", "TEAM", "USER"] = "USER"
     source_type: PLUGIN | Literal["federation"] | None = None
     entities: list[Entity] = Field(default_factory=list)
-    operator_groups: list[OperatorGroup] = Field(default_factory=list)
+    filters: list[OperatorGroup] = Field(default_factory=list)
+    assignments: list[Assignment] = Field(default_factory=list)
     joins: list[Join] = Field(default_factory=list)
     sort_columns: list[Sort] = Field(default_factory=list)
     limit: int | None = None
@@ -486,7 +492,7 @@ class Catalog(BaseModel):
         """
         Divides a federated master Catalog into plugin-specific child Catalogs.
         Each child carries only entities connected by internal joins within one system.
-        Cross-system joins and operator groups remain on the master for DuckDB to resolve.
+        Cross-system filters and assignments remain on the master for DuckDB to resolve.
         """
         if not self.entities:
             return []
@@ -535,10 +541,13 @@ class Catalog(BaseModel):
                     s for s in self.sort_columns
                     if s.column.locator and s.column.locator.entity_name in [e.name for e in cluster_entities]
                 ],
-                "operator_groups": [
-                    g for g in self.operator_groups
+                "filters": [
+                    g for g in self.filters
                     if _collect_plugins_from_group(g) == {plugin_name}
-                    # TODO: refine to only include groups referencing columns in this cluster
+                ],
+                "assignments": [
+                    a for a in self.assignments
+                    if a.column.locator and a.column.locator.plugin == plugin_name
                 ],
                 "limit": None,      # applied post-federation only
             })

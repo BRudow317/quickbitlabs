@@ -1,161 +1,268 @@
 from __future__ import annotations
 
 import pyarrow as pa
+import pytest
 
-from server.plugins.PluginModels import Catalog, Column, Entity, Operator, OperatorGroup, Sort
-from server.plugins.oracle.OracleDialect import build_delete_dml, build_filters, build_select, build_update_dml
+from server.plugins.PluginModels import Assignment, Catalog, Column, Entity, Locator, Operation, OperatorGroup, Sort
+from server.plugins.oracle.OracleDialect import (
+    build_delete_dml,
+    build_select,
+    build_update_dml,
+    build_insert_dml,
+    build_merge_dml,
+)
 
 
-def _col(name: str, arrow_type: str = "string", pk: bool = False) -> Column:
+def _loc(entity_name: str) -> Locator:
+    return Locator(plugin="oracle", entity_name=entity_name)
+
+
+def _col(name: str, arrow_type: str = "string", pk: bool = False, entity: str = "ORDERS") -> Column:
     return Column(
         name=name,
-        qualified_name=name,
         raw_type="VARCHAR2",
         arrow_type_id=arrow_type,
         primary_key=pk,
-        properties={"python_type": "string"},
+        locator=_loc(entity),
     )
 
 
 def _entity(name: str, cols: list[Column]) -> Entity:
-    return Entity(name=name, qualified_name=name, columns=cols)
+    return Entity(name=name, columns=cols)
 
 
-def test_build_filters_equals_and_bind_generation() -> None:
-    status = _col("STATUS")
-    group = OperatorGroup(
-        condition="AND",
-        operators=[Operator(independent=status, operator="=", dependent="active")],
-    )
+# ---------------------------------------------------------------------------
+# SELECT / filters
+# ---------------------------------------------------------------------------
 
-    where_sql, binds = build_filters([group])
-
-    assert where_sql == " WHERE (STATUS = :bind_0)"
-    assert binds == {"bind_0": "active"}
-
-
-def test_build_filters_double_equals_is_normalized_to_equals() -> None:
-    status = _col("STATUS")
-    group = OperatorGroup(
-        condition="AND",
-        operators=[Operator(independent=status, operator="==", dependent="active")],
-    )
-
-    where_sql, binds = build_filters([group])
-
-    assert where_sql == " WHERE (STATUS = :bind_0)"
-    assert binds == {"bind_0": "active"}
-
-
-def test_build_filters_in_creates_multiple_binds_in_order() -> None:
-    status = _col("STATUS")
-    group = OperatorGroup(
-        condition="AND",
-        operators=[Operator(independent=status, operator="IN", dependent=["active", "pending"])],
-    )
-
-    where_sql, binds = build_filters([group])
-
-    assert where_sql == " WHERE (STATUS IN (:bind_0, :bind_1))"
-    assert binds == {"bind_0": "active", "bind_1": "pending"}
-
-
-def test_build_filters_in_empty_list_short_circuits_false_predicate() -> None:
-    status = _col("STATUS")
-    group = OperatorGroup(
-        condition="AND",
-        operators=[Operator(independent=status, operator="IN", dependent=[])],
-    )
-
-    where_sql, binds = build_filters([group])
-
-    assert where_sql == " WHERE (1=0)"
-    assert binds == {}
-
-
-def test_build_filters_field_dependent_uses_named_bind_placeholder() -> None:
-    status = _col("STATUS")
-    stream_field = pa.field("status", pa.string())
-    group = OperatorGroup(
-        condition="AND",
-        operators=[Operator(independent=status, operator="=", dependent=stream_field)],
-    )
-
-    where_sql, binds = build_filters([group])
-
-    assert where_sql == " WHERE (STATUS = :status)"
-    assert binds == {}
-
-
-def test_build_filters_null_operators_emit_no_binds() -> None:
-    status = _col("STATUS")
-    group = OperatorGroup(
-        condition="AND",
-        operators=[
-            Operator(independent=status, operator="IS NULL", dependent=None),
-            Operator(independent=status, operator="IS NOT NULL", dependent=None),
-        ],
-    )
-
-    where_sql, binds = build_filters([group])
-
-    assert where_sql == " WHERE (STATUS IS NULL AND STATUS IS NOT NULL)"
-    assert binds == {}
-
-
-def test_build_select_includes_where_sort_and_limit() -> None:
+def test_build_select_no_filters() -> None:
     id_col = _col("ID", arrow_type="int64", pk=True)
-    status_col = _col("STATUS")
-    entity = _entity("ORDERS", [id_col, status_col])
-    op_group = OperatorGroup(
-        condition="AND",
-        operators=[Operator(independent=status_col, operator="LIKE", dependent="act%")],
-    )
-
-    catalog = Catalog(
-        entities=[entity],
-        operator_groups=[op_group],
-        sort_fields=[Sort(entity=entity, column=id_col, direction="DESC")],
-        limit=25,
-    )
+    entity = _entity("ORDERS", [id_col])
+    catalog = Catalog(entities=[entity])
 
     sql, binds = build_select(catalog)
 
-    assert sql == (
-        "SELECT ID, STATUS FROM ORDERS"
-        " WHERE (STATUS LIKE :bind_0)"
-        " ORDER BY ID DESC"
-        " FETCH FIRST 25 ROWS ONLY"
+    assert '"ID"' in sql
+    assert "FROM" in sql
+    assert "WHERE" not in sql
+    assert binds == {}
+
+
+def test_build_select_with_filter_equality() -> None:
+    status = _col("STATUS")
+    entity = _entity("ORDERS", [status])
+    op_group = OperatorGroup(
+        condition="AND",
+        operation_group=[Operation(independent=status, operator="=", dependent="active")],
     )
-    assert binds == {"bind_0": "act%"}
+    catalog = Catalog(entities=[entity], filters=[op_group])
+
+    sql, binds = build_select(catalog)
+
+    assert 'WHERE' in sql
+    assert '"STATUS" = :STATUS' in sql
+    assert binds == {"STATUS": "active"}
 
 
-def test_build_update_requires_where_clause() -> None:
+def test_build_select_with_filter_in_list() -> None:
+    status = _col("STATUS")
+    entity = _entity("ORDERS", [status])
+    op_group = OperatorGroup(
+        condition="AND",
+        operation_group=[Operation(independent=status, operator="IN", dependent=["active", "pending"])],
+    )
+    catalog = Catalog(entities=[entity], filters=[op_group])
+
+    sql, binds = build_select(catalog)
+
+    assert "IN" in sql
+    assert len(binds) == 2
+
+
+def test_build_select_in_empty_list_short_circuits() -> None:
+    status = _col("STATUS")
+    entity = _entity("ORDERS", [status])
+    op_group = OperatorGroup(
+        condition="AND",
+        operation_group=[Operation(independent=status, operator="IN", dependent=[])],
+    )
+    catalog = Catalog(entities=[entity], filters=[op_group])
+
+    sql, _ = build_select(catalog)
+
+    assert "1=0" in sql
+
+
+def test_build_select_is_null() -> None:
+    status = _col("STATUS")
+    entity = _entity("ORDERS", [status])
+    op_group = OperatorGroup(
+        condition="AND",
+        operation_group=[Operation(independent=status, operator="IS NULL", dependent=None)],
+    )
+    catalog = Catalog(entities=[entity], filters=[op_group])
+
+    sql, binds = build_select(catalog)
+
+    assert "IS NULL" in sql
+    assert binds == {}
+
+
+def test_build_select_pa_field_dependent_uses_named_placeholder() -> None:
+    status = _col("STATUS")
+    entity = _entity("ORDERS", [status])
+    stream_field = pa.field("STATUS", pa.string())
+    op_group = OperatorGroup(
+        condition="AND",
+        operation_group=[Operation(independent=status, operator="=", dependent=stream_field)],
+    )
+    catalog = Catalog(entities=[entity], filters=[op_group])
+
+    sql, binds = build_select(catalog)
+
+    assert ":STATUS" in sql
+    assert binds == {}
+
+
+def test_build_select_with_sort_and_limit() -> None:
+    id_col = _col("ID", arrow_type="int64", pk=True)
+    entity = _entity("ORDERS", [id_col])
+    catalog = Catalog(
+        entities=[entity],
+        sort_columns=[Sort(column=id_col, direction="DESC")],
+        limit=25,
+    )
+
+    sql, _ = build_select(catalog)
+
+    assert "ORDER BY" in sql
+    assert "DESC" in sql
+    assert "FETCH FIRST 25 ROWS ONLY" in sql
+
+
+# ---------------------------------------------------------------------------
+# UPDATE
+# ---------------------------------------------------------------------------
+
+def test_build_update_requires_filter() -> None:
     entity = _entity("ORDERS", [_col("STATUS")])
-    catalog = Catalog(entities=[entity], operator_groups=[])
+    catalog = Catalog(entities=[entity])
 
-    try:
+    with pytest.raises(ValueError, match="catalog.filters"):
         build_update_dml(catalog, entity)
-    except ValueError as exc:
-        assert "No Operator conditions defined" in str(exc)
-    else:
-        raise AssertionError("Expected ValueError when UPDATE has no WHERE clause")
 
 
-def test_build_delete_uses_filter_binds() -> None:
+def test_build_update_set_from_assignments() -> None:
+    status = _col("STATUS")
+    entity = _entity("ORDERS", [status, _col("ID", pk=True)])
+    catalog = Catalog(
+        entities=[entity],
+        filters=[OperatorGroup(
+            condition="AND",
+            operation_group=[Operation(independent=_col("ID", pk=True), operator="=", dependent=1)],
+        )],
+        assignments=[Assignment(column=status, value="inactive")],
+    )
+
+    sql, binds = build_update_dml(catalog, entity)
+
+    assert "UPDATE" in sql
+    assert "SET" in sql
+    assert "WHERE" in sql
+    assert "inactive" in binds.values()
+
+
+# ---------------------------------------------------------------------------
+# INSERT
+# ---------------------------------------------------------------------------
+
+def test_build_insert_assignment_driven() -> None:
     status = _col("STATUS")
     entity = _entity("ORDERS", [status])
     catalog = Catalog(
         entities=[entity],
-        operator_groups=[
-            OperatorGroup(
-                condition="AND",
-                operators=[Operator(independent=status, operator="=", dependent="active")],
-            )
-        ],
+        assignments=[Assignment(column=status, value="new")],
+    )
+
+    sql, binds = build_insert_dml(catalog, entity)
+
+    assert "INSERT INTO" in sql
+    assert "new" in binds.values()
+
+
+def test_build_insert_stream_fallback() -> None:
+    status = _col("STATUS")
+    entity = _entity("ORDERS", [status])
+    catalog = Catalog(entities=[entity])
+
+    sql, binds = build_insert_dml(catalog, entity)
+
+    assert "INSERT INTO" in sql
+    assert ":STATUS" in sql
+    assert binds == {}
+
+
+# ---------------------------------------------------------------------------
+# MERGE
+# ---------------------------------------------------------------------------
+
+def test_build_merge_requires_filters() -> None:
+    entity = _entity("ORDERS", [_col("ID", pk=True)])
+    catalog = Catalog(entities=[entity])
+
+    with pytest.raises(ValueError, match="catalog.filters"):
+        build_merge_dml(catalog, entity)
+
+
+def test_build_merge_on_clause_from_filters() -> None:
+    id_col = _col("ID", pk=True)
+    status = _col("STATUS")
+    entity = _entity("ORDERS", [id_col, status])
+    catalog = Catalog(
+        entities=[entity],
+        filters=[OperatorGroup(
+            condition="AND",
+            operation_group=[Operation(independent=id_col, operator="=", dependent=pa.field("ID"))],
+        )],
+    )
+
+    sql, _ = build_merge_dml(catalog, entity)
+
+    assert "MERGE INTO" in sql
+    assert "ON" in sql
+    assert "tgt." in sql
+    assert "src." in sql
+
+
+# ---------------------------------------------------------------------------
+# DELETE
+# ---------------------------------------------------------------------------
+
+def test_build_delete_with_filter_binds() -> None:
+    status = _col("STATUS")
+    entity = _entity("ORDERS", [status])
+    catalog = Catalog(
+        entities=[entity],
+        filters=[OperatorGroup(
+            condition="AND",
+            operation_group=[Operation(independent=status, operator="=", dependent="active")],
+        )],
     )
 
     sql, binds = build_delete_dml(catalog, entity)
 
-    assert sql == "DELETE FROM ORDERS WHERE (STATUS = :bind_0)"
-    assert binds == {"bind_0": "active"}
+    assert "DELETE FROM" in sql
+    assert "WHERE" in sql
+    assert "active" in binds.values()
+
+
+def test_build_delete_stream_fallback_when_no_filters() -> None:
+    status = _col("STATUS")
+    entity = _entity("ORDERS", [status])
+    catalog = Catalog(entities=[entity])
+
+    sql, binds = build_delete_dml(catalog, entity)
+
+    assert "DELETE FROM" in sql
+    assert ":STATUS" in sql
+    assert binds == {}

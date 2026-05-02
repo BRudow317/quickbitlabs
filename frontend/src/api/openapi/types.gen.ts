@@ -5,6 +5,19 @@ export type ClientOptions = {
 };
 
 /**
+ * Assignment
+ *
+ * A scalar mutation: column = value. The operator is implicit — being in catalog.assignments means assignment.
+ */
+export type Assignment = {
+    column: Column;
+    /**
+     * Value
+     */
+    value: string | Array<unknown> | Column | null;
+};
+
+/**
  * Body_create_data_api_data_insert_put
  */
 export type BodyCreateDataApiDataInsertPut = {
@@ -161,9 +174,13 @@ export type CatalogInput = {
      */
     entities?: Array<Entity>;
     /**
-     * Operator Groups
+     * Filters
      */
-    operator_groups?: Array<OperatorGroupInput>;
+    filters?: Array<OperatorGroupInput>;
+    /**
+     * Assignments
+     */
+    assignments?: Array<Assignment>;
     /**
      * Joins
      */
@@ -237,9 +254,13 @@ export type CatalogOutput = {
      */
     entities?: Array<Entity>;
     /**
-     * Operator Groups
+     * Filters
      */
-    operator_groups?: Array<OperatorGroupOutput>;
+    filters?: Array<OperatorGroupOutput>;
+    /**
+     * Assignments
+     */
+    assignments?: Array<Assignment>;
     /**
      * Joins
      */
@@ -565,15 +586,13 @@ export type MigrationResult = {
 
 /**
  * Operation
- *
- * The single equal sign '=' is an assignment operator, it is not an equality operator.
  */
 export type Operation = {
     independent: Column;
     /**
      * Operator
      */
-    operator: '=' | '==' | '!=' | '>' | '<' | '>=' | '<=' | 'IN' | 'NOT IN' | 'LIKE' | 'NOT LIKE' | 'BETWEEN' | 'NOT BETWEEN' | 'IS NULL' | 'IS NOT NULL';
+    operator: '=' | '!=' | '>' | '<' | '>=' | '<=' | 'IN' | 'NOT IN' | 'LIKE' | 'NOT LIKE' | 'BETWEEN' | 'NOT BETWEEN' | 'IS NULL' | 'IS NOT NULL';
     /**
      * Dependent
      */
