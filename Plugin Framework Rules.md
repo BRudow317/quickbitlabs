@@ -31,8 +31,8 @@ ArrowReader: TypeAlias = pa.RecordBatchReader | RecordBatchStreamReader | Record
   - DuckDB is the query system for cross plugin aka cross system data actions, allowing for more complex transformations and in-memory operations on the ArrowReader without needing to regress to Python objects.
 
 ### Catalog Fanout & Predicate Pushdown:
-  - **Fanout (implemented)**: `Catalog.federate` splits a master Catalog into per-plugin child Catalogs using a connected-component algorithm on internal joins. Each child receives only the entities and `operator_groups` that belong to its plugin. This is the predicate pushdown — filters that can be resolved at the source are embedded in the child Catalog before the plugin is called, so each system only retrieves rows that match its own conditions.
-  - **Reconstitution (not yet fully implemented)**: After each plugin returns its `ArrowReader`, the results must be joined back together in-memory by DuckDB to resolve cross-system joins and apply the master `limit`. `duckdb_orchestrator()` in `server/core/federation.py` is the planned home for this. Operator groups that reference columns across multiple plugins are held on the master Catalog and must be applied here rather than pushed down.
+  - **Fanout (implemented)**: `Catalog.federate` splits a master Catalog into per-plugin child Catalogs using a connected-component algorithm on internal joins. Each child receives only the entities and `filters` that belong to its plugin. This is the predicate pushdown — filters that can be resolved at the source are embedded in the child Catalog before the plugin is called, so each system only retrieves rows that match its own conditions.
+  - **Reconstitution (not yet fully implemented)**: After each plugin returns its `ArrowReader`, the results must be joined back together in-memory by DuckDB to resolve cross-system joins and apply the master `limit`. `duckdb_orchestrator()` in `server/core/federation.py` is the planned home for this. Filters that reference columns across multiple plugins are held on the master Catalog and must be applied here rather than pushed down.
 ```python
 class Catalog(BaseModel):
     ...all the class stuff...
@@ -42,7 +42,7 @@ class Catalog(BaseModel):
         """
         Divides a federated master Catalog into plugin-specific child Catalogs.
         Each child carries only entities connected by internal joins within one system.
-        Cross-system joins and operator groups remain on the master for DuckDB to resolve.
+        Cross-system joins and filters remain on the master for DuckDB to resolve.
         """
         if not self.entities:
             return []
@@ -91,8 +91,8 @@ class Catalog(BaseModel):
                     s for s in self.sort_columns
                     if s.column.locator and s.column.locator.entity_name in [e.name for e in cluster_entities]
                 ],
-                "operator_groups": [
-                    g for g in self.operator_groups
+                "filters": [
+                    g for g in self.filters
                     if _collect_plugins_from_group(g) == {plugin_name}
                     # TODO: refine to only include groups referencing columns in this cluster
                 ],
@@ -258,8 +258,6 @@ While the Oracle Plugin is currently used for raw structural migrations, future 
 
 ---
 
----
-
 ## Key Project Files
 
 ### Core Framework (do not modify without permission)
@@ -285,7 +283,6 @@ While the Oracle Plugin is currently used for raw structural migrations, future 
 - **frontend/src/pages/DataMartPage.tsx** - Entity browser + Catalog query builder + results table
 - **frontend/src/pages/MigrationPage.tsx** - Migration manager
 - **frontend/src/layouts/AppLayout.tsx** - Authenticated nav layout
-
 
 ## Additional Paths:
 - server/ - backend application code
@@ -411,7 +408,7 @@ class Entity(BaseModel):
 ---
 
 ## Catalog
-Catalog represents a collection of entities, joins, operator groups, and other metadata that defines a data source or schema. Catalog also represents an internal system query, or a cross system query. 
+Catalog represents a collection of entities, joins, filters, and other metadata that defines a data source or schema. Catalog also represents an internal system query, or a cross system query. 
 
 In Summary Catalog represents a collection of metadata and context. That collection can include 0, 1, or many entities (tables), and the relationships between them.
 
@@ -445,7 +442,7 @@ class Catalog(BaseModel):
 ```
 Catalog is the top-level wrapper. It may be called schema, namespace, database, etc. in different systems, but the concept is the same: a container for entities/objects/tables sharing the same namespace.
 
-The Catalog is the core contract of the plugin system. It may contain no entities, or one, or many. It may contain operator groups for filtering, sort fields for ordering, and a limit for constraining the result set. The Catalog is the universal way to pass along all the contextual information about what data you want to interact with, and how you want to interact with it.
+The Catalog is the core contract of the plugin system. It may contain no entities, or one, or many. It may contain filters for selection, sort fields for ordering, and a limit for constraining the result set. The Catalog is the universal way to pass along all the contextual information about what data you want to interact with, and how you want to interact with it.
 
 It may be populated with all entities and columns, or just the relevant ones needed for a specific operation. 
 
