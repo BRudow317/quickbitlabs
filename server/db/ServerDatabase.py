@@ -38,18 +38,18 @@ class ServerDatabase:
         return True
     
     def __init__(self,
-        oracle_user: str = os.getenv('ORACLE_USER') or '',
-        oracle_pass: str = os.getenv('ORACLE_PASS') or '',
-        oracle_host: str = os.getenv('ORACLE_HOST') or '',
+        oracle_user: str = os.getenv('ORACLE_QBL_USER') or '',
+        oracle_pass: str = os.getenv('ORACLE_QBL_PASS') or '',
+        oracle_host: str = os.getenv('ORACLE_QBL_HOST') or '',
         oracle_port: int | str | None = None,
-        oracle_service: str = os.getenv('ORACLE_SERVICE') or ''
+        oracle_service: str = os.getenv('ORACLE_QBL_SERVICE') or ''
     ) -> None:
         if oracle_port is None:
-            env_port = os.getenv('ORACLE_PORT') or ''
+            env_port = os.getenv('ORACLE_QBL_PORT') or ''
             try:
                 oracle_port = int(env_port) if env_port else 0
             except ValueError:
-                logger.warning("Ignoring invalid ORACLE_PORT value: %r", env_port)
+                logger.warning("Ignoring invalid ORACLE_QBL_PORT value: %r", env_port)
                 oracle_port = 0
 
         self._oracle_user = oracle_user
@@ -58,6 +58,9 @@ class ServerDatabase:
         self._oracle_port = int(oracle_port)
         self._oracle_service = oracle_service
         self._current_connection = None
+
+        if not all([self._oracle_user, self._oracle_pass, self._oracle_host, self._oracle_service]):
+            raise ValueError(f"Missing required Server Database connection parameters: {self.__repr__()}")
     
     def __repr__(self) -> str:
         return (
@@ -69,7 +72,7 @@ class ServerDatabase:
         )
     def _new_connect(self) -> None:
         try:
-            if self._oracle_user == '' or self._oracle_pass == '' or self._oracle_host == '' or self._oracle_service == '':
+            if not all([self._oracle_user, self._oracle_pass, self._oracle_host, self._oracle_service]):
                 raise ValueError(f"Missing required Oracle connection parameters: {self.__repr__()}")
 
             self._current_connection = oracledb.connect(

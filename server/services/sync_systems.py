@@ -53,7 +53,7 @@ def sync_all() -> dict[str, str]:
                 continue
 
             catalog: Catalog = response.data
-            registry.save(owner="SYSTEM", registry_key=plugin_name, catalog=catalog)
+            registry.save(owner="SYSTEM", catalog=catalog)
             results[plugin_name] = "ok"
             logger.info(f"sync_systems: {plugin_name} → ok ({len(catalog.entities)} entities)")
         except Exception as exc:
