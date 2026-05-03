@@ -13,10 +13,8 @@ class UserUpdate(BaseModel):
 
 class UserOut(UserBase):
     """Safe API response shape - no credentials."""
-    external_id: str | None = None
     role: str = "user"
 
 class User(UserOut):
     """Internal server-side model - includes auth fields, never serialised directly."""
-    hashed_password: str = ""
     is_active: bool = True

@@ -17,10 +17,12 @@ python "Q:/scripts/boot.py" -v  -l ./.logs --env homelab --config Q:/.secrets/.e
 7. [TanStack: react-query, react-table, react-form](https://tanstack.com/)
 8. [React Router](https://reactrouter.com/)
 9. [React Icons](https://react-icons.github.io/react-icons/)
-10. [Axios](https://axios-http.com/)
-11. [Zod](https://zod.dev/)
-12. [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
-13. [Radix UI](https://www.radix-ui.com/)
+10. [React-querybuilder](https://react-querybuilder.js.org/)
+11. [Axios](https://axios-http.com/)
+12. [Zod](https://zod.dev/)
+13. [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+14. [shadcn/ui](https://ui.shadcn.com/)
+15. [Radix UI](https://www.radix-ui.com/)
 
 # Backend Documentation
 1. [Python](https://docs.python.org/3.13/py-modindex.html)
@@ -39,8 +41,41 @@ python "Q:/scripts/boot.py" -v  -l ./.logs --env homelab --config Q:/.secrets/.e
 14. [Apache Arrow](https://arrow.apache.org/)
 15. [Pandas](https://pandas.pydata.org/)
 16. [Polars](https://www.pola.rs/)
-17. [NumPy](https://numpy.org/)
-18. [Docker](https://www.docker.com/)
-19. [Docker Compose](https://docs.docker.com/compose/)
-20. [Arrow Flight SQL:](https://arrow.apache.org/blog/2022/02/16/introducing-arrow-flight-sql/)
-21. [DuckDB Python API Reference:](https://duckdb.org/docs/current/clients/python/overview/)
+17. [Docker](https://www.docker.com/)
+18. [Docker Compose](https://docs.docker.com/compose/)
+19. [DuckDB Python API Reference:](https://duckdb.org/docs/current/clients/python/overview/)
+
+## [The Twelve Factors](https://www.12factor.net/)
+### [I. Codebase](https://www.12factor.net/codebase)
+One codebase tracked in revision control, many deploys
+### [II. Dependencies](https://www.12factor.net/dependencies)
+Explicitly declare and isolate dependencies
+### [III. Config](https://www.12factor.net/config)
+Store config in the environment
+### [IV. Backing services](https://www.12factor.net/backing-services)
+Treat backing services as attached resources
+### [V. Build, release, run](https://www.12factor.net/build-release-run)
+Strictly separate build and run stages
+### [VI. Processes](https://www.12factor.net/processes)
+Execute the app as one or more stateless processes
+### [VII. Port binding](https://www.12factor.net/port-binding)
+Export services via port binding
+### [VIII. Concurrency](https://www.12factor.net/concurrency)
+Scale out via the process model
+### [IX. Disposability](https://www.12factor.net/disposability)
+Maximize robustness with fast startup and graceful shutdown
+### [X. Dev/prod parity](https://www.12factor.net/dev-prod-parity)
+Keep development, staging, and production as similar as possible
+### [XI. Logs](https://www.12factor.net/logs)
+Treat logs as event streams
+### [XII. Admin processes](https://www.12factor.net/admin-processes)
+Run admin/management tasks as one-off processes
+
+## Removed
+1. [NumPy](https://numpy.org/)
+2. [SQLAlchemy](https://www.sqlalchemy.org/)
+3. [Pandas](https://pandas.pydata.org/)
+
+
+## For Later
+1. [Arrow Flight SQL](https://arrow.apache.org/blog/2022/02/16/introducing-arrow-flight-sql/)

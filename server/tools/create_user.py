@@ -19,9 +19,9 @@ import re
 import sys
 from pathlib import Path
 
-# ---------------------------------------------------------------------------
+# ===================================================
 # .env loader with ${env} substitution
-# ---------------------------------------------------------------------------
+# ===================================================
 
 def _load_env(config_path: str, env_name: str) -> dict[str, str]:
     raw = Path(config_path).read_text(encoding="utf-8")
@@ -47,9 +47,9 @@ def _load_env(config_path: str, env_name: str) -> dict[str, str]:
     return {k: _resolve(v) for k, v in result.items()}
 
 
-# ---------------------------------------------------------------------------
+# ===================================================
 # Main
-# ---------------------------------------------------------------------------
+# ===================================================
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Create or update a user in the USER table")
@@ -83,16 +83,16 @@ def main() -> int:
     hashed = get_password_hash(args.password)
     con = server_db.connect()
 
-    # MERGE: update HASHED_PASSWORD if USERNAME exists, insert new row otherwise
+    # MERGE: update password_hash if USERNAME exists, insert new row otherwise
     merge_sql = """
-        MERGE INTO "USER" tgt
+        MERGE INTO QBL_USERS tgt
         USING (SELECT :username AS USERNAME FROM DUAL) src
         ON (tgt.USERNAME = src.USERNAME)
         WHEN MATCHED THEN
-            UPDATE SET HASHED_PASSWORD = :hashed,
-                       IS_ACTIVE       = 1
+            UPDATE SET password_hash = :hashed,
+                       IS_ACTIVE     = 1
         WHEN NOT MATCHED THEN
-            INSERT (USERNAME, EMAIL, HASHED_PASSWORD, IS_ACTIVE)
+            INSERT (USERNAME, EMAIL, password_hash, IS_ACTIVE)
             VALUES (:username, :email, :hashed, 1)
     """
     with con.cursor() as cur:

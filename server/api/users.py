@@ -12,7 +12,7 @@ def get_user(current_user: User = Depends(get_current_user)):
     return UserOut(
         username=current_user.username,
         email=current_user.email,
-        external_id=current_user.external_id,
+        role=current_user.role,
     )
 
 
@@ -25,7 +25,7 @@ def update_user(
         con = server_db.connect()
         with con.cursor() as cur:
             cur.execute(
-                'UPDATE "USER" SET EMAIL = :email WHERE USERNAME = :username',
+                "UPDATE QBL_USERS SET EMAIL = :email WHERE USERNAME = :username",
                 email=update.email,
                 username=current_user.username,
             )
@@ -34,5 +34,5 @@ def update_user(
     return UserOut(
         username=current_user.username,
         email=update.email if update.email is not None else current_user.email,
-        external_id=current_user.external_id,
+        role=current_user.role,
     )

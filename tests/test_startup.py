@@ -1,11 +1,6 @@
 from __future__ import annotations
 
 import os
-import runpy
-import subprocess
-import sys
-import types
-from pathlib import Path
 
 import pytest
 from pydantic import ValidationError
@@ -55,14 +50,14 @@ def test_settings_loads_successfully_when_required_vars_present(monkeypatch: pyt
 # ---------------------------------------------------------------------------
 
 def test_ensure_jwt_secret_preserves_existing_secret(monkeypatch: pytest.MonkeyPatch) -> None:
-	import build_server
+	import build.build_server as build_server
 	monkeypatch.setenv("JWT_SECRET", "already-set-strong-secret")
 	build_server._ensure_jwt_secret()
 	assert os.environ["JWT_SECRET"] == "already-set-strong-secret"
 
 
 def test_ensure_jwt_secret_replaces_placeholder(monkeypatch: pytest.MonkeyPatch) -> None:
-	import build_server
+	import build.build_server as build_server
 	monkeypatch.setenv("JWT_SECRET", build_server._PLACEHOLDER)
 	monkeypatch.setattr(build_server.secrets, "token_urlsafe", lambda _: "fresh-generated-key")
 	build_server._ensure_jwt_secret()
@@ -70,7 +65,7 @@ def test_ensure_jwt_secret_replaces_placeholder(monkeypatch: pytest.MonkeyPatch)
 
 
 def test_ensure_jwt_secret_generates_when_missing(monkeypatch: pytest.MonkeyPatch) -> None:
-	import build_server
+	import build.build_server as build_server
 	monkeypatch.delenv("JWT_SECRET", raising=False)
 	monkeypatch.setattr(build_server.secrets, "token_urlsafe", lambda _: "fresh-generated-key")
 	build_server._ensure_jwt_secret()
@@ -78,30 +73,19 @@ def test_ensure_jwt_secret_generates_when_missing(monkeypatch: pytest.MonkeyPatc
 
 
 # ---------------------------------------------------------------------------
-# Hot-reload sentinel: build step control flow
+# build_process: control flow
 # ---------------------------------------------------------------------------
 
-@pytest.fixture
-def fake_uvicorn(monkeypatch: pytest.MonkeyPatch) -> list[dict[str, object]]:
-	calls: list[dict[str, object]] = []
-
-	def fake_run(app: str, host: str, port: int, reload: bool) -> None:
-		calls.append({"app": app, "host": host, "port": port, "reload": reload})
-
-	monkeypatch.setitem(sys.modules, "uvicorn", types.SimpleNamespace(run=fake_run))
-	return calls
-
-
-def test_build_process_generates_ephemeral_secret_and_marks_completion(
+def test_build_process_calls_check_db_and_npm_then_sets_sentinel(
 	monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-	import build_server
+	import build.build_server as build_server
 
 	calls: list[tuple[str, str | None]] = []
 
 	monkeypatch.delenv("JWT_SECRET", raising=False)
 	monkeypatch.delenv("_BUILD_STEP_COMPLETED", raising=False)
-	monkeypatch.setattr(build_server, "_check_db", lambda: calls.append(("db", None)) or True)
+	monkeypatch.setattr(build_server, "_check_db", lambda: calls.append(("db", None)))
 	monkeypatch.setattr(build_server, "_npm", lambda script: calls.append(("npm", script)))
 	monkeypatch.setattr(build_server.secrets, "token_urlsafe", lambda _: "ephemeral-test-secret")
 
@@ -112,43 +96,19 @@ def test_build_process_generates_ephemeral_secret_and_marks_completion(
 	assert calls == [("db", None), ("npm", "build")]
 
 
-def test_main_entry_skips_build_steps_when_hot_reload_sentinel_present(
+def test_build_process_skips_all_steps_when_sentinel_is_set(
 	monkeypatch: pytest.MonkeyPatch,
-	fake_uvicorn: list[dict[str, object]],
 ) -> None:
-	main_path = Path(__file__).resolve().parents[1] / "boot_server.py"
+	import build.build_server as build_server
 
-	class FakeConnection:
-		is_healthy = True
-
-	class FakeServerDb:
-		def connect(self) -> FakeConnection:
-			raise AssertionError("build step should be skipped when sentinel is set")
-
-	fake_server_module = types.ModuleType("server")
-	fake_db_package = types.ModuleType("server.db")
-	fake_db_module = types.ModuleType("server.db.db")
-	setattr(fake_db_module, "server_db", FakeServerDb())
-
-	monkeypatch.setitem(sys.modules, "server", fake_server_module)
-	monkeypatch.setitem(sys.modules, "server.db", fake_db_package)
-	monkeypatch.setitem(sys.modules, "server.db.db", fake_db_module)
-	monkeypatch.setattr(
-		subprocess,
-		"run",
-		lambda *args, **kwargs: (_ for _ in ()).throw(
-			AssertionError("npm build should be skipped when sentinel is set")
-		),
-	)
 	monkeypatch.setenv("_BUILD_STEP_COMPLETED", "1")
-	monkeypatch.delenv("JWT_SECRET", raising=False)
+	monkeypatch.setattr(
+		build_server, "_check_db",
+		lambda: (_ for _ in ()).throw(AssertionError("_check_db must not be called")),
+	)
+	monkeypatch.setattr(
+		build_server, "_npm",
+		lambda _: (_ for _ in ()).throw(AssertionError("_npm must not be called")),
+	)
 
-	runpy.run_path(str(main_path), run_name="__main__")
-
-	assert "JWT_SECRET" not in os.environ
-	assert fake_uvicorn == [{
-		"app": "server.start_server:app",
-		"host": "0.0.0.0",
-		"port": 8000,
-		"reload": True,
-	}]
+	build_server.build_process(mode="development")  # should return immediately, no assertions raised

@@ -13,7 +13,7 @@ import {
 import { cn } from "@/lib/utils"
 import type { Column, Entity, Operation, OperatorGroup } from "@/api/sessionApi"
 
-// ── UI-layer types (carry React keys, raw string values) ───────────────────────
+// -- UI-layer types (carry React keys, raw string values) -----------------------
 
 type Combinator = "AND" | "OR" | "NOT"
 
@@ -39,7 +39,7 @@ interface UIGroup {
   groups: UIGroup[]
 }
 
-// ── Operator metadata ──────────────────────────────────────────────────────────
+// -- Operator metadata ----------------------------------------------------------
 
 const OPERATORS: { value: FilterOp; label: string }[] = [
   { value: "=",           label: "equals" },
@@ -64,7 +64,7 @@ const LIST_VALUE_OPS = new Set<FilterOp>(["IN", "NOT IN"])
 
 const COMBINATORS: Combinator[] = ["AND", "OR", "NOT"]
 
-// ── Factory helpers ────────────────────────────────────────────────────────────
+// -- Factory helpers ------------------------------------------------------------
 
 function uid() { return Math.random().toString(36).slice(2) }
 
@@ -76,7 +76,7 @@ function makeGroup(combinator: Combinator = "AND"): UIGroup {
   return { id: uid(), combinator, conditions: [makeCondition()], groups: [] }
 }
 
-// ── Serialization to backend OperatorGroup ─────────────────────────────────────
+// -- Serialization to backend OperatorGroup -------------------------------------
 // Operation.independent is a full Column object (the backend contract).
 // Operation.dependent is the comparison value.
 // OperatorGroup.condition is "AND" | "OR" | "NOT".
@@ -118,7 +118,7 @@ function hasContent(group: UIGroup): boolean {
   )
 }
 
-// ── FilterConditionRow ─────────────────────────────────────────────────────────
+// -- FilterConditionRow ---------------------------------------------------------
 
 interface ConditionRowProps {
   condition: UICondition
@@ -213,7 +213,7 @@ function FilterConditionRow({ condition, availableColumns, onChange, onRemove }:
   )
 }
 
-// ── FilterGroupNode (recursive) ────────────────────────────────────────────────
+// -- FilterGroupNode (recursive) ------------------------------------------------
 
 interface GroupNodeProps {
   group: UIGroup
@@ -325,7 +325,7 @@ function FilterGroupNode({ group, availableColumns, isRoot, onUpdate, onRemove }
   )
 }
 
-// ── FilterBuilder (public export) ──────────────────────────────────────────────
+// -- FilterBuilder (public export) ----------------------------------------------
 
 interface FilterBuilderProps {
   selectedEntities: Entity[]

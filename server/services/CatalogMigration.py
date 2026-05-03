@@ -58,9 +58,9 @@ class CatalogMigration:
         self.source_kwargs = source_kwargs or {}
         self.target_kwargs = target_kwargs or {}
 
-    # ------------------------------------------------------------------
+    # ================================================
     # Step 1: Discovery
-    # ------------------------------------------------------------------
+    # ================================================
 
     def get_catalog(self) -> None:
         """Discover source schema (entity list + columns)."""
@@ -70,9 +70,9 @@ class CatalogMigration:
             raise RuntimeError(f"Source discovery failed [{resp.code}]: {resp.message}")
         self.source_catalog = resp.data
 
-    # ------------------------------------------------------------------
+    # ================================================
     # Step 2: Schema Mapping + DDL
-    # ------------------------------------------------------------------
+    # ================================================
 
     def upsert_catalog(self) -> Catalog:
         """Map source schema to target-native entities and execute DDL to align target.
@@ -116,9 +116,9 @@ class CatalogMigration:
             raise RuntimeError(f"Target DDL failed [{resp.code}]: {resp.message}")
         return self.target_catalog
 
-    # ------------------------------------------------------------------
+    # ================================================
     # Step 3: Data Migration
-    # ------------------------------------------------------------------
+    # ================================================
 
     def upsert_data(self) -> list[dict[str, Any]]:
         """Extract from source entity by entity, upsert into target.

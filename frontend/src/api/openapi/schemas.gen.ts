@@ -350,7 +350,7 @@ export const Catalog_InputSchema = {
             ],
             title: 'Offset'
         },
-        owner_username: {
+        owner_user_id: {
             anyOf: [
                 {
                     type: 'string'
@@ -359,7 +359,7 @@ export const Catalog_InputSchema = {
                     type: 'null'
                 }
             ],
-            title: 'Owner Username'
+            title: 'Owner User Id'
         },
         team_id: {
             anyOf: [
@@ -532,7 +532,7 @@ export const Catalog_OutputSchema = {
             ],
             title: 'Offset'
         },
-        owner_username: {
+        owner_user_id: {
             anyOf: [
                 {
                     type: 'string'
@@ -541,7 +541,7 @@ export const Catalog_OutputSchema = {
                     type: 'null'
                 }
             ],
-            title: 'Owner Username'
+            title: 'Owner User Id'
         },
         team_id: {
             anyOf: [
@@ -1478,17 +1478,6 @@ export const UserOutSchema = {
         email: {
             type: 'string',
             title: 'Email'
-        },
-        external_id: {
-            anyOf: [
-                {
-                    type: 'string'
-                },
-                {
-                    type: 'null'
-                }
-            ],
-            title: 'External Id'
         },
         role: {
             type: 'string',

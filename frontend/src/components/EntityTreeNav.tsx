@@ -4,7 +4,7 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { cn } from "@/lib/utils"
 import type { Entity } from "@/api/sessionApi"
 
-// ── Helpers ────────────────────────────────────────────────────────────────────
+// -- Helpers --------------------------------------------------------------------
 
 function getSource(entity: Entity): string {
   return entity.plugin ?? entity.columns?.[0]?.locator?.plugin ?? "unknown"
@@ -14,7 +14,7 @@ function titleCase(s: string) {
   return s.charAt(0).toUpperCase() + s.slice(1)
 }
 
-// ── Component ──────────────────────────────────────────────────────────────────
+// -- Component ------------------------------------------------------------------
 
 interface EntityTreeNavProps {
   entities: Entity[]
@@ -85,7 +85,7 @@ export function EntityTreeNav({ entities, selectedNames, onToggle, isLoading }: 
 
         return (
           <div key={source}>
-            {/* ── Source header ── */}
+            {/* -- Source header -- */}
             <button
               className="flex w-full items-center gap-1.5 rounded-md px-2 py-1.5 text-xs font-semibold
                          hover:bg-accent hover:text-accent-foreground transition-colors"
@@ -101,7 +101,7 @@ export function EntityTreeNav({ entities, selectedNames, onToggle, isLoading }: 
               </span>
             </button>
 
-            {/* ── Entity rows ── */}
+            {/* -- Entity rows -- */}
             {isOpen && (
               <div className="ml-3 space-y-0.5 border-l border-border/50 pl-2">
                 {entities.map(entity => {

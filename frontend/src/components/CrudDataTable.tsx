@@ -22,7 +22,7 @@ import { useToast } from "@/context/ToastContext"
 import { upsertData, deleteData, type Entity, type Catalog } from "@/api/sessionApi"
 import { cn } from "@/lib/utils"
 
-// ── Row state ──────────────────────────────────────────────────────────────────
+// -- Row state ------------------------------------------------------------------
 
 type RowState = "pristine" | "dirty" | "new"
 
@@ -38,7 +38,7 @@ function toManaged(rows: Record<string, unknown>[]): ManagedRow[] {
   return rows.map(r => ({ ...r, _id: uid(), _state: "pristine" as RowState }))
 }
 
-// ── Component ──────────────────────────────────────────────────────────────────
+// -- Component ------------------------------------------------------------------
 
 interface CrudDataTableProps {
   columns: string[]
@@ -73,7 +73,7 @@ export function CrudDataTable({
   const [saving, setSaving] = React.useState(false)
   const { toast } = useToast()
 
-  // ── Derived ────────────────────────────────────────────────────────────────
+  // -- Derived ----------------------------------------------------------------
 
   const dirtyRows = rows.filter(r => r._state !== "pristine")
   const newCount = dirtyRows.filter(r => r._state === "new").length
@@ -82,7 +82,7 @@ export function CrudDataTable({
   const someChecked = selected.size > 0 && !allChecked
   const targetEntity = availableEntities.find(e => e.name === target)
 
-  // ── Editing ────────────────────────────────────────────────────────────────
+  // -- Editing ----------------------------------------------------------------
 
   function startEdit(rowId: string, col: string, val: unknown) {
     setEditing({ rowId, col })
@@ -108,7 +108,7 @@ export function CrudDataTable({
     if (e.key === "Escape") { e.preventDefault(); cancelEdit() }
   }
 
-  // ── Row management ─────────────────────────────────────────────────────────
+  // -- Row management ---------------------------------------------------------
 
   function addRow() {
     const row: ManagedRow = { _id: uid(), _state: "new" }
@@ -116,7 +116,7 @@ export function CrudDataTable({
     setRows(prev => [...prev, row])
   }
 
-  // ── Column management ──────────────────────────────────────────────────────
+  // -- Column management ------------------------------------------------------
 
   function confirmAddCol() {
     const name = newColName.trim()
@@ -129,7 +129,7 @@ export function CrudDataTable({
 
   function cancelAddCol() { setAddingCol(false); setNewColName("") }
 
-  // ── Selection ──────────────────────────────────────────────────────────────
+  // -- Selection --------------------------------------------------------------
 
   function toggleRow(id: string) {
     setSelected(prev => {
@@ -145,7 +145,7 @@ export function CrudDataTable({
     )
   }
 
-  // ── Write operations ───────────────────────────────────────────────────────
+  // -- Write operations -------------------------------------------------------
 
   function makeCatalog(): Catalog | null {
     if (!targetEntity) return null
@@ -197,11 +197,11 @@ export function CrudDataTable({
     }
   }
 
-  // ── Render ─────────────────────────────────────────────────────────────────
+  // -- Render -----------------------------------------------------------------
 
   return (
     <div className="flex flex-col rounded-md border bg-background">
-      {/* ── Toolbar ── */}
+      {/* -- Toolbar -- */}
       <div className="flex flex-wrap items-center gap-2 px-3 py-2 border-b">
         {/* Left: row / column actions */}
         <Button size="sm" variant="outline" className="h-7 text-xs" onClick={addRow} disabled={saving}>
@@ -289,7 +289,7 @@ export function CrudDataTable({
         </div>
       </div>
 
-      {/* ── Table ── */}
+      {/* -- Table -- */}
       <div className="w-full overflow-auto" style={{ maxHeight }}>
         <Table>
           <TableHeader className="sticky top-0 z-10 bg-muted/50 backdrop-blur-sm">
@@ -368,7 +368,7 @@ export function CrudDataTable({
         </Table>
       </div>
 
-      {/* ── Status bar ── */}
+      {/* -- Status bar -- */}
       <div className="flex items-center gap-4 px-3 py-1 border-t text-[10px] text-muted-foreground">
         <span>{rows.length} rows</span>
         {selected.size > 0 && <span>{selected.size} selected</span>}

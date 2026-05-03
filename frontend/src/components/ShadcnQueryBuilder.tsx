@@ -56,7 +56,7 @@ export function ShadcnQueryBuilder({
       </CardHeader>
 
       <CardContent className="p-0">
-        {/* ── Top: entity nav (left) + selections (right) ── */}
+        {/* -- Top: entity nav (left) + selections (right) -- */}
         <div className="flex min-h-50 border-b">
           {/* Left: source → entity tree */}
           <div className="w-52 shrink-0 overflow-y-auto border-r p-3" style={{ maxHeight: 300 }}>
@@ -121,21 +121,21 @@ export function ShadcnQueryBuilder({
           </div>
         </div>
 
-        {/* ── Joins (2+ entities) ── */}
+        {/* -- Joins (2+ entities) -- */}
         {hasMultiple && (
           <div className="border-b px-4 py-3">
             <JoinBuilder selectedEntities={selectedEntities} onChange={onJoinsChange} />
           </div>
         )}
 
-        {/* ── Filters ── */}
+        {/* -- Filters -- */}
         {hasEntities && (
           <div className="border-b px-4 py-3">
             <FilterBuilder selectedEntities={selectedEntities} onChange={onFilterGroupsChange} />
           </div>
         )}
 
-        {/* ── Sort ── */}
+        {/* -- Sort -- */}
         {hasEntities && (
           <div className="px-4 py-3">
             <SortBuilder selectedEntities={selectedEntities} onChange={onSortColumnsChange} />

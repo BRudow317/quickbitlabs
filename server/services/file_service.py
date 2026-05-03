@@ -111,9 +111,9 @@ def process_upload(
     return final_catalog, all_tables[0]
 
 
-# ---------------------------------------------------------------------------
+# ================================================---------
 # Internal readers
-# ---------------------------------------------------------------------------
+# ================================================---------
 
 def _read_excel(path: Path) -> tuple[Catalog, list[pa.Table]]:
     """Read all worksheets from an Excel file via the excel plugin."""

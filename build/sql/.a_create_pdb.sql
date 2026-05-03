@@ -1,0 +1,7 @@
+CREATE PLUGGABLE DATABASE QBLPDB 
+ADMIN USER BRUDOW IDENTIFIED BY "UserPassword123" 
+FILE_NAME_CONVERT = (
+    '/opt/oracle/oradata/QBL/QBLPDB/pdbseed.dbf', 
+    '/opt/oracle/oradata/QBL/QBLPDB/qblpdb.dbf'
+    );
+ALTER PLUGGABLE DATABASE QBLPDB OPEN;

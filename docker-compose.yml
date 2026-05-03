@@ -1,0 +1,12 @@
+services:
+  oracle19c:
+    image: container-registry.oracle.com/database/enterprise:19.3.0.0
+    container_name: dev
+    environment:
+      - ORACLE_PWD=MySuperSecretPassword123!
+      - ORACLE_PDB=QBLPDB
+      - ORACLE_CHARACTERSET=AL32UTF8
+    ports:
+      - "1521:1521"
+    volumes:
+      - ./build/sql:/opt/oracle/scripts/setup

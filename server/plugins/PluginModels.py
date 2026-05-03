@@ -322,7 +322,7 @@ class Catalog(BaseModel):
     sort_columns: list[Sort] = Field(default_factory=list)
     limit: int | None = None
     offset: int | None = None
-    owner_username: str | None = None
+    owner_user_id: str | None = None
     team_id: str | None = None
     properties: dict[str, Any] = Field(default_factory=dict)
     

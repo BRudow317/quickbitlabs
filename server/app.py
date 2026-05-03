@@ -1,21 +1,18 @@
 """python "Q:/scripts/boot.py" -l ./.logs -config"""
 from __future__ import annotations
-from contextlib import asynccontextmanager
+import logging
+logger: logging.Logger = logging.getLogger(__name__)
+
 from pathlib import Path
 from typing import Literal
-import logging
 import time
-
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.routing import APIRoute
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
-
 from configs.settings import settings
-
-logger = logging.getLogger(__name__)
 from api import auth, users
 from api import (
     catalog,
@@ -28,13 +25,15 @@ from api import (
     registry,
     files,
 )
-from server.db.db import server_db
-from server.db.setup_tables import create_tables
 
+from contextlib import asynccontextmanager
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    yield
 
 def _generate_unique_id(route: APIRoute) -> str:
     return route.name
-
 
 class LoggingMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
@@ -44,13 +43,6 @@ class LoggingMiddleware(BaseHTTPMiddleware):
         elapsed = time.time() - start
         logger.info(f"← {request.method} {request.url.path} | {response.status_code} | {elapsed:.3f}s")
         return response
-
-
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    create_tables(server_db)
-    yield
-
 
 def create_app() -> FastAPI:
     _app = FastAPI(
@@ -104,11 +96,9 @@ def create_app() -> FastAPI:
 
     return _app
 
-
 app = create_app()
-
 
 def start_app(mode: Literal["development", "staging", "production"]) -> None:
     import uvicorn
     reload = True if mode == "development" else False
-    uvicorn.run("server.start_app:app", host="0.0.0.0", port=8000, reload=reload, access_log=True)
+    uvicorn.run("server.app:app", host="0.0.0.0", port=8000, reload=reload)

@@ -1,8 +1,8 @@
 from __future__ import annotations
-from pydantic import SecretStr
-from pydantic_settings import BaseSettings, SettingsConfigDict, PydanticBaseSettingsSource, CliSettingsSource
-from pydantic_settings.sources import DotenvType, ENV_FILE_SENTINEL, EnvPrefixTarget, PathType
 from typing import Any, ClassVar, Mapping, Literal
+from pydantic import SecretStr
+from pydantic_settings import BaseSettings, SettingsConfigDict, PydanticBaseSettingsSource, PyprojectTomlConfigSettingsSource
+from pydantic_settings.sources import DotenvType, PathType
 
 class Settings(BaseSettings):
     
@@ -45,16 +45,28 @@ class Settings(BaseSettings):
         enable_decoding: bool
     """
     model_config: ClassVar[SettingsConfigDict] = SettingsConfigDict(
-        # Discovery: Look for these files in the current working directory
-        env_file=".env",
-        # Integration: Look in pyproject.toml under the [tool.quickbitlabs] table
-        toml_file="./pyproject.toml",
+        # env_file=".env",
         pyproject_toml_table_header=("tool", "quickbitlabs"),
-        # Behavior: Ignore environment variables or TOML keys that don't match class fields
         extra="ignore",
-        # Behavior: Allow case-insensitive matching (e.g. JWT_SECRET in env matches jwt_secret)
-        case_sensitive=False
+        case_sensitive=False,
     )
+
+    @classmethod
+    def settings_customise_sources(
+        cls,
+        settings_cls: type[BaseSettings],
+        init_settings: PydanticBaseSettingsSource,
+        env_settings: PydanticBaseSettingsSource,
+        dotenv_settings: PydanticBaseSettingsSource,
+        file_secret_settings: PydanticBaseSettingsSource,
+    ) -> tuple[PydanticBaseSettingsSource, ...]:
+        return (
+            init_settings,
+            env_settings,
+            dotenv_settings,
+            PyprojectTomlConfigSettingsSource(settings_cls),
+            file_secret_settings,
+        )
 
     project_name: str = "quickbitlabs"
     jwt_secret: SecretStr # In development, main.py generates an ephemeral 256-bit key at startup if this is unset.

@@ -24,11 +24,11 @@ from server.db.ServerDatabase import ServerDatabase
 
 logger = logging.getLogger(__name__)
 
-# -------------------------------------------------------------------
+# ===================================================
 # RAW SQL: Oracle Upsert (MERGE INTO)
 # Matches on OWNER + REGISTRY_KEY to align with current CATALOG_REGISTRY
 # schema used by registry APIs.
-# -------------------------------------------------------------------
+# ===================================================
 UPSERT_CATALOG_SQL = """
 MERGE INTO catalog_registry trg
 USING (

@@ -15,7 +15,7 @@ from __future__ import annotations
 import logging
 from typing import cast
 
-from server.core.catalog_registry import CatalogRegistryService
+from server.services.catalog_registry import CatalogRegistryService
 from server.plugins.PluginModels import Catalog
 from server.plugins.PluginRegistry import PLUGIN, PLUGIN_REGISTRY
 

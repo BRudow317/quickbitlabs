@@ -11,7 +11,7 @@ import {
 import { cn } from "@/lib/utils"
 import type { Entity, Join } from "@/api/sessionApi"
 
-// ── Types ──────────────────────────────────────────────────────────────────────
+// -- Types ----------------------------------------------------------------------
 
 type JoinType = "INNER" | "LEFT" | "OUTER"
 
@@ -43,7 +43,7 @@ const JOIN_LABELS: Record<JoinType, string> = {
   OUTER: "OUTER JOIN",
 }
 
-// ── Component ──────────────────────────────────────────────────────────────────
+// -- Component ------------------------------------------------------------------
 
 interface JoinBuilderProps {
   selectedEntities: Entity[]

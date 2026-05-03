@@ -5,7 +5,7 @@ from typing import Annotated, Any
 from fastapi import APIRouter, Depends, HTTPException, status
 
 from server.api.auth import get_current_user
-from server.core.catalog_registry import CatalogRegistryService
+from server.services.catalog_registry import CatalogRegistryService
 from server.models.user import UserBase
 from server.plugins.PluginModels import Catalog
 

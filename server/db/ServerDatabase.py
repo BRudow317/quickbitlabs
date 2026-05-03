@@ -1,6 +1,10 @@
 """
 The server database is only for use for metadata server operations, it is not for core application functions. 
 Instead use the plugin framework.
+
+https://python-oracledb.readthedocs.io/en/latest/user_guide/introduction.html
+https://arrow.apache.org/docs/python/data.html
+
 """
 from __future__ import annotations
 import os
@@ -11,7 +15,7 @@ from typing import Any, Iterator, Callable
 from oracledb import LOB, Connection, Cursor, DataFrame, DbObjectType, DbType, Queue, DbObject, MessageProperties # ConnectionPool, Subscription
 from oracledb.connection import Xid
 
-logger = logging.getLogger(__name__)
+logger: logging.Logger = logging.getLogger(__name__)
 
 # TODO: Implement connection pooling for the server database to improve performance and resource management. This can be done using oracledb's ConnectionPool class, and the ServerDatabase can manage a pool of connections instead of a single connection. The connect() method would then acquire a connection from the pool, and there would be a corresponding method to release connections back to the pool when done.
 

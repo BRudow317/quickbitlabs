@@ -198,9 +198,9 @@ export type CatalogInput = {
      */
     offset?: number | null;
     /**
-     * Owner Username
+     * Owner User Id
      */
-    owner_username?: string | null;
+    owner_user_id?: string | null;
     /**
      * Team Id
      */
@@ -278,9 +278,9 @@ export type CatalogOutput = {
      */
     offset?: number | null;
     /**
-     * Owner Username
+     * Owner User Id
      */
-    owner_username?: string | null;
+    owner_user_id?: string | null;
     /**
      * Team Id
      */
@@ -728,10 +728,6 @@ export type UserOut = {
      * Email
      */
     email: string;
-    /**
-     * External Id
-     */
-    external_id?: string | null;
     /**
      * Role
      */

@@ -61,15 +61,6 @@ export function ProfilePage() {
               <Text size="1" color="gray" weight="bold">USERNAME</Text>
               <Text size="3">{user?.username}</Text>
             </Flex>
-            {user?.external_id && (
-              <>
-                <Separator size="4" />
-                <Flex direction="column" gap="1">
-                  <Text size="1" color="gray" weight="bold">EXTERNAL ID</Text>
-                  <Text size="2" style={{ fontFamily: 'monospace' }}>{user.external_id}</Text>
-                </Flex>
-              </>
-            )}
           </Flex>
         </Card>
 

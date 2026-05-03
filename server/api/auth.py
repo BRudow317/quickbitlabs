@@ -20,65 +20,62 @@ router = APIRouter()
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="api/auth/login")
 
 
-# ---------------------------------------------------------------------------
+# ===================================================--------
 # Internal helpers - raw Oracle queries against USER_CREDENTIALS
-# ---------------------------------------------------------------------------
+# ===================================================--------
 
 def _get_credentials(username: str) -> dict | None:
-    """Return the USER row for *username*, or None if not found."""
+    """Return the QBL_USERS row for *username*, or None if not found."""
     sql = """
-        SELECT EXTERNAL_ID, USERNAME, EMAIL, HASHED_PASSWORD, IS_ACTIVE,
-               NVL(ROLE, 'user')
-          FROM "USER"
+        SELECT USERNAME, EMAIL, password_hash, IS_ACTIVE,
+               NVL(role_id, 'user')
+          FROM QBL_USERS
          WHERE USERNAME = :username
     """
-    con = server_db.connect()
-    with con.cursor() as cur:
+    with server_db.connect().cursor() as cur:
         cur.execute(sql, username=username)
         row = cur.fetchone()
     if row is None:
         return None
     return {
-        "external_id": str(row[0]) if row[0] is not None else None,
-        "username": row[1],
-        "email": row[2],
-        "hashed_password": row[3],
-        "is_active": bool(row[4]),
-        "role": row[5] or "user",
+        "username":        row[0],
+        "email":           row[1],
+        "hashed_password": row[2],
+        "is_active":       bool(row[3]),
+        "role":            row[4] or "user",
     }
 
 
 def _username_exists(username: str) -> bool:
-    sql = 'SELECT COUNT(*) FROM "USER" WHERE USERNAME = :u'
+    sql = "SELECT COUNT(*) FROM QBL_USERS WHERE USERNAME = :u"
     with server_db.connect().cursor() as cur:
         cur.execute(sql, u=username)
         return (cur.fetchone() or (0,))[0] > 0
 
 
 def _email_exists(email: str) -> bool:
-    sql = 'SELECT COUNT(*) FROM "USER" WHERE EMAIL = :e'
+    sql = "SELECT COUNT(*) FROM QBL_USERS WHERE EMAIL = :e"
     with server_db.connect().cursor() as cur:
         cur.execute(sql, e=email)
         return (cur.fetchone() or (0,))[0] > 0
 
 
 def _insert_user(username: str, email: str, hashed_password: str) -> None:
-    """INSERT a new row into the USER table."""
+    """INSERT a new row into QBL_USERS."""
     sql = """
-        INSERT INTO "USER"
-            (USERNAME, EMAIL, HASHED_PASSWORD, IS_ACTIVE)
+        INSERT INTO QBL_USERS
+            (USERNAME, EMAIL, password_hash, IS_ACTIVE)
         VALUES
             (:username, :email, :hashed_password, 1)
     """
-    con = server_db.connect()
-    with con.cursor() as cur:
+    with server_db.connect().cursor() as cur:
         cur.execute(sql, username=username, email=email, hashed_password=hashed_password)
-    con.commit()
+    server_db.connect().commit()
 
 
-# ---------------------------------------------------------------------------
+# ===================================================--------
 # Endpoints
-# ---------------------------------------------------------------------------
+# ===================================================--------
 
 @router.post("/register", response_model=UserOut, operation_id="register")
 def register(user_in: UserCreate):
@@ -132,10 +129,9 @@ def _build_access_token(username: str) -> str:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
     return create_access_token(
         data={
-            "sub": username,
-            "eid": creds["external_id"],
+            "sub":   username,
             "email": creds["email"],
-            "role": creds["role"],
+            "role":  creds["role"],
         },
         expires_delta=timedelta(minutes=settings.access_token_expire_minutes),
     )
@@ -198,10 +194,9 @@ def login(
     access_expires = timedelta(minutes=settings.access_token_expire_minutes)
     access_token = create_access_token(
         data={
-            "sub": username,
-            "eid": creds["external_id"],
+            "sub":   username,
             "email": creds["email"],
-            "role": creds["role"],
+            "role":  creds["role"],
         },
         expires_delta=access_expires,
     )
@@ -252,7 +247,6 @@ def get_current_user(token: str = Depends(oauth2_scheme)) -> User:
     return User(
         username=username,
         email=payload.get("email", ""),
-        external_id=payload.get("eid"),
         role=payload.get("role", "user"),
     )
 
@@ -322,7 +316,7 @@ def refresh_token_endpoint(body: RefreshRequest, request: Request, response: Res
             settings.jwt_secret.get_secret_value(),
             algorithms=[settings.jwt_algorithm],
         )
-        username = payload.get("sub")
+        username = payload.get("sub") or ''
         if not username:
             raise ValueError("missing sub claim")
     except (jwt.PyJWTError, ValueError):
