@@ -1,16 +1,4 @@
-"""
-CLI tool to create or update application credentials in the USER table.
-
-Usage:
-    python server/tools/create_user.py <username> <email> <password> [--env homelab] [--config Q:/.secrets/.env]
-
-If the USERNAME already exists (e.g. a Salesforce-migrated user), this sets their
-HASHED_PASSWORD so they can log into the application.  If the row does not exist yet,
-a new one is inserted with the supplied email.
-
-The tool loads the .env file and expands ${env} placeholders so it works standalone
-without going through a boot loader.
-"""
+#!/usr/bin/env python3
 from __future__ import annotations
 
 import argparse
@@ -18,69 +6,16 @@ import os
 import re
 import sys
 from pathlib import Path
+def main(username, email, password, role) -> int:
 
-# ===================================================
-# .env loader with ${env} substitution
-# ===================================================
-
-def _load_env(config_path: str, env_name: str) -> dict[str, str]:
-    raw = Path(config_path).read_text(encoding="utf-8")
-    expanded = raw.replace("${env}", env_name)
-
-    result: dict[str, str] = {}
-    for line in expanded.splitlines():
-        line = line.strip()
-        if not line or line.startswith("#") or "=" not in line:
-            continue
-        key, _, val = line.partition("=")
-        result[key.strip()] = val.strip().strip('"').strip("'")
-
-    def _resolve(v: str) -> str:
-        # Handle ${VAR} style references
-        resolved = re.sub(r'\$\{([^}]+)\}', lambda m: result.get(m.group(1), m.group(0)), v)
-        # Handle bare indirect references: after ${env} substitution a value like
-        # "oracle_homelab_port" is itself a key whose value is the real setting.
-        if resolved in result:
-            resolved = result[resolved]
-        return resolved
-
-    return {k: _resolve(v) for k, v in result.items()}
-
-
-# ===================================================
-# Main
-# ===================================================
-
-def main() -> int:
-    parser = argparse.ArgumentParser(description="Create or update a user in the USER table")
-    parser.add_argument("username")
-    parser.add_argument("email")
-    parser.add_argument("password")
-    parser.add_argument("--env",    default="homelab",            help="Environment name (replaces ${env} in .env)")
-    parser.add_argument("--config", default=r"Q:/.secrets/.env", help="Path to .env file")
-    args = parser.parse_args()
-
-    try:
-        env_vars = _load_env(args.config, args.env)
-    except FileNotFoundError:
-        print(f"ERROR: config file not found: {args.config}", file=sys.stderr)
-        return 1
-
-    # Force-override so we replace any un-substituted template values already
-    # present in the shell environment (e.g. ORACLE_PORT=oracle_${env}_port
-    # set by the PowerShell profile before ${env} was resolved).
-    for k, v in env_vars.items():
-        os.environ[k] = v
-
-    PROJECT_ROOT = Path(__file__).resolve().parent.parent
+    PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
     if str(PROJECT_ROOT) not in sys.path:
         sys.path.insert(0, str(PROJECT_ROOT))
 
     from server.db.db import server_db
     from server.core.security import get_password_hash
 
-
-    hashed = get_password_hash(args.password)
+    hashed = get_password_hash(password)
     con = server_db.connect()
 
     # MERGE: update password_hash if USERNAME exists, insert new row otherwise
@@ -92,16 +27,21 @@ def main() -> int:
             UPDATE SET password_hash = :hashed,
                        IS_ACTIVE     = 1
         WHEN NOT MATCHED THEN
-            INSERT (USERNAME, EMAIL, password_hash, IS_ACTIVE)
-            VALUES (:username, :email, :hashed, 1)
+            INSERT (USERNAME, EMAIL, password_hash, qbl_role, IS_ACTIVE)
+            VALUES (:username, :email, :hashed, :role, 1)
     """
     with con.cursor() as cur:
-        cur.execute(merge_sql, username=args.username, email=args.email, hashed=hashed)
+        cur.execute(merge_sql, {"username": username, "email": email, "hashed": hashed, "role": role})
     con.commit()
 
-    print(f"User '{args.username}' ready.")
+    print(f"User '{username}' ready.")
     return 0
 
-
 if __name__ == "__main__":
-    sys.exit(main())
+    parser = argparse.ArgumentParser(description="Create or update a user in the USER table")
+    parser.add_argument("username")
+    parser.add_argument("email")
+    parser.add_argument("password")
+    parser.add_argument("role")
+    args = parser.parse_args()
+    sys.exit(main(args.username, args.email, args.password, args.role))

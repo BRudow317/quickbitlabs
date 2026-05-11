@@ -14,11 +14,11 @@ class OracleClient:
     _current_connection: oracledb.Connection
 
     def __init__(self,
-                oracle_user: str = os.getenv('ORACLE_USER') or '',
-                oracle_pass: str = os.getenv('ORACLE_PASS') or '',
-                oracle_host: str = os.getenv('ORACLE_HOST') or '',
-                oracle_port: int = int(p) if (p := os.getenv('ORACLE_PORT')) else 0,
-                oracle_service: str = os.getenv('ORACLE_SERVICE') or ''
+                oracle_user: str = os.getenv('ORACLE_DWH_USER') or '',
+                oracle_pass: str = os.getenv('ORACLE_DWH_PASS') or '',
+                oracle_host: str = os.getenv('ORACLE_DWH_HOST') or '',
+                oracle_port: int = int(p) if (p := os.getenv('ORACLE_DWH_PORT')) else 0,
+                oracle_service: str = os.getenv('ORACLE_DWH_SERVICE') or ''
                  ):
         self.oracle_user = oracle_user
         self.oracle_pass = oracle_pass

@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 logger: logging.Logger = logging.getLogger(__name__)
 
+import os
 from pathlib import Path
 from typing import Literal
 import time
@@ -13,7 +14,7 @@ from fastapi.staticfiles import StaticFiles
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from configs.settings import settings
-from api import auth, users
+from api import auth, users, health
 from api import (
     catalog,
     entity,
@@ -46,7 +47,7 @@ class LoggingMiddleware(BaseHTTPMiddleware):
 
 def create_app() -> FastAPI:
     _app = FastAPI(
-        title=settings.project_name,
+        title=os.getenv("PROGRAM_NAME", "QuickBitLabs API"),
         generate_unique_id_callback=_generate_unique_id,
         lifespan=lifespan,
     )
@@ -59,6 +60,7 @@ def create_app() -> FastAPI:
         allow_headers=settings.allow_headers,
     )
 
+    _app.include_router(health.router)
     _app.include_router(auth.router, prefix="/api/auth", tags=["auth"])
     _app.include_router(users.router, prefix="/api/users", tags=["users"])
 
@@ -98,7 +100,8 @@ def create_app() -> FastAPI:
 
 app = create_app()
 
-def start_app(mode: Literal["development", "staging", "production"]) -> None:
+def start_app() -> None:
     import uvicorn
+    mode = os.environ.get("ENV_MODE", "production")
     reload = True if mode == "development" else False
     uvicorn.run("server.app:app", host="0.0.0.0", port=8000, reload=reload)

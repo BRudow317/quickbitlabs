@@ -310,20 +310,20 @@ class Catalog(BaseModel):
     catalog_id: str | None = None
     name: str | None = None
     alias: str | None = None
+    label: str | None = None
     namespace: str | None = None
-    version: int = 1
     description: str | None = None
-    scope: Literal["SYSTEM", "TEAM", "USER"] = "USER"
-    source_type: PLUGIN | Literal["federation"] | None = None
+    catalog_limit: int | None = None
+    catalog_offset: int | None = None
     entities: list[Entity] = Field(default_factory=list)
     filters: list[OperatorGroup] = Field(default_factory=list)
-    assignments: list[Assignment] = Field(default_factory=list)
     joins: list[Join] = Field(default_factory=list)
     sort_columns: list[Sort] = Field(default_factory=list)
-    limit: int | None = None
-    offset: int | None = None
+    assignments: list[Assignment] = Field(default_factory=list)
+    source_type: PLUGIN | Literal["federation"] | None = None
+    share_scope: Literal["SYSTEM", "GROUP", "USER"] = "USER"
     owner_user_id: str | None = None
-    team_id: str | None = None
+    catalog_version: int = 1
     properties: dict[str, Any] = Field(default_factory=dict)
     
     @property

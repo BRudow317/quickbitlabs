@@ -1,0 +1,15 @@
+fastapi
+uvicorn
+gunicorn
+pyarrow
+duckdb
+polars
+PyJWT
+argon2-cffi
+cryptography
+openpyxl
+oracledb
+tzdata
+
+[dev]
+pytest

@@ -50,25 +50,25 @@ def test_settings_loads_successfully_when_required_vars_present(monkeypatch: pyt
 # ---------------------------------------------------------------------------
 
 def test_ensure_jwt_secret_preserves_existing_secret(monkeypatch: pytest.MonkeyPatch) -> None:
-	import build.build_server as build_server
+	import build.builder as builder
 	monkeypatch.setenv("JWT_SECRET", "already-set-strong-secret")
-	build_server._ensure_jwt_secret()
+	builder._ensure_jwt_secret()
 	assert os.environ["JWT_SECRET"] == "already-set-strong-secret"
 
 
 def test_ensure_jwt_secret_replaces_placeholder(monkeypatch: pytest.MonkeyPatch) -> None:
-	import build.build_server as build_server
-	monkeypatch.setenv("JWT_SECRET", build_server._PLACEHOLDER)
-	monkeypatch.setattr(build_server.secrets, "token_urlsafe", lambda _: "fresh-generated-key")
-	build_server._ensure_jwt_secret()
+	import build.builder as builder
+	monkeypatch.setenv("JWT_SECRET", builder._PLACEHOLDER)
+	monkeypatch.setattr(builder.secrets, "token_urlsafe", lambda _: "fresh-generated-key")
+	builder._ensure_jwt_secret()
 	assert os.environ["JWT_SECRET"] == "fresh-generated-key"
 
 
 def test_ensure_jwt_secret_generates_when_missing(monkeypatch: pytest.MonkeyPatch) -> None:
-	import build.build_server as build_server
+	import build.builder as builder
 	monkeypatch.delenv("JWT_SECRET", raising=False)
-	monkeypatch.setattr(build_server.secrets, "token_urlsafe", lambda _: "fresh-generated-key")
-	build_server._ensure_jwt_secret()
+	monkeypatch.setattr(builder.secrets, "token_urlsafe", lambda _: "fresh-generated-key")
+	builder._ensure_jwt_secret()
 	assert os.environ["JWT_SECRET"] == "fresh-generated-key"
 
 
@@ -79,36 +79,37 @@ def test_ensure_jwt_secret_generates_when_missing(monkeypatch: pytest.MonkeyPatc
 def test_build_process_calls_check_db_and_npm_then_sets_sentinel(
 	monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-	import build.build_server as build_server
+	import build.builder as builder
 
 	calls: list[tuple[str, str | None]] = []
 
 	monkeypatch.delenv("JWT_SECRET", raising=False)
 	monkeypatch.delenv("_BUILD_STEP_COMPLETED", raising=False)
-	monkeypatch.setattr(build_server, "_check_db", lambda: calls.append(("db", None)))
-	monkeypatch.setattr(build_server, "_npm", lambda script: calls.append(("npm", script)))
-	monkeypatch.setattr(build_server.secrets, "token_urlsafe", lambda _: "ephemeral-test-secret")
+	monkeypatch.setattr(builder, "_check_db",  lambda: calls.append(("db", None)))
+	monkeypatch.setattr(builder, "_setup_db",  lambda: calls.append(("setup", None)))
+	monkeypatch.setattr(builder, "_npm",        lambda script: calls.append(("npm", script)))
+	monkeypatch.setattr(builder.secrets, "token_urlsafe", lambda _: "ephemeral-test-secret")
 
-	build_server.build_process(mode="development")
+	builder.build_server(mode="development")
 
 	assert os.environ["JWT_SECRET"] == "ephemeral-test-secret"
 	assert os.environ["_BUILD_STEP_COMPLETED"] == "1"
-	assert calls == [("db", None), ("npm", "build")]
+	assert calls == [("setup", None), ("db", None), ("npm", "build")]
 
 
 def test_build_process_skips_all_steps_when_sentinel_is_set(
 	monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-	import build.build_server as build_server
+	import build.builder as builder
 
 	monkeypatch.setenv("_BUILD_STEP_COMPLETED", "1")
 	monkeypatch.setattr(
-		build_server, "_check_db",
+		builder, "_check_db",
 		lambda: (_ for _ in ()).throw(AssertionError("_check_db must not be called")),
 	)
 	monkeypatch.setattr(
-		build_server, "_npm",
+		builder, "_npm",
 		lambda _: (_ for _ in ()).throw(AssertionError("_npm must not be called")),
 	)
 
-	build_server.build_process(mode="development")  # should return immediately, no assertions raised
+	builder.build_server(mode="development")  # should return immediately, no assertions raised

@@ -10,7 +10,8 @@ from __future__ import annotations
 import os
 import logging
 import oracledb
-from typing import Any, Iterator, Callable
+from typing import Any
+from collections.abc import Iterator, Callable
 
 from oracledb import LOB, Connection, Cursor, DataFrame, DbObjectType, DbType, Queue, DbObject, MessageProperties # ConnectionPool, Subscription
 from oracledb.connection import Xid
@@ -38,49 +39,72 @@ class ServerDatabase:
         return True
     
     def __init__(self,
-        oracle_user: str = os.getenv('ORACLE_QBL_USER') or '',
-        oracle_pass: str = os.getenv('ORACLE_QBL_PASS') or '',
-        oracle_host: str = os.getenv('ORACLE_QBL_HOST') or '',
+        oracle_user: str = '',
+        oracle_pass: str = '',
+        oracle_host: str = '',
         oracle_port: int | str | None = None,
-        oracle_service: str = os.getenv('ORACLE_QBL_SERVICE') or ''
+        oracle_service: str = ''
     ) -> None:
-        if oracle_port is None:
-            env_port = os.getenv('ORACLE_QBL_PORT') or ''
-            try:
-                oracle_port = int(env_port) if env_port else 0
-            except ValueError:
-                logger.warning("Ignoring invalid ORACLE_QBL_PORT value: %r", env_port)
-                oracle_port = 0
 
         self._oracle_user = oracle_user
         self._oracle_pass = oracle_pass
         self._oracle_host = oracle_host
-        self._oracle_port = int(oracle_port)
+        self._oracle_port = int(oracle_port) if oracle_port is not None else 1521
         self._oracle_service = oracle_service
         self._current_connection = None
-
+        self.get_user
+        self.get_password
+        self.get_host
+        self.get_port
+        self.get_service
         if not all([self._oracle_user, self._oracle_pass, self._oracle_host, self._oracle_service]):
             raise ValueError(f"Missing required Server Database connection parameters: {self.__repr__()}")
-    
+    @property
+    def get_user(self) -> str:
+        if not self._oracle_user:
+            self._oracle_user = os.getenv('ORACLE_QBL_USER') or ''
+
+        return self._oracle_user
+    @property
+    def get_password(self) -> str:
+        if not self._oracle_pass:
+            self._oracle_pass = os.getenv('ORACLE_QBL_PWD') or ''
+        return self._oracle_pass
+    @property
+    def get_host(self) -> str:
+        if not self._oracle_host:
+            self._oracle_host = os.getenv('ORACLE_QBL_HOST') or ''
+        return self._oracle_host
+    @property
+    def get_port(self) -> int:
+        if not self._oracle_port:
+            env_port = os.getenv('ORACLE_QBL_PORT') or ''
+            self._oracle_port = int(env_port) if env_port else 1521
+        return self._oracle_port
+    @property
+    def get_service(self) -> str:
+        if not self._oracle_service:
+            self._oracle_service = os.getenv('ORACLE_QBL_SERVICE') or ''
+        return self._oracle_service
     def __repr__(self) -> str:
         return (
             f"{type(self).__name__}("
-            f"user={self._oracle_user!r}, "
-            f"host={self._oracle_host!r}, "
-            f"port={self._oracle_port!r}, "
-            f"service={self._oracle_service!r})"
+            f"user={self.get_user!r}, "
+            f"host={self.get_host!r}, "
+            f"port={self.get_port!r}, "
+            f"service={self.get_service!r})"
         )
     def _new_connect(self) -> None:
         try:
-            if not all([self._oracle_user, self._oracle_pass, self._oracle_host, self._oracle_service]):
+            if not all([self.get_user, self.get_password, self.get_host, self.get_service]):
                 raise ValueError(f"Missing required Oracle connection parameters: {self.__repr__()}")
 
             self._current_connection = oracledb.connect(
-                user=self._oracle_user,
-                password=self._oracle_pass,
-                host=self._oracle_host,
-                port=self._oracle_port,
-                service_name=self._oracle_service,
+                user=self.get_user,
+                password=self.get_password,
+                host=self.get_host,
+                port=self.get_port,
+                service_name=self.get_service,
             )
             self._current_connection.autocommit = False
         except oracledb.Error as e:
@@ -89,7 +113,6 @@ class ServerDatabase:
         except Exception as e:
             logger.error(f'Unexpected error during Oracle connection: {self.__repr__()}\\nError: {e}')
             raise
-    
     def connect(self) -> oracledb.Connection:
         if self._current_connection is not None and self._current_connection.is_healthy(): 
             return self._current_connection
@@ -98,10 +121,8 @@ class ServerDatabase:
         if self._current_connection is None:
             raise RuntimeError(f"Failed to establish Oracle connection: {self.__repr__()}")
         return self._current_connection
-    
     def __call__(self):
         return self.connect()
-    
     def close(self) -> None:
         if self._current_connection is None:
             return

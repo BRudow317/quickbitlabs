@@ -1,0 +1,21 @@
+Metadata-Version: 2.4
+Name: quickbitlabs
+Version: 0.1.0
+Summary: quickbitlabs
+Requires-Python: >=3.11
+License-File: LICENSE
+Requires-Dist: fastapi
+Requires-Dist: uvicorn
+Requires-Dist: gunicorn
+Requires-Dist: pyarrow
+Requires-Dist: duckdb
+Requires-Dist: polars
+Requires-Dist: PyJWT
+Requires-Dist: argon2-cffi
+Requires-Dist: cryptography
+Requires-Dist: openpyxl
+Requires-Dist: oracledb
+Requires-Dist: tzdata
+Provides-Extra: dev
+Requires-Dist: pytest; extra == "dev"
+Dynamic: license-file

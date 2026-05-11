@@ -11,6 +11,13 @@ python "./build/boot.py" -v  -l ./.logs --env homelab --config Q:/.secrets/.env 
 python Q:/scripts/encrypt.py aes256 ./quickbitlabs/.keys
 ```
 
+## Packaging
+```shell
+pip uninstall quickbitlabs -y
+pip install -e
+pip install -e .[dev]
+```
+
 ## DB Administration Commands
 ```shell
 sqlplus / as sysdba
@@ -26,6 +33,9 @@ ALTER PLUGGABLE DATABASE ALL SAVE STATE; --# Saves the open state of all PDBs so
 SHOW PDBS; --# Shows Pluggable Databases
 ALTER SESSION SET CONTAINER = homelab; --# Switch to the homelab PDB.
 ALTER SESSION SET CONTAINER = CDB$ROOT; --# Switch back to the CDB root container.
+
+ALTER SESSION SET CONTAINER = QBLPDB;
+ALTER SESSION SET CURRENT_SCHEMA = QBL;
 ```
 
 ### User Creation
@@ -52,7 +62,7 @@ WHERE grantee = 'MY_APP_USER';
 --
 SELECT privilege 
 FROM dba_sys_privs 
-WHERE grantee = 'MY_APP_USER';
+WHERE grantee = 'QBL';
 
 --List Tables
 select distinct table_name from all_tab_columns where upper(owner) = 'dwh' or upper(owner) = 'qbl'; 
@@ -66,6 +76,9 @@ SET PAGESIZE 100;
 SET TRIMSPOOL ON;
 SET TAB OFF;
 SET WRAP OFF;
+
+SET SERVEROUTPUT ON;
+SET FEED OFF;
 
 -- Format common dictionary columns so they don't break the screen
 COLUMN username FORMAT A25;

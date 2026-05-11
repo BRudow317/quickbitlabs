@@ -10,16 +10,6 @@ The core vision is intended to be a system agnostic data & metadata engine built
 
 See **Q:\quickbitlabs\Plugin Framework Rules.md**
 
-## Prototypes
-
-### ArrowFrame:
-  - A system-agnostic data interchange container. It represents the "Clean Slate" where data is transitioned from system-specific native formats to a universal PyArrow stream. It does NOT own or carry system-specific metadata.
-  - A *God Object* during prototyping, but the long-term vision is to have ArrowFrame adapted to the DataFrame Interchange Protocol, allowing it to be a true universal container that can be easily converted to/from Pandas, Spark, Dask, etc. without losing the Arrow-based performance benefits.
-
-## Legacy Types:
-### Records:
-  - An older format represented as `Iterable[dict]`. It is less efficient and more memory-intensive than the ArrowReader. The Records format is being phased out in favor of the ArrowReader for all data operations. However I'm keeping it and it's type mappings to native python around for now.
-
 ## Key Project Files
 
 - **server/plugins/PluginModels.py** Pydantic models for Catalog, Entity, and Column metadata.
@@ -75,13 +65,15 @@ The platform is strictly divided into three layers:
 
 1. **Backend (`/server`**: This handles FastAPI web requests, user authentication, and internal platform state.
 2. **Frontend (`/frontend`)**: The Typescript/React UI.
-3. **Plugins (`/server/plugins`)**: The Sandboxes. These are isolated, lazy-loaded modules that translate the universal platform language into system-specific execution (SQL, REST, File I/O).
+3. **Build (`/build`)**: The build and deployment scripts, including environment setup and testing.
+4. **Plugins (`/server/plugins`)**: The Sandboxes. These are isolated, lazy-loaded modules that translate the universal platform language into system-specific execution (SQL, REST, File I/O).
    1. Plugins have their own Service layer for internal orchestration of the plugin. 
    2. Plugins usually have their own Dialect layer for translating the AST Catalog queries into native search language.
    3. Plugins likely have a type mapping layer for translating system types into the universal Catalog types.
    4. Plugin Engine layer is for execution of system-specific commands. To avoid import issues, this layer should rarely import anything else from the local plugin. 
    5. Plugins typically have a Client to manage connections and sessions. 
    6. Plugins must have a Facade that implements the Plugin Protocol.
+5. **Tests (`/tests`)**: Unit and integration tests for the backend and the core backend db.
 
 ## Data Transmission
 - `ArrowReader` (Iterator[pa.RecordBatch]): A more efficient boundary for large data transfers, especially from databases or APIs that can natively produce Arrow RecordBatches. This allows for zero-copy data transmission and efficient in-memory processing.
@@ -161,3 +153,13 @@ pip install -e .
 # Start the FastAPI server
 python server/start_server.py
 ```
+
+## Prototypes
+
+### ArrowFrame:
+  - A system-agnostic data interchange container. It represents the "Clean Slate" where data is transitioned from system-specific native formats to a universal PyArrow stream. It does NOT own or carry system-specific metadata.
+  - A *God Object* during prototyping, but the long-term vision is to have ArrowFrame adapted to the DataFrame Interchange Protocol, allowing it to be a true universal container that can be easily converted to/from Pandas, Spark, Dask, etc. without losing the Arrow-based performance benefits.
+
+## Legacy Types:
+### Records:
+  - An older format represented as `Iterable[dict]`. It is less efficient and more memory-intensive than the ArrowReader. The Records format is being phased out in favor of the ArrowReader for all data operations. However I'm keeping it and it's type mappings to native python around for now.

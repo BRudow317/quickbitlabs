@@ -68,7 +68,7 @@ class Settings(BaseSettings):
             file_secret_settings,
         )
 
-    project_name: str = "quickbitlabs"
+    # project_name: str = "quickbitlabs"
     jwt_secret: SecretStr # In development, main.py generates an ephemeral 256-bit key at startup if this is unset.
     jwt_algorithm: str = "HS256"
     upload_encryption_key: SecretStr # base64-encoded 32-byte AES key for encrypting uploaded files at rest.
