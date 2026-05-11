@@ -1,0 +1,1496 @@
+[
+  {
+    "lookup_code": 1,
+    "category": "GENDER",
+    "lookup_desc": "MALE",
+    "created_at": null,
+    "created_by": null,
+    "updated_at": null,
+    "updated_by": null
+  },
+  {
+    "lookup_code": 2,
+    "category": "GENDER",
+    "lookup_desc": "FEMALE",
+    "created_at": null,
+    "created_by": null,
+    "updated_at": null,
+    "updated_by": null
+  },
+  {
+    "lookup_code": 3,
+    "category": "GENDER",
+    "lookup_desc": "UNKNOWN",
+    "created_at": null,
+    "created_by": null,
+    "updated_at": null,
+    "updated_by": null
+  },
+  {
+    "lookup_code": 10,
+    "category": "MAR_STATUS",
+    "lookup_desc": "MARRIED",
+    "created_at": null,
+    "created_by": null,
+    "updated_at": null,
+    "updated_by": null
+  },
+  {
+    "lookup_code": 11,
+    "category": "MAR_STATUS",
+    "lookup_desc": "SINGLE",
+    "created_at": null,
+    "created_by": null,
+    "updated_at": null,
+    "updated_by": null
+  },
+  {
+    "lookup_code": 12,
+    "category": "MAR_STATUS",
+    "lookup_desc": "UNKNOWN",
+    "created_at": null,
+    "created_by": null,
+    "updated_at": null,
+    "updated_by": null
+  },
+  {
+    "lookup_code": 21,
+    "category": "NAME_PREFIX",
+    "lookup_desc": "MR",
+    "created_at": null,
+    "created_by": null,
+    "updated_at": null,
+    "updated_by": null
+  },
+  {
+    "lookup_code": 22,
+    "category": "NAME_PREFIX",
+    "lookup_desc": "MS",
+    "created_at": null,
+    "created_by": null,
+    "updated_at": null,
+    "updated_by": null
+  },
+  {
+    "lookup_code": 23,
+    "category": "NAME_PREFIX",
+    "lookup_desc": "DR",
+    "created_at": null,
+    "created_by": null,
+    "updated_at": null,
+    "updated_by": null
+  },
+  {
+    "lookup_code": 24,
+    "category": "NAME_PREFIX",
+    "lookup_desc": "PROF",
+    "created_at": null,
+    "created_by": null,
+    "updated_at": null,
+    "updated_by": null
+  },
+  {
+    "lookup_code": 31,
+    "category": "NAME_SUFFIX",
+    "lookup_desc": "JR",
+    "created_at": null,
+    "created_by": null,
+    "updated_at": null,
+    "updated_by": null
+  },
+  {
+    "lookup_code": 32,
+    "category": "NAME_SUFFIX",
+    "lookup_desc": "SR",
+    "created_at": null,
+    "created_by": null,
+    "updated_at": null,
+    "updated_by": null
+  },
+  {
+    "lookup_code": 33,
+    "category": "NAME_SUFFIX",
+    "lookup_desc": "II",
+    "created_at": null,
+    "created_by": null,
+    "updated_at": null,
+    "updated_by": null
+  },
+  {
+    "lookup_code": 34,
+    "category": "NAME_SUFFIX",
+    "lookup_desc": "III",
+    "created_at": null,
+    "created_by": null,
+    "updated_at": null,
+    "updated_by": null
+  },
+  {
+    "lookup_code": 41,
+    "category": "ADDRESS_TYPE",
+    "lookup_desc": "HOME",
+    "created_at": null,
+    "created_by": null,
+    "updated_at": null,
+    "updated_by": null
+  },
+  {
+    "lookup_code": 42,
+    "category": "ADDRESS_TYPE",
+    "lookup_desc": "WORK",
+    "created_at": null,
+    "created_by": null,
+    "updated_at": null,
+    "updated_by": null
+  },
+  {
+    "lookup_code": 43,
+    "category": "ADDRESS_TYPE",
+    "lookup_desc": "MAILING",
+    "created_at": null,
+    "created_by": null,
+    "updated_at": null,
+    "updated_by": null
+  },
+  {
+    "lookup_code": 51,
+    "category": "PHONE_TYPE",
+    "lookup_desc": "MAIN",
+    "created_at": null,
+    "created_by": null,
+    "updated_at": null,
+    "updated_by": null
+  },
+  {
+    "lookup_code": 52,
+    "category": "PHONE_TYPE",
+    "lookup_desc": "MOBILE",
+    "created_at": null,
+    "created_by": null,
+    "updated_at": null,
+    "updated_by": null
+  },
+  {
+    "lookup_code": 53,
+    "category": "PHONE_TYPE",
+    "lookup_desc": "FAX",
+    "created_at": null,
+    "created_by": null,
+    "updated_at": null,
+    "updated_by": null
+  },
+  {
+    "lookup_code": 61,
+    "category": "DELETED_STATUS",
+    "lookup_desc": "ACTIVE",
+    "created_at": null,
+    "created_by": null,
+    "updated_at": null,
+    "updated_by": null
+  },
+  {
+    "lookup_code": 62,
+    "category": "DELETED_STATUS",
+    "lookup_desc": "INACTIVE",
+    "created_at": null,
+    "created_by": null,
+    "updated_at": null,
+    "updated_by": null
+  },
+  {
+    "lookup_code": 63,
+    "category": "DELETED_STATUS",
+    "lookup_desc": "PENDING",
+    "created_at": null,
+    "created_by": null,
+    "updated_at": null,
+    "updated_by": null
+  },
+  {
+    "lookup_code": 71,
+    "category": "ACCOUNT_STATUS",
+    "lookup_desc": "ACTIVE",
+    "created_at": null,
+    "created_by": null,
+    "updated_at": null,
+    "updated_by": null
+  },
+  {
+    "lookup_code": 72,
+    "category": "ACCOUNT_STATUS",
+    "lookup_desc": "SUSPENDED",
+    "created_at": null,
+    "created_by": null,
+    "updated_at": null,
+    "updated_by": null
+  },
+  {
+    "lookup_code": 73,
+    "category": "ACCOUNT_STATUS",
+    "lookup_desc": "CLOSED",
+    "created_at": null,
+    "created_by": null,
+    "updated_at": null,
+    "updated_by": null
+  },
+  {
+    "lookup_code": 100000,
+    "category": "ACCOUNT_TYPE",
+    "lookup_desc": "Architecture / Planning",
+    "created_at": null,
+    "created_by": null,
+    "updated_at": null,
+    "updated_by": null
+  },
+  {
+    "lookup_code": 100001,
+    "category": "ACCOUNT_TYPE",
+    "lookup_desc": "Supermarkets",
+    "created_at": null,
+    "created_by": null,
+    "updated_at": null,
+    "updated_by": null
+  },
+  {
+    "lookup_code": 100002,
+    "category": "ACCOUNT_TYPE",
+    "lookup_desc": "Import / Export",
+    "created_at": null,
+    "created_by": null,
+    "updated_at": null,
+    "updated_by": null
+  },
+  {
+    "lookup_code": 100003,
+    "category": "ACCOUNT_TYPE",
+    "lookup_desc": "Animation",
+    "created_at": null,
+    "created_by": null,
+    "updated_at": null,
+    "updated_by": null
+  },
+  {
+    "lookup_code": 100004,
+    "category": "ACCOUNT_TYPE",
+    "lookup_desc": "Design",
+    "created_at": null,
+    "created_by": null,
+    "updated_at": null,
+    "updated_by": null
+  },
+  {
+    "lookup_code": 100005,
+    "category": "ACCOUNT_TYPE",
+    "lookup_desc": "Computer Games",
+    "created_at": null,
+    "created_by": null,
+    "updated_at": null,
+    "updated_by": null
+  },
+  {
+    "lookup_code": 100006,
+    "category": "ACCOUNT_TYPE",
+    "lookup_desc": "Capital Markets / Hedge Fund / Private Equity",
+    "created_at": null,
+    "created_by": null,
+    "updated_at": null,
+    "updated_by": null
+  },
+  {
+    "lookup_code": 100007,
+    "category": "ACCOUNT_TYPE",
+    "lookup_desc": "Legislative Office",
+    "created_at": null,
+    "created_by": null,
+    "updated_at": null,
+    "updated_by": null
+  },
+  {
+    "lookup_code": 100008,
+    "category": "ACCOUNT_TYPE",
+    "lookup_desc": "Judiciary",
+    "created_at": null,
+    "created_by": null,
+    "updated_at": null,
+    "updated_by": null
+  },
+  {
+    "lookup_code": 100009,
+    "category": "ACCOUNT_TYPE",
+    "lookup_desc": "Plastics",
+    "created_at": null,
+    "created_by": null,
+    "updated_at": null,
+    "updated_by": null
+  },
+  {
+    "lookup_code": 100010,
+    "category": "ACCOUNT_TYPE",
+    "lookup_desc": "Restaurants",
+    "created_at": null,
+    "created_by": null,
+    "updated_at": null,
+    "updated_by": null
+  },
+  {
+    "lookup_code": 100011,
+    "category": "ACCOUNT_TYPE",
+    "lookup_desc": "Investment Banking / Venture",
+    "created_at": null,
+    "created_by": null,
+    "updated_at": null,
+    "updated_by": null
+  },
+  {
+    "lookup_code": 100012,
+    "category": "ACCOUNT_TYPE",
+    "lookup_desc": "Electrical / Electronic Manufacturing",
+    "created_at": null,
+    "created_by": null,
+    "updated_at": null,
+    "updated_by": null
+  },
+  {
+    "lookup_code": 100013,
+    "category": "ACCOUNT_TYPE",
+    "lookup_desc": "Research Industry",
+    "created_at": null,
+    "created_by": null,
+    "updated_at": null,
+    "updated_by": null
+  },
+  {
+    "lookup_code": 100014,
+    "category": "ACCOUNT_TYPE",
+    "lookup_desc": "Music",
+    "created_at": null,
+    "created_by": null,
+    "updated_at": null,
+    "updated_by": null
+  },
+  {
+    "lookup_code": 100015,
+    "category": "ACCOUNT_TYPE",
+    "lookup_desc": "Newspapers / Journalism",
+    "created_at": null,
+    "created_by": null,
+    "updated_at": null,
+    "updated_by": null
+  },
+  {
+    "lookup_code": 100016,
+    "category": "ACCOUNT_TYPE",
+    "lookup_desc": "Computer Hardware",
+    "created_at": null,
+    "created_by": null,
+    "updated_at": null,
+    "updated_by": null
+  },
+  {
+    "lookup_code": 100017,
+    "category": "ACCOUNT_TYPE",
+    "lookup_desc": "Semiconductors",
+    "created_at": null,
+    "created_by": null,
+    "updated_at": null,
+    "updated_by": null
+  },
+  {
+    "lookup_code": 100018,
+    "category": "ACCOUNT_TYPE",
+    "lookup_desc": "Marketing / Advertising / Sales",
+    "created_at": null,
+    "created_by": null,
+    "updated_at": null,
+    "updated_by": null
+  },
+  {
+    "lookup_code": 100019,
+    "category": "ACCOUNT_TYPE",
+    "lookup_desc": "Individual / Family Services",
+    "created_at": null,
+    "created_by": null,
+    "updated_at": null,
+    "updated_by": null
+  },
+  {
+    "lookup_code": 100020,
+    "category": "ACCOUNT_TYPE",
+    "lookup_desc": "Computer Networking",
+    "created_at": null,
+    "created_by": null,
+    "updated_at": null,
+    "updated_by": null
+  },
+  {
+    "lookup_code": 100021,
+    "category": "ACCOUNT_TYPE",
+    "lookup_desc": "International Affairs",
+    "created_at": null,
+    "created_by": null,
+    "updated_at": null,
+    "updated_by": null
+  },
+  {
+    "lookup_code": 100022,
+    "category": "ACCOUNT_TYPE",
+    "lookup_desc": "Professional Training",
+    "created_at": null,
+    "created_by": null,
+    "updated_at": null,
+    "updated_by": null
+  },
+  {
+    "lookup_code": 100023,
+    "category": "ACCOUNT_TYPE",
+    "lookup_desc": "Fine Art",
+    "created_at": null,
+    "created_by": null,
+    "updated_at": null,
+    "updated_by": null
+  },
+  {
+    "lookup_code": 100024,
+    "category": "ACCOUNT_TYPE",
+    "lookup_desc": "Government Administration",
+    "created_at": null,
+    "created_by": null,
+    "updated_at": null,
+    "updated_by": null
+  },
+  {
+    "lookup_code": 100025,
+    "category": "ACCOUNT_TYPE",
+    "lookup_desc": "Airlines / Aviation",
+    "created_at": null,
+    "created_by": null,
+    "updated_at": null,
+    "updated_by": null
+  },
+  {
+    "lookup_code": 100026,
+    "category": "ACCOUNT_TYPE",
+    "lookup_desc": "Investment Management / Hedge Fund / Private Equity",
+    "created_at": null,
+    "created_by": null,
+    "updated_at": null,
+    "updated_by": null
+  },
+  {
+    "lookup_code": 100027,
+    "category": "ACCOUNT_TYPE",
+    "lookup_desc": "Pharmaceuticals",
+    "created_at": null,
+    "created_by": null,
+    "updated_at": null,
+    "updated_by": null
+  },
+  {
+    "lookup_code": 100028,
+    "category": "ACCOUNT_TYPE",
+    "lookup_desc": "Motion Pictures / Film",
+    "created_at": null,
+    "created_by": null,
+    "updated_at": null,
+    "updated_by": null
+  },
+  {
+    "lookup_code": 100029,
+    "category": "ACCOUNT_TYPE",
+    "lookup_desc": "Defense / Space",
+    "created_at": null,
+    "created_by": null,
+    "updated_at": null,
+    "updated_by": null
+  },
+  {
+    "lookup_code": 100030,
+    "category": "ACCOUNT_TYPE",
+    "lookup_desc": "Apparel / Fashion",
+    "created_at": null,
+    "created_by": null,
+    "updated_at": null,
+    "updated_by": null
+  },
+  {
+    "lookup_code": 100031,
+    "category": "ACCOUNT_TYPE",
+    "lookup_desc": "Mechanical or Industrial Engineering",
+    "created_at": null,
+    "created_by": null,
+    "updated_at": null,
+    "updated_by": null
+  },
+  {
+    "lookup_code": 100032,
+    "category": "ACCOUNT_TYPE",
+    "lookup_desc": "Ranching",
+    "created_at": null,
+    "created_by": null,
+    "updated_at": null,
+    "updated_by": null
+  },
+  {
+    "lookup_code": 100033,
+    "category": "ACCOUNT_TYPE",
+    "lookup_desc": "Banking / Mortgage",
+    "created_at": null,
+    "created_by": null,
+    "updated_at": null,
+    "updated_by": null
+  },
+  {
+    "lookup_code": 100034,
+    "category": "ACCOUNT_TYPE",
+    "lookup_desc": "Medical Practice",
+    "created_at": null,
+    "created_by": null,
+    "updated_at": null,
+    "updated_by": null
+  },
+  {
+    "lookup_code": 100035,
+    "category": "ACCOUNT_TYPE",
+    "lookup_desc": "Entertainment / Movie Production",
+    "created_at": null,
+    "created_by": null,
+    "updated_at": null,
+    "updated_by": null
+  },
+  {
+    "lookup_code": 100036,
+    "category": "ACCOUNT_TYPE",
+    "lookup_desc": "Consumer Goods",
+    "created_at": null,
+    "created_by": null,
+    "updated_at": null,
+    "updated_by": null
+  },
+  {
+    "lookup_code": 100037,
+    "category": "ACCOUNT_TYPE",
+    "lookup_desc": "Political Organization",
+    "created_at": null,
+    "created_by": null,
+    "updated_at": null,
+    "updated_by": null
+  },
+  {
+    "lookup_code": 100038,
+    "category": "ACCOUNT_TYPE",
+    "lookup_desc": "Computer / Network Security",
+    "created_at": null,
+    "created_by": null,
+    "updated_at": null,
+    "updated_by": null
+  },
+  {
+    "lookup_code": 100039,
+    "category": "ACCOUNT_TYPE",
+    "lookup_desc": "Sporting Goods",
+    "created_at": null,
+    "created_by": null,
+    "updated_at": null,
+    "updated_by": null
+  },
+  {
+    "lookup_code": 100040,
+    "category": "ACCOUNT_TYPE",
+    "lookup_desc": "Medical Equipment",
+    "created_at": null,
+    "created_by": null,
+    "updated_at": null,
+    "updated_by": null
+  },
+  {
+    "lookup_code": 100041,
+    "category": "ACCOUNT_TYPE",
+    "lookup_desc": "Industrial Automation",
+    "created_at": null,
+    "created_by": null,
+    "updated_at": null,
+    "updated_by": null
+  },
+  {
+    "lookup_code": 100042,
+    "category": "ACCOUNT_TYPE",
+    "lookup_desc": "Other Industry",
+    "created_at": null,
+    "created_by": null,
+    "updated_at": null,
+    "updated_by": null
+  },
+  {
+    "lookup_code": 100043,
+    "category": "ACCOUNT_TYPE",
+    "lookup_desc": "Retail Industry",
+    "created_at": null,
+    "created_by": null,
+    "updated_at": null,
+    "updated_by": null
+  },
+  {
+    "lookup_code": 100044,
+    "category": "ACCOUNT_TYPE",
+    "lookup_desc": "Financial Services",
+    "created_at": null,
+    "created_by": null,
+    "updated_at": null,
+    "updated_by": null
+  },
+  {
+    "lookup_code": 100045,
+    "category": "ACCOUNT_TYPE",
+    "lookup_desc": "Media Production",
+    "created_at": null,
+    "created_by": null,
+    "updated_at": null,
+    "updated_by": null
+  },
+  {
+    "lookup_code": 100046,
+    "category": "ACCOUNT_TYPE",
+    "lookup_desc": "Venture Capital / VC",
+    "created_at": null,
+    "created_by": null,
+    "updated_at": null,
+    "updated_by": null
+  },
+  {
+    "lookup_code": 100047,
+    "category": "ACCOUNT_TYPE",
+    "lookup_desc": "Translation / Localization",
+    "created_at": null,
+    "created_by": null,
+    "updated_at": null,
+    "updated_by": null
+  },
+  {
+    "lookup_code": 100048,
+    "category": "ACCOUNT_TYPE",
+    "lookup_desc": "Recreational Facilities / Services",
+    "created_at": null,
+    "created_by": null,
+    "updated_at": null,
+    "updated_by": null
+  },
+  {
+    "lookup_code": 100049,
+    "category": "ACCOUNT_TYPE",
+    "lookup_desc": "Mining / Metals",
+    "created_at": null,
+    "created_by": null,
+    "updated_at": null,
+    "updated_by": null
+  },
+  {
+    "lookup_code": 100050,
+    "category": "ACCOUNT_TYPE",
+    "lookup_desc": "Outsourcing / Offshoring",
+    "created_at": null,
+    "created_by": null,
+    "updated_at": null,
+    "updated_by": null
+  },
+  {
+    "lookup_code": 100051,
+    "category": "ACCOUNT_TYPE",
+    "lookup_desc": "Market Research",
+    "created_at": null,
+    "created_by": null,
+    "updated_at": null,
+    "updated_by": null
+  },
+  {
+    "lookup_code": 100052,
+    "category": "ACCOUNT_TYPE",
+    "lookup_desc": "Fishery",
+    "created_at": null,
+    "created_by": null,
+    "updated_at": null,
+    "updated_by": null
+  },
+  {
+    "lookup_code": 100053,
+    "category": "ACCOUNT_TYPE",
+    "lookup_desc": "Philanthropy",
+    "created_at": null,
+    "created_by": null,
+    "updated_at": null,
+    "updated_by": null
+  },
+  {
+    "lookup_code": 100054,
+    "category": "ACCOUNT_TYPE",
+    "lookup_desc": "Cosmetics",
+    "created_at": null,
+    "created_by": null,
+    "updated_at": null,
+    "updated_by": null
+  },
+  {
+    "lookup_code": 100055,
+    "category": "ACCOUNT_TYPE",
+    "lookup_desc": "Information Technology / IT",
+    "created_at": null,
+    "created_by": null,
+    "updated_at": null,
+    "updated_by": null
+  },
+  {
+    "lookup_code": 100056,
+    "category": "ACCOUNT_TYPE",
+    "lookup_desc": "Mental Health Care",
+    "created_at": null,
+    "created_by": null,
+    "updated_at": null,
+    "updated_by": null
+  },
+  {
+    "lookup_code": 100057,
+    "category": "ACCOUNT_TYPE",
+    "lookup_desc": "Think Tanks",
+    "created_at": null,
+    "created_by": null,
+    "updated_at": null,
+    "updated_by": null
+  },
+  {
+    "lookup_code": 100058,
+    "category": "ACCOUNT_TYPE",
+    "lookup_desc": "Chemicals",
+    "created_at": null,
+    "created_by": null,
+    "updated_at": null,
+    "updated_by": null
+  },
+  {
+    "lookup_code": 100059,
+    "category": "ACCOUNT_TYPE",
+    "lookup_desc": "Glass / Ceramics / Concrete",
+    "created_at": null,
+    "created_by": null,
+    "updated_at": null,
+    "updated_by": null
+  },
+  {
+    "lookup_code": 100060,
+    "category": "ACCOUNT_TYPE",
+    "lookup_desc": "Civic / Social Organization",
+    "created_at": null,
+    "created_by": null,
+    "updated_at": null,
+    "updated_by": null
+  },
+  {
+    "lookup_code": 100061,
+    "category": "ACCOUNT_TYPE",
+    "lookup_desc": "Graphic Design / Web Design",
+    "created_at": null,
+    "created_by": null,
+    "updated_at": null,
+    "updated_by": null
+  },
+  {
+    "lookup_code": 100062,
+    "category": "ACCOUNT_TYPE",
+    "lookup_desc": "Higher Education / Acadamia",
+    "created_at": null,
+    "created_by": null,
+    "updated_at": null,
+    "updated_by": null
+  },
+  {
+    "lookup_code": 100063,
+    "category": "ACCOUNT_TYPE",
+    "lookup_desc": "Consumer Electronics",
+    "created_at": null,
+    "created_by": null,
+    "updated_at": null,
+    "updated_by": null
+  },
+  {
+    "lookup_code": 100064,
+    "category": "ACCOUNT_TYPE",
+    "lookup_desc": "Internet",
+    "created_at": null,
+    "created_by": null,
+    "updated_at": null,
+    "updated_by": null
+  },
+  {
+    "lookup_code": 100065,
+    "category": "ACCOUNT_TYPE",
+    "lookup_desc": "Alternative Medicine",
+    "created_at": null,
+    "created_by": null,
+    "updated_at": null,
+    "updated_by": null
+  },
+  {
+    "lookup_code": 100066,
+    "category": "ACCOUNT_TYPE",
+    "lookup_desc": "Paper / Forest Products",
+    "created_at": null,
+    "created_by": null,
+    "updated_at": null,
+    "updated_by": null
+  },
+  {
+    "lookup_code": 100067,
+    "category": "ACCOUNT_TYPE",
+    "lookup_desc": "Staffing / Recruiting",
+    "created_at": null,
+    "created_by": null,
+    "updated_at": null,
+    "updated_by": null
+  },
+  {
+    "lookup_code": 100068,
+    "category": "ACCOUNT_TYPE",
+    "lookup_desc": "Environmental Services",
+    "created_at": null,
+    "created_by": null,
+    "updated_at": null,
+    "updated_by": null
+  },
+  {
+    "lookup_code": 100069,
+    "category": "ACCOUNT_TYPE",
+    "lookup_desc": "Broadcast Media",
+    "created_at": null,
+    "created_by": null,
+    "updated_at": null,
+    "updated_by": null
+  },
+  {
+    "lookup_code": 100070,
+    "category": "ACCOUNT_TYPE",
+    "lookup_desc": "Warehousing",
+    "created_at": null,
+    "created_by": null,
+    "updated_at": null,
+    "updated_by": null
+  },
+  {
+    "lookup_code": 100071,
+    "category": "ACCOUNT_TYPE",
+    "lookup_desc": "Food Production",
+    "created_at": null,
+    "created_by": null,
+    "updated_at": null,
+    "updated_by": null
+  },
+  {
+    "lookup_code": 100072,
+    "category": "ACCOUNT_TYPE",
+    "lookup_desc": "Public Relations / PR",
+    "created_at": null,
+    "created_by": null,
+    "updated_at": null,
+    "updated_by": null
+  },
+  {
+    "lookup_code": 100073,
+    "category": "ACCOUNT_TYPE",
+    "lookup_desc": "Security / Investigations",
+    "created_at": null,
+    "created_by": null,
+    "updated_at": null,
+    "updated_by": null
+  },
+  {
+    "lookup_code": 100074,
+    "category": "ACCOUNT_TYPE",
+    "lookup_desc": "Veterinary",
+    "created_at": null,
+    "created_by": null,
+    "updated_at": null,
+    "updated_by": null
+  },
+  {
+    "lookup_code": 100075,
+    "category": "ACCOUNT_TYPE",
+    "lookup_desc": "Arts / Crafts",
+    "created_at": null,
+    "created_by": null,
+    "updated_at": null,
+    "updated_by": null
+  },
+  {
+    "lookup_code": 100076,
+    "category": "ACCOUNT_TYPE",
+    "lookup_desc": "Government Relations",
+    "created_at": null,
+    "created_by": null,
+    "updated_at": null,
+    "updated_by": null
+  },
+  {
+    "lookup_code": 100077,
+    "category": "ACCOUNT_TYPE",
+    "lookup_desc": "Nanotechnology",
+    "created_at": null,
+    "created_by": null,
+    "updated_at": null,
+    "updated_by": null
+  },
+  {
+    "lookup_code": 100078,
+    "category": "ACCOUNT_TYPE",
+    "lookup_desc": "Luxury Goods / Jewelry",
+    "created_at": null,
+    "created_by": null,
+    "updated_at": null,
+    "updated_by": null
+  },
+  {
+    "lookup_code": 100079,
+    "category": "ACCOUNT_TYPE",
+    "lookup_desc": "Telecommunications",
+    "created_at": null,
+    "created_by": null,
+    "updated_at": null,
+    "updated_by": null
+  },
+  {
+    "lookup_code": 100080,
+    "category": "ACCOUNT_TYPE",
+    "lookup_desc": "Museums / Institutions",
+    "created_at": null,
+    "created_by": null,
+    "updated_at": null,
+    "updated_by": null
+  },
+  {
+    "lookup_code": 100081,
+    "category": "ACCOUNT_TYPE",
+    "lookup_desc": "Public Safety",
+    "created_at": null,
+    "created_by": null,
+    "updated_at": null,
+    "updated_by": null
+  },
+  {
+    "lookup_code": 100082,
+    "category": "ACCOUNT_TYPE",
+    "lookup_desc": "Religious Institutions",
+    "created_at": null,
+    "created_by": null,
+    "updated_at": null,
+    "updated_by": null
+  },
+  {
+    "lookup_code": 100083,
+    "category": "ACCOUNT_TYPE",
+    "lookup_desc": "Wholesale",
+    "created_at": null,
+    "created_by": null,
+    "updated_at": null,
+    "updated_by": null
+  },
+  {
+    "lookup_code": 100084,
+    "category": "ACCOUNT_TYPE",
+    "lookup_desc": "Primary / Secondary Education",
+    "created_at": null,
+    "created_by": null,
+    "updated_at": null,
+    "updated_by": null
+  },
+  {
+    "lookup_code": 100085,
+    "category": "ACCOUNT_TYPE",
+    "lookup_desc": "Legal Services",
+    "created_at": null,
+    "created_by": null,
+    "updated_at": null,
+    "updated_by": null
+  },
+  {
+    "lookup_code": 100086,
+    "category": "ACCOUNT_TYPE",
+    "lookup_desc": "Printing",
+    "created_at": null,
+    "created_by": null,
+    "updated_at": null,
+    "updated_by": null
+  },
+  {
+    "lookup_code": 100087,
+    "category": "ACCOUNT_TYPE",
+    "lookup_desc": "Health / Fitness",
+    "created_at": null,
+    "created_by": null,
+    "updated_at": null,
+    "updated_by": null
+  },
+  {
+    "lookup_code": 100088,
+    "category": "ACCOUNT_TYPE",
+    "lookup_desc": "Computer Software / Engineering",
+    "created_at": null,
+    "created_by": null,
+    "updated_at": null,
+    "updated_by": null
+  },
+  {
+    "lookup_code": 100089,
+    "category": "ACCOUNT_TYPE",
+    "lookup_desc": "Performing Arts",
+    "created_at": null,
+    "created_by": null,
+    "updated_at": null,
+    "updated_by": null
+  },
+  {
+    "lookup_code": 100090,
+    "category": "ACCOUNT_TYPE",
+    "lookup_desc": "Business Supplies / Equipment",
+    "created_at": null,
+    "created_by": null,
+    "updated_at": null,
+    "updated_by": null
+  },
+  {
+    "lookup_code": 100091,
+    "category": "ACCOUNT_TYPE",
+    "lookup_desc": "Civil Engineering",
+    "created_at": null,
+    "created_by": null,
+    "updated_at": null,
+    "updated_by": null
+  },
+  {
+    "lookup_code": 100092,
+    "category": "ACCOUNT_TYPE",
+    "lookup_desc": "Maritime",
+    "created_at": null,
+    "created_by": null,
+    "updated_at": null,
+    "updated_by": null
+  },
+  {
+    "lookup_code": 100093,
+    "category": "ACCOUNT_TYPE",
+    "lookup_desc": "Building Materials",
+    "created_at": null,
+    "created_by": null,
+    "updated_at": null,
+    "updated_by": null
+  },
+  {
+    "lookup_code": 100094,
+    "category": "ACCOUNT_TYPE",
+    "lookup_desc": "Human Resources / HR",
+    "created_at": null,
+    "created_by": null,
+    "updated_at": null,
+    "updated_by": null
+  },
+  {
+    "lookup_code": 100095,
+    "category": "ACCOUNT_TYPE",
+    "lookup_desc": "Insurance",
+    "created_at": null,
+    "created_by": null,
+    "updated_at": null,
+    "updated_by": null
+  },
+  {
+    "lookup_code": 100096,
+    "category": "ACCOUNT_TYPE",
+    "lookup_desc": "Gambling / Casinos",
+    "created_at": null,
+    "created_by": null,
+    "updated_at": null,
+    "updated_by": null
+  },
+  {
+    "lookup_code": 100097,
+    "category": "ACCOUNT_TYPE",
+    "lookup_desc": "Leisure / Travel",
+    "created_at": null,
+    "created_by": null,
+    "updated_at": null,
+    "updated_by": null
+  },
+  {
+    "lookup_code": 100098,
+    "category": "ACCOUNT_TYPE",
+    "lookup_desc": "Information Services",
+    "created_at": null,
+    "created_by": null,
+    "updated_at": null,
+    "updated_by": null
+  },
+  {
+    "lookup_code": 100099,
+    "category": "ACCOUNT_TYPE",
+    "lookup_desc": "Law Practice / Law Firms",
+    "created_at": null,
+    "created_by": null,
+    "updated_at": null,
+    "updated_by": null
+  },
+  {
+    "lookup_code": 100100,
+    "category": "ACCOUNT_TYPE",
+    "lookup_desc": "Food / Beverages",
+    "created_at": null,
+    "created_by": null,
+    "updated_at": null,
+    "updated_by": null
+  },
+  {
+    "lookup_code": 100101,
+    "category": "ACCOUNT_TYPE",
+    "lookup_desc": "Alternative Dispute Resolution",
+    "created_at": null,
+    "created_by": null,
+    "updated_at": null,
+    "updated_by": null
+  },
+  {
+    "lookup_code": 100102,
+    "category": "ACCOUNT_TYPE",
+    "lookup_desc": "Tobacco",
+    "created_at": null,
+    "created_by": null,
+    "updated_at": null,
+    "updated_by": null
+  },
+  {
+    "lookup_code": 100103,
+    "category": "ACCOUNT_TYPE",
+    "lookup_desc": "Military Industry",
+    "created_at": null,
+    "created_by": null,
+    "updated_at": null,
+    "updated_by": null
+  },
+  {
+    "lookup_code": 100104,
+    "category": "ACCOUNT_TYPE",
+    "lookup_desc": "Consumer Services",
+    "created_at": null,
+    "created_by": null,
+    "updated_at": null,
+    "updated_by": null
+  },
+  {
+    "lookup_code": 100105,
+    "category": "ACCOUNT_TYPE",
+    "lookup_desc": "Sports",
+    "created_at": null,
+    "created_by": null,
+    "updated_at": null,
+    "updated_by": null
+  },
+  {
+    "lookup_code": 100106,
+    "category": "ACCOUNT_TYPE",
+    "lookup_desc": "Commercial Real Estate",
+    "created_at": null,
+    "created_by": null,
+    "updated_at": null,
+    "updated_by": null
+  },
+  {
+    "lookup_code": 100107,
+    "category": "ACCOUNT_TYPE",
+    "lookup_desc": "Photography",
+    "created_at": null,
+    "created_by": null,
+    "updated_at": null,
+    "updated_by": null
+  },
+  {
+    "lookup_code": 100108,
+    "category": "ACCOUNT_TYPE",
+    "lookup_desc": "Furniture",
+    "created_at": null,
+    "created_by": null,
+    "updated_at": null,
+    "updated_by": null
+  },
+  {
+    "lookup_code": 100109,
+    "category": "ACCOUNT_TYPE",
+    "lookup_desc": "Textiles",
+    "created_at": null,
+    "created_by": null,
+    "updated_at": null,
+    "updated_by": null
+  },
+  {
+    "lookup_code": 100110,
+    "category": "ACCOUNT_TYPE",
+    "lookup_desc": "Shipbuilding",
+    "created_at": null,
+    "created_by": null,
+    "updated_at": null,
+    "updated_by": null
+  },
+  {
+    "lookup_code": 100111,
+    "category": "ACCOUNT_TYPE",
+    "lookup_desc": "Construction",
+    "created_at": null,
+    "created_by": null,
+    "updated_at": null,
+    "updated_by": null
+  },
+  {
+    "lookup_code": 100112,
+    "category": "ACCOUNT_TYPE",
+    "lookup_desc": "Management Consulting",
+    "created_at": null,
+    "created_by": null,
+    "updated_at": null,
+    "updated_by": null
+  },
+  {
+    "lookup_code": 100113,
+    "category": "ACCOUNT_TYPE",
+    "lookup_desc": "Library",
+    "created_at": null,
+    "created_by": null,
+    "updated_at": null,
+    "updated_by": null
+  },
+  {
+    "lookup_code": 100114,
+    "category": "ACCOUNT_TYPE",
+    "lookup_desc": "Non - Profit / Volunteering",
+    "created_at": null,
+    "created_by": null,
+    "updated_at": null,
+    "updated_by": null
+  },
+  {
+    "lookup_code": 100115,
+    "category": "ACCOUNT_TYPE",
+    "lookup_desc": "Fundraising",
+    "created_at": null,
+    "created_by": null,
+    "updated_at": null,
+    "updated_by": null
+  },
+  {
+    "lookup_code": 100116,
+    "category": "ACCOUNT_TYPE",
+    "lookup_desc": "Packaging / Containers",
+    "created_at": null,
+    "created_by": null,
+    "updated_at": null,
+    "updated_by": null
+  },
+  {
+    "lookup_code": 100117,
+    "category": "ACCOUNT_TYPE",
+    "lookup_desc": "Utilities",
+    "created_at": null,
+    "created_by": null,
+    "updated_at": null,
+    "updated_by": null
+  },
+  {
+    "lookup_code": 100118,
+    "category": "ACCOUNT_TYPE",
+    "lookup_desc": "E - Learning",
+    "created_at": null,
+    "created_by": null,
+    "updated_at": null,
+    "updated_by": null
+  },
+  {
+    "lookup_code": 100119,
+    "category": "ACCOUNT_TYPE",
+    "lookup_desc": "Executive Office",
+    "created_at": null,
+    "created_by": null,
+    "updated_at": null,
+    "updated_by": null
+  },
+  {
+    "lookup_code": 100120,
+    "category": "ACCOUNT_TYPE",
+    "lookup_desc": "Publishing Industry",
+    "created_at": null,
+    "created_by": null,
+    "updated_at": null,
+    "updated_by": null
+  },
+  {
+    "lookup_code": 100121,
+    "category": "ACCOUNT_TYPE",
+    "lookup_desc": "Wireless",
+    "created_at": null,
+    "created_by": null,
+    "updated_at": null,
+    "updated_by": null
+  },
+  {
+    "lookup_code": 100122,
+    "category": "ACCOUNT_TYPE",
+    "lookup_desc": "Machinery",
+    "created_at": null,
+    "created_by": null,
+    "updated_at": null,
+    "updated_by": null
+  },
+  {
+    "lookup_code": 100123,
+    "category": "ACCOUNT_TYPE",
+    "lookup_desc": "Law Enforcement",
+    "created_at": null,
+    "created_by": null,
+    "updated_at": null,
+    "updated_by": null
+  },
+  {
+    "lookup_code": 100124,
+    "category": "ACCOUNT_TYPE",
+    "lookup_desc": "Automotive",
+    "created_at": null,
+    "created_by": null,
+    "updated_at": null,
+    "updated_by": null
+  },
+  {
+    "lookup_code": 100125,
+    "category": "ACCOUNT_TYPE",
+    "lookup_desc": "Package / Freight Delivery",
+    "created_at": null,
+    "created_by": null,
+    "updated_at": null,
+    "updated_by": null
+  },
+  {
+    "lookup_code": 100126,
+    "category": "ACCOUNT_TYPE",
+    "lookup_desc": "Real Estate / Mortgage",
+    "created_at": null,
+    "created_by": null,
+    "updated_at": null,
+    "updated_by": null
+  },
+  {
+    "lookup_code": 100127,
+    "category": "ACCOUNT_TYPE",
+    "lookup_desc": "Hospitality",
+    "created_at": null,
+    "created_by": null,
+    "updated_at": null,
+    "updated_by": null
+  },
+  {
+    "lookup_code": 100128,
+    "category": "ACCOUNT_TYPE",
+    "lookup_desc": "Program Development",
+    "created_at": null,
+    "created_by": null,
+    "updated_at": null,
+    "updated_by": null
+  },
+  {
+    "lookup_code": 100129,
+    "category": "ACCOUNT_TYPE",
+    "lookup_desc": "Writing / Editing",
+    "created_at": null,
+    "created_by": null,
+    "updated_at": null,
+    "updated_by": null
+  },
+  {
+    "lookup_code": 100130,
+    "category": "ACCOUNT_TYPE",
+    "lookup_desc": "Farming",
+    "created_at": null,
+    "created_by": null,
+    "updated_at": null,
+    "updated_by": null
+  },
+  {
+    "lookup_code": 100131,
+    "category": "ACCOUNT_TYPE",
+    "lookup_desc": "Logistics / Procurement",
+    "created_at": null,
+    "created_by": null,
+    "updated_at": null,
+    "updated_by": null
+  },
+  {
+    "lookup_code": 100132,
+    "category": "ACCOUNT_TYPE",
+    "lookup_desc": "Oil / Energy / Solar / Greentech",
+    "created_at": null,
+    "created_by": null,
+    "updated_at": null,
+    "updated_by": null
+  },
+  {
+    "lookup_code": 100133,
+    "category": "ACCOUNT_TYPE",
+    "lookup_desc": "Events Services",
+    "created_at": null,
+    "created_by": null,
+    "updated_at": null,
+    "updated_by": null
+  },
+  {
+    "lookup_code": 100134,
+    "category": "ACCOUNT_TYPE",
+    "lookup_desc": "Transportation",
+    "created_at": null,
+    "created_by": null,
+    "updated_at": null,
+    "updated_by": null
+  },
+  {
+    "lookup_code": 100135,
+    "category": "ACCOUNT_TYPE",
+    "lookup_desc": "Aviation / Aerospace",
+    "created_at": null,
+    "created_by": null,
+    "updated_at": null,
+    "updated_by": null
+  },
+  {
+    "lookup_code": 100136,
+    "category": "ACCOUNT_TYPE",
+    "lookup_desc": "Hospital / Health Care",
+    "created_at": null,
+    "created_by": null,
+    "updated_at": null,
+    "updated_by": null
+  },
+  {
+    "lookup_code": 100137,
+    "category": "ACCOUNT_TYPE",
+    "lookup_desc": "Online Publishing",
+    "created_at": null,
+    "created_by": null,
+    "updated_at": null,
+    "updated_by": null
+  },
+  {
+    "lookup_code": 100138,
+    "category": "ACCOUNT_TYPE",
+    "lookup_desc": "International Trade / Development",
+    "created_at": null,
+    "created_by": null,
+    "updated_at": null,
+    "updated_by": null
+  },
+  {
+    "lookup_code": 100139,
+    "category": "ACCOUNT_TYPE",
+    "lookup_desc": "Dairy",
+    "created_at": null,
+    "created_by": null,
+    "updated_at": null,
+    "updated_by": null
+  }
+]

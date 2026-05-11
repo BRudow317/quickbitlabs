@@ -1,5 +1,6 @@
 from __future__ import annotations
 from typing import Any, ClassVar, Mapping, Literal
+import os
 from pydantic import SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict, PydanticBaseSettingsSource, PyprojectTomlConfigSettingsSource
 from pydantic_settings.sources import DotenvType, PathType
@@ -72,7 +73,7 @@ class Settings(BaseSettings):
     jwt_secret: SecretStr # In development, main.py generates an ephemeral 256-bit key at startup if this is unset.
     jwt_algorithm: str = "HS256"
     upload_encryption_key: SecretStr # base64-encoded 32-byte AES key for encrypting uploaded files at rest.
-    py_project_root: str # app root directory
+    project_root: str  = os.getenv("PROJECT_ROOT", "./") # app root directory
     frontend: str = './frontend/dist'
     access_token_expire_minutes: int = 30
     log_level: str = "INFO"

@@ -32,8 +32,8 @@ def build_server(mode: str|None = None, force_rebuild: bool = False, pgdb_base_n
             orchestrate_pdb(pgdb_base_name=pgdb_base_name, force_rebuild=force_rebuild)
             from build.db_setup import build_db
             build_db(sql_dir=str(PROJECT_ROOT / "build" / "sql"))
-            import build.app_setup
-            build.app_setup.create_app_user()
+            from build.app_setup import user_setup
+            user_setup(username="admin")
             from server.services.sync_systems import sync_all
             sync_all()
         

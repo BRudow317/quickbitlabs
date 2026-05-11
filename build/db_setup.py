@@ -161,8 +161,6 @@ def user_setup(username, email, password, role, is_active: bool = True) -> int:
     hashed = get_password_hash(password_)
     is_active_ = 1 if is_active else 0
 
-
-
     merge_sql = f"""
         MERGE INTO QBL_USERS tgt
         USING (SELECT '{username_}' AS USERNAME FROM DUAL) src
@@ -174,6 +172,7 @@ def user_setup(username, email, password, role, is_active: bool = True) -> int:
             INSERT (USERNAME, EMAIL, password_hash, qbl_role, IS_ACTIVE)
             VALUES ('{username_}', '{email_}', '{hashed}', '{role_}', {is_active_})
     """
+    return sql_runner(merge_sql).returncode
 
 def build_db(sql_dir: str, username: str = "QBL", as_sysdba: bool = False) -> None:    
     create_db_logger(username,  as_sysdba)
