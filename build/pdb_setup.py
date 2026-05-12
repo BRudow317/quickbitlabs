@@ -60,9 +60,10 @@ def create_pdb_from_seed(pdb_name: str, admin_user: str, admin_pwd: str) -> None
     create_sql = f"""
     CREATE PLUGGABLE DATABASE {pdb_name}
     ADMIN USER {admin_user} IDENTIFIED BY "{admin_pwd}";
-    
+
     ALTER PLUGGABLE DATABASE {pdb_name} OPEN;
     ALTER PLUGGABLE DATABASE {pdb_name} SAVE STATE;
+    ALTER SYSTEM REGISTER;
     """
     _run_sysdba_query(create_sql)
 
@@ -134,10 +135,9 @@ def orchestrate_pdb(pgdb_base_name: str, force_rebuild: bool = False) -> None:
             create_pdb_from_seed(pdb_name, admin_user, admin_pwd)
         else:
             logger.info("PDB '%s' already exists. Skipping creation.", pdb_name)
-            return
+    else:
+        create_pdb_from_seed(pdb_name, admin_user, admin_pwd)
 
-    
-    
     orchestrate_user("QBL")
     orchestrate_user("DWH")
     # orchestrate_user("QBLPDB_ADMIN", is_admin=True)

@@ -31,9 +31,11 @@ def build_server(mode: str|None = None, force_rebuild: bool = False, pgdb_base_n
             from build.pdb_setup import orchestrate_pdb
             orchestrate_pdb(pgdb_base_name=pgdb_base_name, force_rebuild=force_rebuild)
             from build.db_setup import build_db
-            build_db(sql_dir=str(PROJECT_ROOT / "build" / "sql"))
+            build_db(sql_dir=str(PROJECT_ROOT / "build" / "sql"), username="SYSDBA")
             from build.app_setup import user_setup
             user_setup(username="admin")
+            from build.db_dwh_setup import dwh_setup
+            dwh_setup()
             from server.services.sync_systems import sync_all
             sync_all()
         

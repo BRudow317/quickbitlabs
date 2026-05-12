@@ -1,3 +1,6 @@
+
+ALTER SESSION SET CURRENT_SCHEMA = QBL;
+
 -- =====================================================
 -- QBL.QBL_USER_ROLES
 -- =====================================================
@@ -12,11 +15,11 @@ CREATE TABLE qbl_user_roles (
     updated_by VARCHAR2(100 CHAR) DEFAULT 'SYSTEM' NOT NULL
 );
 
-INSERT INTO qbl_user_roles (qbl_role, qbl_role_desc) VALUES ('ADMIN', 'Website Administrator');
+INSERT INTO qbl_user_roles (qbl_role, qbl_role_desc) VALUES ('ADMIN' , 'Website Administrator');
 INSERT INTO qbl_user_roles (qbl_role, qbl_role_desc) VALUES ('SYSTEM', 'System Role');
-INSERT INTO qbl_user_roles (qbl_role, qbl_role_desc) VALUES ('GROUP', 'Group Role');
-INSERT INTO qbl_user_roles (qbl_role, qbl_role_desc) VALUES ('USER',  'Standard User');
-INSERT INTO qbl_user_roles (qbl_role, qbl_role_desc) VALUES ('GUEST', 'Guest Role');
+INSERT INTO qbl_user_roles (qbl_role, qbl_role_desc) VALUES ('GROUP' , 'Group Role');
+INSERT INTO qbl_user_roles (qbl_role, qbl_role_desc) VALUES ('USER'  ,  'Standard User');
+INSERT INTO qbl_user_roles (qbl_role, qbl_role_desc) VALUES ('GUEST' , 'Guest Role');
 
 -- =====================================================
 -- QBL.QBL_USERS
@@ -33,7 +36,6 @@ CREATE TABLE qbl_users (
     updated_at TIMESTAMP DEFAULT SYSTIMESTAMP NOT NULL,
     updated_by VARCHAR2(100 CHAR) DEFAULT 'SYSTEM' NOT NULL
 );
-
 
 INSERT INTO qbl_users (username, email, password_hash, qbl_role) VALUES ('jdoe', 'jane.doe@company.com','hashed_password', 'USER');
 insert into qbl_users (username, email, password_hash, qbl_role) values ('testuser', 'testuser@example.com', 'hashedpassword', 'USER');
@@ -59,9 +61,9 @@ INSERT INTO qbl_groups (group_name, group_label)
 VALUES ('actuarial', 'Actuarial Sciences');
 INSERT INTO qbl_groups (group_name, group_label) 
 VALUES ('finance', 'Finance Department');
-INSERT INTO qbl_groups (group_name, group_label) 
+INSERT INTO qbl_groups (group_name, group_label)
 VALUES ('operations', 'Operations Department');
-INSERT INTO qbl_groups (group_name, group_label) 
+INSERT INTO qbl_groups (group_name, group_label)
 VALUES ('admin', 'Administrator');
 
 
@@ -80,9 +82,6 @@ CREATE TABLE qbl_user_groups (
     updated_by VARCHAR2(100 CHAR) DEFAULT 'SYSTEM' NOT NULL,
     CONSTRAINT UQ_QBL_USER_GROUPS UNIQUE (qbl_user_id, qbl_groups_id)
 );
-
-
-
 
 -- =====================================================
 -- QBL.QBL_SETTINGS_LOOKUP
@@ -137,7 +136,6 @@ CREATE TABLE qbl_user_settings (
     CONSTRAINT UQ_USER_SETTINGS UNIQUE (qbl_user_id, setting_category)
 );
 
-
 -- =====================================================
 -- QBL.QBL_USER_SESSION
 -- =====================================================
@@ -157,7 +155,6 @@ CREATE TABLE qbl_user_session (
     updated_at TIMESTAMP DEFAULT SYSTIMESTAMP NOT NULL,
     updated_by VARCHAR2(100 CHAR) DEFAULT 'SYSTEM' NOT NULL
 );
-
 
 CREATE INDEX IDX_QBL_USER_SESSION_USER_ID  ON qbl_user_session (qbl_user_id);
 CREATE INDEX IDX_QBL_USER_SESSION_TOKEN    ON qbl_user_session (token_hash);

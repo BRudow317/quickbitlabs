@@ -105,7 +105,9 @@ def generate_full_mock_data(base_path: str|Path) -> None:
     # 1. Load Base Data
     print(f"Loading base templates (Limit: {MOCK_DATA_LIMIT})...")
     cust_df = pl.read_csv(output_dir / "customers-100000.csv").head(MOCK_DATA_LIMIT)
-    org_df = pl.read_csv(output_dir / "org.csv")
+    org_df = (pl.read_csv(output_dir / "org.csv")
+              .unique(subset=["Organization Id"], keep="first")
+              .unique(subset=["Name"], keep="first"))
     
     cust_df = cust_df.with_columns([
         pl.arange(START_ID_DEMOGRAPHIC, START_ID_DEMOGRAPHIC + cust_df.height).alias("demographic_id"),

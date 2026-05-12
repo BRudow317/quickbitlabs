@@ -61,12 +61,7 @@ CREATE TABLE DWH.MQ_OUTBOUND (
     UPDATED_BY      VARCHAR2(32 CHAR) DEFAULT ON NULL NVL(SYS_CONTEXT('userenv','client_identifier'),USER) NOT NULL,
     CREATED_AT      TIMESTAMP DEFAULT ON NULL SYSTIMESTAMP NOT NULL,
     CREATED_BY      VARCHAR2(32 CHAR) DEFAULT ON NULL NVL(SYS_CONTEXT('userenv','client_identifier'),USER) NOT NULL
-
-)
-PARTITION BY LIST (MQ_STATUS)(
-    PARTITION P_NEW     VALUES (NULL),
-    PARTITION P_DEFAULT VALUES (DEFAULT)
-) ENABLE ROW MOVEMENT;
+);
 
 -- =====================================================
 -- DWH.MQ_INBOUND (Staging Table)
@@ -114,17 +109,13 @@ CREATE TABLE dwh.mq_inbound (
   address_type      VARCHAR2(32 CHAR),
   mq_address_hash   VARCHAR2(32 CHAR),
   integration_id    VARCHAR2(64 CHAR),
-  mq_status         NUMBER CONSTRAINT FK_MQ_INBOUND_STATUS REFERENCES qbl.http_codes(code) DEFAULT 202,
+  mq_status         NUMBER DEFAULT 202 CONSTRAINT FK_MQ_INBOUND_STATUS REFERENCES qbl.http_codes(code),
   -- Audit Fields
   created_at        TIMESTAMP DEFAULT ON NULL SYSTIMESTAMP NOT NULL,
   created_by        VARCHAR2(100 CHAR) DEFAULT ON NULL NVL(SYS_CONTEXT('userenv','client_identifier'),USER) NOT NULL,
   updated_at        TIMESTAMP DEFAULT ON NULL SYSTIMESTAMP NOT NULL,
   updated_by        VARCHAR2(100 CHAR) DEFAULT ON NULL NVL(SYS_CONTEXT('userenv','client_identifier'),USER) NOT NULL
-)
-PARTITION BY LIST (MQ_STATUS)(
-    PARTITION P_NEW     VALUES (202),
-    PARTITION P_DEFAULT VALUES (DEFAULT)
-) ENABLE ROW MOVEMENT;
+);
 
 
 CREATE VIEW DWH.MQ_SOURCE_VW AS
@@ -218,10 +209,17 @@ LEFT JOIN dwh.mq_lookup prefix      ON d.prefix_id      = prefix.lookup_id
 LEFT JOIN dwh.mq_lookup suffix      ON d.suffix_id      = suffix.lookup_id
 LEFT JOIN dwh.mq_lookup gender      ON d.gender_id      = gender.lookup_id
 LEFT JOIN dwh.mq_lookup mar_status  ON d.mar_status_id  = mar_status.lookup_id
-LEFT JOIN dwh.phone p ON d.demographic_id = p.demographic_id
-    AND p.phone_type_id = (SELECT lookup_id FROM dwh.mq_lookup WHERE category = 'PHONE_TYPE' AND lookup_desc = 'MAIN')
+LEFT JOIN (
+    SELECT p.*
+    FROM dwh.phone p
+    WHERE p.phone_type_id = (SELECT lookup_id FROM dwh.mq_lookup WHERE category = 'PHONE_TYPE' AND lookup_desc = 'MAIN')
+) p ON d.demographic_id = p.demographic_id
 LEFT JOIN dwh.mq_lookup phone_type   ON p.phone_type_id   = phone_type.lookup_id
-LEFT JOIN dwh.address a ON d.demographic_id = a.demographic_id
-    AND a.address_type_id = (SELECT lookup_id FROM dwh.mq_lookup WHERE category = 'ADDRESS_TYPE' AND lookup_desc = 'HOME')
+LEFT JOIN (
+    SELECT a.*
+    FROM dwh.address a
+    WHERE a.address_type_id = (SELECT lookup_id FROM dwh.mq_lookup WHERE category = 'ADDRESS_TYPE' AND lookup_desc = 'HOME')
+) a ON d.demographic_id = a.demographic_id
 LEFT JOIN dwh.mq_lookup address_type ON a.address_type_id = address_type.lookup_id
 WHERE d.deleted_status = (SELECT lookup_id FROM dwh.mq_lookup WHERE category = 'DELETED_STATUS' AND lookup_desc = 'ACTIVE');
+
