@@ -1,0 +1,201 @@
+/* ============================================================
+   NeonInput — neon-input.css
+
+   CSS custom properties (set inline on ni-field-root):
+     --ni-accent  : main accent color
+     --ni-border  : border color (default state)
+     --ni-hover   : border color on hover
+     --ni-focus   : border color + glow color on focus
+     --ni-glow    : drop-shadow spread radius
+     --ni-corner  : diagonal cut depth in px
+   ============================================================ */
+
+.ni-field-root {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+}
+
+.ni-disabled {
+  opacity: 0.45;
+  pointer-events: none;
+  user-select: none;
+}
+
+.ni-label {
+  display: block;
+  letter-spacing: 0.12em;
+  line-height: 1;
+  margin-bottom: 2px;
+}
+
+.ni-glow-wrapper {
+  position: relative;
+  transition: filter 0.25s ease;
+}
+
+.ni-glow-wrapper:focus-within {
+  filter: drop-shadow(0 0 var(--ni-glow, 10px) var(--ni-focus));
+}
+
+.ni-border-frame {
+  background: var(--ni-border);
+  transition: background 0.2s ease;
+}
+
+.ni-glow-wrapper:hover .ni-border-frame {
+  background: var(--ni-hover);
+}
+
+.ni-glow-wrapper:focus-within .ni-border-frame {
+  background: var(--ni-focus);
+}
+
+.ni-border-css {
+  border: 1px solid var(--ni-border);
+  transition: border-color 0.2s ease;
+}
+
+.ni-glow-wrapper:hover .ni-border-css {
+  border-color: var(--ni-hover);
+}
+
+.ni-glow-wrapper:focus-within .ni-border-css {
+  border-color: var(--ni-focus);
+}
+
+.ni-bottom-shell {
+  border-bottom: 1px solid var(--ni-border);
+  transition: border-color 0.2s ease;
+}
+
+.ni-glow-wrapper:hover .ni-bottom-shell {
+  border-color: var(--ni-hover);
+}
+
+.ni-glow-wrapper:focus-within .ni-bottom-shell {
+  border-color: var(--ni-focus);
+}
+
+.ni-input {
+  flex: 1;
+  min-width: 0;
+  width: 100%;
+  background: transparent;
+  border: none;
+  outline: none;
+  caret-color: var(--ni-accent);
+}
+
+.ni-input::placeholder {
+  color: var(--ni-ph-color);
+}
+
+.ni-input:-webkit-autofill,
+.ni-input:-webkit-autofill:hover,
+.ni-input:-webkit-autofill:focus {
+  -webkit-box-shadow: 0 0 0 1000px #0a0f14 inset;
+  -webkit-text-fill-color: inherit;
+  transition: background-color 9999s ease-in-out 0s;
+}
+
+.ni-input::-ms-reveal { display: none; }
+
+.ni-input[type="number"]::-webkit-inner-spin-button,
+.ni-input[type="number"]::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.ni-input[type="number"] { -moz-appearance: textfield; }
+
+.ni-prefix,
+.ni-suffix {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  user-select: none;
+  opacity: 0.7;
+  transition: opacity 0.2s ease;
+}
+
+.ni-glow-wrapper:focus-within .ni-prefix,
+.ni-glow-wrapper:focus-within .ni-suffix {
+  opacity: 1;
+}
+
+.ni-hint {
+  display: block;
+  line-height: 1.4;
+  letter-spacing: 0.04em;
+}
+
+.ni-clip-br {
+  clip-path: polygon(
+    0 0, 100% 0,
+    100% calc(100% - var(--ni-corner, 12px)),
+    calc(100% - var(--ni-corner, 12px)) 100%,
+    0 100%
+  );
+}
+
+.ni-clip-bl {
+  clip-path: polygon(
+    0 0, 100% 0, 100% 100%,
+    var(--ni-corner, 12px) 100%,
+    0 calc(100% - var(--ni-corner, 12px))
+  );
+}
+
+.ni-clip-tr {
+  clip-path: polygon(
+    0 0,
+    calc(100% - var(--ni-corner, 12px)) 0,
+    100% var(--ni-corner, 12px),
+    100% 100%, 0 100%
+  );
+}
+
+.ni-clip-tl {
+  clip-path: polygon(
+    var(--ni-corner, 12px) 0,
+    100% 0, 100% 100%, 0 100%,
+    0 var(--ni-corner, 12px)
+  );
+}
+
+.ni-clip-all {
+  clip-path: polygon(
+    var(--ni-corner, 12px) 0,
+    calc(100% - var(--ni-corner, 12px)) 0,
+    100% var(--ni-corner, 12px),
+    100% calc(100% - var(--ni-corner, 12px)),
+    calc(100% - var(--ni-corner, 12px)) 100%,
+    var(--ni-corner, 12px) 100%,
+    0 calc(100% - var(--ni-corner, 12px)),
+    0 var(--ni-corner, 12px)
+  );
+}
+
+.ni-clip-tl-br {
+  clip-path: polygon(
+    var(--ni-corner, 12px) 0,
+    100% 0,
+    100% calc(100% - var(--ni-corner, 12px)),
+    calc(100% - var(--ni-corner, 12px)) 100%,
+    0 100%,
+    0 var(--ni-corner, 12px)
+  );
+}
+
+.ni-clip-bl-tr {
+  clip-path: polygon(
+    0 0,
+    calc(100% - var(--ni-corner, 12px)) 0,
+    100% var(--ni-corner, 12px),
+    100% 100%,
+    var(--ni-corner, 12px) 100%,
+    0 calc(100% - var(--ni-corner, 12px))
+  );
+}
