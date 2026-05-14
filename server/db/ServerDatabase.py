@@ -25,7 +25,7 @@ class ServerDatabase:
     _oracle_user: str
     _oracle_pass: str
     _oracle_host: str
-    _oracle_port: int
+    _oracle_port: int | None
     _oracle_service: str
     _current_connection: Connection | None
 
@@ -49,7 +49,7 @@ class ServerDatabase:
         self._oracle_user = oracle_user
         self._oracle_pass = oracle_pass
         self._oracle_host = oracle_host
-        self._oracle_port = int(oracle_port) if oracle_port is not None else 1521
+        self._oracle_port = int(oracle_port) if oracle_port is not None and str(oracle_port).isdigit() else None
         self._oracle_service = oracle_service
         self._current_connection = None
         self.get_user
@@ -68,7 +68,7 @@ class ServerDatabase:
     @property
     def get_password(self) -> str:
         if not self._oracle_pass:
-            self._oracle_pass = os.getenv('ORACLE_QBL_PWD') or ''
+            self._oracle_pass = os.getenv('ORACLE_QBL_PASS') or ''
         return self._oracle_pass
     @property
     def get_host(self) -> str:

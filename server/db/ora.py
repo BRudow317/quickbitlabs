@@ -259,7 +259,7 @@ class OracleClient:
         )
 
     def odf_to_arrow(self, odf: oracledb.DataFrame) -> pa.Table:
-        """Zero-copy conversion to a PyArrow Table via the PyCapsule interface."""
+        """Zero copy conversion to a PyArrow Table via the PyCapsule interface."""
         return pa.Table.from_arrays(odf.column_arrays(), names=odf.column_names())
 
     def arrow_query(

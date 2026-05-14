@@ -20,7 +20,6 @@ def list_registry(
     current_user: Annotated[UserBase, Depends(get_current_user)],
     registry: CatalogRegistryService = Depends(_registry),
 ):
-    """Return lightweight metadata for all catalogs saved by the current user."""
     return registry.list_entries(current_user.username)
 
 
@@ -30,7 +29,6 @@ def get_registry_entry(
     current_user: Annotated[UserBase, Depends(get_current_user)],
     registry: CatalogRegistryService = Depends(_registry),
 ):
-    """Retrieve a saved Catalog by key."""
     catalog = registry.get(current_user.username, registry_key)
     if catalog is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"'{registry_key}' not found")
@@ -44,8 +42,8 @@ def save_registry_entry(
     current_user: Annotated[UserBase, Depends(get_current_user)],
     registry: CatalogRegistryService = Depends(_registry),
 ):
-    """Save (create or overwrite) a named Catalog for the current user."""
-    registry.save(current_user.username, registry_key, catalog)
+    catalog.name = catalog.name or registry_key
+    registry.save(current_user.username, catalog)
 
 
 @router.delete("/{registry_key}", status_code=status.HTTP_204_NO_CONTENT, operation_id="delete_registry_entry")
@@ -54,7 +52,6 @@ def delete_registry_entry(
     current_user: Annotated[UserBase, Depends(get_current_user)],
     registry: CatalogRegistryService = Depends(_registry),
 ):
-    """Delete a saved Catalog by key."""
     deleted = registry.delete(current_user.username, registry_key)
     if not deleted:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"'{registry_key}' not found")

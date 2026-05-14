@@ -37,7 +37,7 @@ def sync_all() -> dict[str, str]:
             plugin = get_plugin(cast(PLUGIN, plugin_name))
         except Exception as exc:
             results[plugin_name] = f"load error: {exc}"
-            logger.warning(f"sync_systems: {plugin_name} → could not load plugin: {exc}")
+            logger.warning(f"sync_systems: {plugin_name} -> could not load plugin: {exc}")
             continue
 
         try:
@@ -46,19 +46,21 @@ def sync_all() -> dict[str, str]:
                 msg = response.message or "get_catalog returned not ok"
                 if response.code == 501:
                     results[plugin_name] = "not_implemented"
-                    logger.info(f"sync_systems: {plugin_name} → not implemented, skipped")
+                    logger.info(f"sync_systems: {plugin_name} -> not implemented, skipped")
                 else:
                     results[plugin_name] = msg
-                    logger.warning(f"sync_systems: {plugin_name} → {msg}")
+                    logger.warning(f"sync_systems: {plugin_name} -> {msg}")
                 continue
 
             catalog: Catalog = response.data
+            catalog.name = catalog.name or plugin_name
+            catalog.source_type = catalog.source_type or plugin_name
             registry.save(owner="SYSTEM", catalog=catalog)
             results[plugin_name] = "ok"
-            logger.info(f"sync_systems: {plugin_name} → ok ({len(catalog.entities)} entities)")
+            logger.info(f"sync_systems: {plugin_name} -> ok ({len(catalog.entities)} entities)")
         except Exception as exc:
             results[plugin_name] = str(exc)
-            logger.exception(f"sync_systems: {plugin_name} → exception")
+            logger.exception(f"sync_systems: {plugin_name} -> exception")
 
     return results
 
@@ -72,6 +74,5 @@ if __name__ == "__main__":
         sys.path.insert(0, str(PROJECT_ROOT))
 
     results = sync_all()
-    print("\n--- sync_systems results ---")
     for name, status in results.items():
         print(f"  {name:20s}  {status}")

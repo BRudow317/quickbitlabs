@@ -13,15 +13,14 @@ from __future__ import annotations
 import os
 import uuid
 from datetime import datetime, timedelta, timezone
-
 import pytest
 
 # ---------------------------------------------------------------------------
-# Skip guard — skip entire module when mocks are active or DB vars are absent
+# Skip guard skip entire module when mocks are active or DB vars are absent
 # ---------------------------------------------------------------------------
 
 _DB_VARS_PRESENT = all(
-    os.getenv(v) for v in ("ORACLE_QBL_USER", "ORACLE_QBL_PWD", "ORACLE_QBL_HOST", "ORACLE_QBL_SERVICE")
+    os.getenv(v) for v in ("ORACLE_QBL_USER", "ORACLE_QBL_PASS", "ORACLE_QBL_HOST", "ORACLE_QBL_SERVICE")
 )
 _MOCKS_ACTIVE = os.getenv("ORACLE_TEST_USE_MOCKS", "0") == "1"
 
@@ -79,7 +78,7 @@ def test_username(db):
 
 
 # ---------------------------------------------------------------------------
-# 1 — Connectivity
+# 1 Connectivity
 # ---------------------------------------------------------------------------
 
 class TestConnectivity:
@@ -99,13 +98,13 @@ class TestConnectivity:
 
 
 # ---------------------------------------------------------------------------
-# 2 — Schema / DDL completeness
+# 2 Schema / DDL completeness
 # ---------------------------------------------------------------------------
 
 _EXPECTED_TABLES = [
-    "QBL_USERS", "USER_ROLES", "USER_SETTINGS", "USER_TEAMS", "TEAMS",
-    "USER_SESSION", "USER_SIGN_IN", "USER_REFRESH_TOKEN",
-    "CATALOG_REGISTRY", "CATALOG_SHARES",
+    "QBL_USERS", "QBL_USER_ROLES", "QBL_USER_SETTINGS", "QBL_USER_TEAMS", "QBL_GROUPS",
+    "QBL_USER_SESSION", "QBL_USER_SIGN_IN", "QBL_USER_REFRESH_TOKEN",
+    "QBL_CATALOG_REGISTRY", 
 ]
 
 class TestSchema:
@@ -141,7 +140,7 @@ class TestSchema:
 
 
 # ---------------------------------------------------------------------------
-# 3 — Auth queries
+# 3 Auth queries
 # ---------------------------------------------------------------------------
 
 class TestAuthQueries:
@@ -167,12 +166,12 @@ class TestAuthQueries:
 
 
 # ---------------------------------------------------------------------------
-# 4 — SessionService
+# 4 SessionService
 # ---------------------------------------------------------------------------
 
 class TestSessionService:
     def test_log_sign_in_unknown_user_does_not_raise(self, session_svc):
-        """qbl_user_id is nullable — failed logins for unknown users must not raise."""
+        """qbl_user_id is nullable failed logins for unknown users must not raise."""
         session_svc.log_sign_in(
             "ghost_user_pytest",
             success=False,
@@ -216,7 +215,7 @@ class TestSessionService:
 
 
 # ---------------------------------------------------------------------------
-# 5 — CatalogRegistryService
+# 5 CatalogRegistryService
 # ---------------------------------------------------------------------------
 
 class TestCatalogRegistry:

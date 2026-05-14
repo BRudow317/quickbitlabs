@@ -11,26 +11,33 @@ logger = logging.getLogger(__name__)
 
 
 def user_setup(
-        username: str, 
-        email: str|None = None, 
-        password: str|None = None, 
-        role: str|None = None, 
-        is_active: bool = True
+        username: str,
+        email: str | None = None,
+        password: str | None = None,
+        role: str | None = None,
+        is_active: bool = True,
         ) -> int:
     from server.core.security import get_password_hash
     if email is None and password is None and role is None:
-        # If only username is provided, attempt to read all values from environment variables.
         key = (username or '').upper()
         username_ = os.getenv(f"QBL_{key}_USER", key)
         email_ = os.getenv(f"QBL_{key}_EMAIL", '')
-        password_ = os.getenv(f"QBL_{key}_PWD", '')
-        role_ = os.getenv(f"QBL_{key}_ROLE", "USER")
+        password_ = os.getenv(f"QBL_{key}_PWD", '') or os.getenv(f"QBL_{key}_PASS", '')
+        role_ = os.getenv(f"QBL_{key}_ROLE", '') or os.getenv(f"QBL_{key}_USER_ROLE", '')
     else:
         username_ = username
-        email_ = email
-        password_: str = password or secrets.token_urlsafe(16)  # Generate a random password if not provided.
-        role_ = role or "USER"
+        email_ = email or ''
+        password_ = password or secrets.token_urlsafe(16)
+        role_ = role or ''
 
+    if not username_:
+        raise ValueError("user_setup: username could not be resolved")
+    if not email_:
+        raise ValueError(f"user_setup: email is required for '{username_}'")
+    if not password_:
+        raise ValueError(f"user_setup: password is required for '{username_}'")
+
+    role_ = (role_ or 'USER').upper()
     hashed = get_password_hash(password_)
     is_active_ = 1 if is_active else 0
 
@@ -42,8 +49,14 @@ def user_setup(
             UPDATE SET password_hash = '{hashed}',
                        IS_ACTIVE     = {is_active_}
         WHEN NOT MATCHED THEN
-            INSERT (USERNAME, EMAIL, password_hash, qbl_role, IS_ACTIVE)
-            VALUES ('{username_}', '{email_}', '{hashed}', '{role_}', {is_active_})
+            INSERT (username, email, password_hash, qbl_role, IS_ACTIVE)
+            VALUES ('{username_}', '{email_}', '{hashed}', '{role_}', {is_active_});
+    COMMIT;
     """
-    return sql_runner(merge_sql).returncode
+    result = sql_runner(merge_sql, username="SYSDBA", schema="QBL")
+    stdout_upper = result.stdout.upper()
+    if result.returncode != 0 or "ORA-" in stdout_upper or "SP2-" in stdout_upper:
+        logger.error("user_setup failed for '%s':\n%s", username_, result.stdout.strip())
+        sys.exit(1)
+    return result.returncode
 

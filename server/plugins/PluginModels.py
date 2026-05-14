@@ -315,6 +315,8 @@ class Catalog(BaseModel):
     description: str | None = None
     catalog_limit: int | None = None
     catalog_offset: int | None = None
+    limit: int | None = None
+    offset: int | None = None
     entities: list[Entity] = Field(default_factory=list)
     filters: list[OperatorGroup] = Field(default_factory=list)
     joins: list[Join] = Field(default_factory=list)
@@ -550,6 +552,7 @@ class Catalog(BaseModel):
                     if a.column.locator and a.column.locator.plugin == plugin_name
                 ],
                 "limit": None,      # applied post-federation only
+                "offset": None,
             })
             children.append(child)
 

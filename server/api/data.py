@@ -49,6 +49,7 @@ def get_data(catalog: Catalog = Body(...)):
         if not child.source_type:
             raise HTTPException(status_code=500, detail="Child catalog is missing source_type.")
         plugin = _get_plugin(cast(PLUGIN, child.source_type))
+        child = child.model_copy(update={"limit": catalog.limit, "offset": catalog.offset})
         resp = plugin.get_data(child)
         if not resp.ok:
             raise HTTPException(status_code=500, detail=resp.message)

@@ -27,8 +27,7 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="api/auth/login")
 def _get_credentials(username: str) -> dict | None:
     """Return the QBL_USERS row for *username*, or None if not found."""
     sql = """
-        SELECT USERNAME, EMAIL, password_hash, IS_ACTIVE,
-               NVL(role_id, 'user')
+        SELECT USERNAME, EMAIL, password_hash, IS_ACTIVE, qbl_role
           FROM QBL_USERS
          WHERE USERNAME = :username
     """
@@ -81,7 +80,6 @@ def _insert_user(username: str, email: str, hashed_password: str) -> None:
 def register(user_in: UserCreate):
     """
     Register application credentials for a user.
-    If the username exists in the Salesforce USER table it will be linked via EXTERNAL_ID.
     """
     if _username_exists(user_in.username):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Username already registered")
@@ -274,7 +272,7 @@ def refresh_token_endpoint(body: RefreshRequest, request: Request, response: Res
     """
     Exchange a valid refresh token for a new access token + rotated refresh token.
 
-    The refresh token is read from the HttpOnly cookie first; the request body
+    The refresh token is read from the HttpOnly cookie first. The request body
     value is used as a fallback for clients that cannot use cookies.
     If the refresh token is expired but the request carries a valid JWT in the
     Authorization header, the JWT is used to re-issue both tokens (allowing

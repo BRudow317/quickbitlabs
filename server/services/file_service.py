@@ -46,7 +46,7 @@ def process_upload(
     """
     Persist *file_bytes* (uploaded as *filename*) through the appropriate plugin,
     save each entity as an encrypted Parquet file in the user's upload directory,
-    and return a Catalog (reader-plugin locators → saved files) plus the first
+    and return a Catalog (reader-plugin locators -> saved files) plus the first
     entity's PyArrow Table for preview slicing.
 
     Raises ValueError for unsupported extensions or empty files.

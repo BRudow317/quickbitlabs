@@ -235,6 +235,17 @@ export const Catalog_InputSchema = {
             ],
             title: 'Alias'
         },
+        label: {
+            anyOf: [
+                {
+                    type: 'string'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Label'
+        },
         namespace: {
             anyOf: [
                 {
@@ -245,11 +256,6 @@ export const Catalog_InputSchema = {
                 }
             ],
             title: 'Namespace'
-        },
-        version: {
-            type: 'integer',
-            title: 'Version',
-            default: 1
         },
         description: {
             anyOf: [
@@ -262,15 +268,62 @@ export const Catalog_InputSchema = {
             ],
             title: 'Description'
         },
-        scope: {
-            type: 'string',
-            enum: [
-                'SYSTEM',
-                'TEAM',
-                'USER'
+        catalog_limit: {
+            anyOf: [
+                {
+                    type: 'integer'
+                },
+                {
+                    type: 'null'
+                }
             ],
-            title: 'Scope',
-            default: 'USER'
+            title: 'Catalog Limit'
+        },
+        catalog_offset: {
+            anyOf: [
+                {
+                    type: 'integer'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Catalog Offset'
+        },
+        entities: {
+            items: {
+                $ref: '#/components/schemas/Entity'
+            },
+            type: 'array',
+            title: 'Entities'
+        },
+        filters: {
+            items: {
+                $ref: '#/components/schemas/OperatorGroup-Input'
+            },
+            type: 'array',
+            title: 'Filters'
+        },
+        joins: {
+            items: {
+                $ref: '#/components/schemas/Join'
+            },
+            type: 'array',
+            title: 'Joins'
+        },
+        sort_columns: {
+            items: {
+                $ref: '#/components/schemas/Sort'
+            },
+            type: 'array',
+            title: 'Sort Columns'
+        },
+        assignments: {
+            items: {
+                $ref: '#/components/schemas/Assignment'
+            },
+            type: 'array',
+            title: 'Assignments'
         },
         source_type: {
             anyOf: [
@@ -293,62 +346,15 @@ export const Catalog_InputSchema = {
             ],
             title: 'Source Type'
         },
-        entities: {
-            items: {
-                $ref: '#/components/schemas/Entity'
-            },
-            type: 'array',
-            title: 'Entities'
-        },
-        filters: {
-            items: {
-                $ref: '#/components/schemas/OperatorGroup-Input'
-            },
-            type: 'array',
-            title: 'Filters'
-        },
-        assignments: {
-            items: {
-                $ref: '#/components/schemas/Assignment'
-            },
-            type: 'array',
-            title: 'Assignments'
-        },
-        joins: {
-            items: {
-                $ref: '#/components/schemas/Join'
-            },
-            type: 'array',
-            title: 'Joins'
-        },
-        sort_columns: {
-            items: {
-                $ref: '#/components/schemas/Sort'
-            },
-            type: 'array',
-            title: 'Sort Columns'
-        },
-        limit: {
-            anyOf: [
-                {
-                    type: 'integer'
-                },
-                {
-                    type: 'null'
-                }
+        share_scope: {
+            type: 'string',
+            enum: [
+                'SYSTEM',
+                'GROUP',
+                'USER'
             ],
-            title: 'Limit'
-        },
-        offset: {
-            anyOf: [
-                {
-                    type: 'integer'
-                },
-                {
-                    type: 'null'
-                }
-            ],
-            title: 'Offset'
+            title: 'Share Scope',
+            default: 'USER'
         },
         owner_user_id: {
             anyOf: [
@@ -361,16 +367,10 @@ export const Catalog_InputSchema = {
             ],
             title: 'Owner User Id'
         },
-        team_id: {
-            anyOf: [
-                {
-                    type: 'string'
-                },
-                {
-                    type: 'null'
-                }
-            ],
-            title: 'Team Id'
+        catalog_version: {
+            type: 'integer',
+            title: 'Catalog Version',
+            default: 1
         },
         properties: {
             additionalProperties: true,
@@ -417,6 +417,17 @@ export const Catalog_OutputSchema = {
             ],
             title: 'Alias'
         },
+        label: {
+            anyOf: [
+                {
+                    type: 'string'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Label'
+        },
         namespace: {
             anyOf: [
                 {
@@ -427,11 +438,6 @@ export const Catalog_OutputSchema = {
                 }
             ],
             title: 'Namespace'
-        },
-        version: {
-            type: 'integer',
-            title: 'Version',
-            default: 1
         },
         description: {
             anyOf: [
@@ -444,15 +450,62 @@ export const Catalog_OutputSchema = {
             ],
             title: 'Description'
         },
-        scope: {
-            type: 'string',
-            enum: [
-                'SYSTEM',
-                'TEAM',
-                'USER'
+        catalog_limit: {
+            anyOf: [
+                {
+                    type: 'integer'
+                },
+                {
+                    type: 'null'
+                }
             ],
-            title: 'Scope',
-            default: 'USER'
+            title: 'Catalog Limit'
+        },
+        catalog_offset: {
+            anyOf: [
+                {
+                    type: 'integer'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Catalog Offset'
+        },
+        entities: {
+            items: {
+                $ref: '#/components/schemas/Entity'
+            },
+            type: 'array',
+            title: 'Entities'
+        },
+        filters: {
+            items: {
+                $ref: '#/components/schemas/OperatorGroup-Output'
+            },
+            type: 'array',
+            title: 'Filters'
+        },
+        joins: {
+            items: {
+                $ref: '#/components/schemas/Join'
+            },
+            type: 'array',
+            title: 'Joins'
+        },
+        sort_columns: {
+            items: {
+                $ref: '#/components/schemas/Sort'
+            },
+            type: 'array',
+            title: 'Sort Columns'
+        },
+        assignments: {
+            items: {
+                $ref: '#/components/schemas/Assignment'
+            },
+            type: 'array',
+            title: 'Assignments'
         },
         source_type: {
             anyOf: [
@@ -475,62 +528,15 @@ export const Catalog_OutputSchema = {
             ],
             title: 'Source Type'
         },
-        entities: {
-            items: {
-                $ref: '#/components/schemas/Entity'
-            },
-            type: 'array',
-            title: 'Entities'
-        },
-        filters: {
-            items: {
-                $ref: '#/components/schemas/OperatorGroup-Output'
-            },
-            type: 'array',
-            title: 'Filters'
-        },
-        assignments: {
-            items: {
-                $ref: '#/components/schemas/Assignment'
-            },
-            type: 'array',
-            title: 'Assignments'
-        },
-        joins: {
-            items: {
-                $ref: '#/components/schemas/Join'
-            },
-            type: 'array',
-            title: 'Joins'
-        },
-        sort_columns: {
-            items: {
-                $ref: '#/components/schemas/Sort'
-            },
-            type: 'array',
-            title: 'Sort Columns'
-        },
-        limit: {
-            anyOf: [
-                {
-                    type: 'integer'
-                },
-                {
-                    type: 'null'
-                }
+        share_scope: {
+            type: 'string',
+            enum: [
+                'SYSTEM',
+                'GROUP',
+                'USER'
             ],
-            title: 'Limit'
-        },
-        offset: {
-            anyOf: [
-                {
-                    type: 'integer'
-                },
-                {
-                    type: 'null'
-                }
-            ],
-            title: 'Offset'
+            title: 'Share Scope',
+            default: 'USER'
         },
         owner_user_id: {
             anyOf: [
@@ -543,16 +549,10 @@ export const Catalog_OutputSchema = {
             ],
             title: 'Owner User Id'
         },
-        team_id: {
-            anyOf: [
-                {
-                    type: 'string'
-                },
-                {
-                    type: 'null'
-                }
-            ],
-            title: 'Team Id'
+        catalog_version: {
+            type: 'integer',
+            title: 'Catalog Version',
+            default: 1
         },
         properties: {
             additionalProperties: true,

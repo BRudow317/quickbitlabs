@@ -130,7 +130,6 @@ def test_build_select_with_sort_and_limit() -> None:
     catalog = Catalog(
         entities=[entity],
         sort_columns=[Sort(column=id_col, direction="DESC")],
-        limit=25,
     )
 
     sql, _ = build_select(catalog)

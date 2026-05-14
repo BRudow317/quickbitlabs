@@ -16,10 +16,9 @@ def build(mode: ENV_MODE|None = None, force_rebuild: bool = False):
 def release():
     mode = os.environ.get("ENV_MODE", "production")
     if mode == "production":
-        logger.warning("Production Mode skipping release steps.")
         return
     import pytest
-    pytest.main(["-v", "server/tests/"])
+    pytest.main(["-v", "tests/"])
 
 def run():
     from server.app import start_app

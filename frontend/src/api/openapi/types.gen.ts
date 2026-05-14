@@ -150,25 +150,25 @@ export type CatalogInput = {
      */
     alias?: string | null;
     /**
+     * Label
+     */
+    label?: string | null;
+    /**
      * Namespace
      */
     namespace?: string | null;
-    /**
-     * Version
-     */
-    version?: number;
     /**
      * Description
      */
     description?: string | null;
     /**
-     * Scope
+     * Catalog Limit
      */
-    scope?: 'SYSTEM' | 'TEAM' | 'USER';
+    catalog_limit?: number | null;
     /**
-     * Source Type
+     * Catalog Offset
      */
-    source_type?: 'salesforce' | 'oracle' | 'reader' | 'excel' | 'federation' | null;
+    catalog_offset?: number | null;
     /**
      * Entities
      */
@@ -178,10 +178,6 @@ export type CatalogInput = {
      */
     filters?: Array<OperatorGroupInput>;
     /**
-     * Assignments
-     */
-    assignments?: Array<Assignment>;
-    /**
      * Joins
      */
     joins?: Array<Join>;
@@ -190,21 +186,25 @@ export type CatalogInput = {
      */
     sort_columns?: Array<Sort>;
     /**
-     * Limit
+     * Assignments
      */
-    limit?: number | null;
+    assignments?: Array<Assignment>;
     /**
-     * Offset
+     * Source Type
      */
-    offset?: number | null;
+    source_type?: 'salesforce' | 'oracle' | 'reader' | 'excel' | 'federation' | null;
+    /**
+     * Share Scope
+     */
+    share_scope?: 'SYSTEM' | 'GROUP' | 'USER';
     /**
      * Owner User Id
      */
     owner_user_id?: string | null;
     /**
-     * Team Id
+     * Catalog Version
      */
-    team_id?: string | null;
+    catalog_version?: number;
     /**
      * Properties
      */
@@ -230,25 +230,25 @@ export type CatalogOutput = {
      */
     alias?: string | null;
     /**
+     * Label
+     */
+    label?: string | null;
+    /**
      * Namespace
      */
     namespace?: string | null;
-    /**
-     * Version
-     */
-    version?: number;
     /**
      * Description
      */
     description?: string | null;
     /**
-     * Scope
+     * Catalog Limit
      */
-    scope?: 'SYSTEM' | 'TEAM' | 'USER';
+    catalog_limit?: number | null;
     /**
-     * Source Type
+     * Catalog Offset
      */
-    source_type?: 'salesforce' | 'oracle' | 'reader' | 'excel' | 'federation' | null;
+    catalog_offset?: number | null;
     /**
      * Entities
      */
@@ -258,10 +258,6 @@ export type CatalogOutput = {
      */
     filters?: Array<OperatorGroupOutput>;
     /**
-     * Assignments
-     */
-    assignments?: Array<Assignment>;
-    /**
      * Joins
      */
     joins?: Array<Join>;
@@ -270,21 +266,25 @@ export type CatalogOutput = {
      */
     sort_columns?: Array<Sort>;
     /**
-     * Limit
+     * Assignments
      */
-    limit?: number | null;
+    assignments?: Array<Assignment>;
     /**
-     * Offset
+     * Source Type
      */
-    offset?: number | null;
+    source_type?: 'salesforce' | 'oracle' | 'reader' | 'excel' | 'federation' | null;
+    /**
+     * Share Scope
+     */
+    share_scope?: 'SYSTEM' | 'GROUP' | 'USER';
     /**
      * Owner User Id
      */
     owner_user_id?: string | null;
     /**
-     * Team Id
+     * Catalog Version
      */
-    team_id?: string | null;
+    catalog_version?: number;
     /**
      * Properties
      */
@@ -770,6 +770,20 @@ export type ValidationError = {
     ctx?: {
         [key: string]: unknown;
     };
+};
+
+export type HealthCheckData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/health';
+};
+
+export type HealthCheckResponses = {
+    /**
+     * Successful Response
+     */
+    200: unknown;
 };
 
 export type RegisterData = {

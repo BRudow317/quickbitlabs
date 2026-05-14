@@ -1,11 +1,11 @@
 """
-SessionService - manages USER_SESSION, USER_SIGN_IN, and USER_REFRESH_TOKEN.
+SessionService - manages QBL_USER_SESSION, QBL_USER_SIGN_IN, and QBL_USER_REFRESH_TOKEN.
 
 All session tables reference QBL_USERS.qbl_user_id (numeric FK) rather than the
 raw username string.  Public methods still accept/return username strings; the
 service resolves IDs internally via _get_user_id().
 
-Audit column names are created_at / updated_at throughout (matching b_qbl_tables.sql).
+Audit column names are created_at / updated_at throughout (matching d_qbl_tables.sql).
 """
 from __future__ import annotations
 
@@ -22,7 +22,7 @@ logger = logging.getLogger(__name__)
 
 
 def _hash_token(token: str) -> str:
-    """SHA-256 hex digest of a raw JWT — what we store in the DB."""
+    """SHA-256 hex digest of a raw JWT  what we store in the DB."""
     return hashlib.sha256(token.encode()).hexdigest()
 
 
@@ -51,52 +51,66 @@ class SessionService:
 
     def load_session(self, username: str | None = None) -> Catalog:
         """
-        Read SYSTEM-owned catalog entries plus, when *username* is provided,
-        that user's own entries. Assembles entities from CATALOG_ENTITIES rows —
-        one row per Entity, no full-catalog JSON parsing.
+        Read SYSTEM-owned catalog entries (owner_user_id IS NULL) plus, when
+        *username* is provided, that user's own entries.  Each row's entities
+        CLOB is a JSON array of Entity objects.
         """
         if username:
             sql = """
-                SELECT ce.entity_json
-                  FROM CATALOG_REGISTRY cr
-                  JOIN CATALOG_ENTITIES ce
-                    ON ce.catalog_registry_id = cr.catalog_registry_id
-                 WHERE cr.scope = 'SYSTEM'
-                    OR (cr.scope = 'USER'
-                        AND cr.owner_user_id = (
-                            SELECT qbl_user_id FROM QBL_USERS WHERE USERNAME = :u))
+                SELECT cr.entities
+                  FROM QBL_CATALOG_REGISTRY cr
+                 WHERE cr.owner_user_id IS NULL
+                    OR cr.owner_user_id = (
+                        SELECT qbl_user_id FROM QBL_USERS WHERE USERNAME = :u)
             """
             params: dict = {"u": username}
         else:
             sql = """
-                SELECT ce.entity_json
-                  FROM CATALOG_REGISTRY cr
-                  JOIN CATALOG_ENTITIES ce
-                    ON ce.catalog_registry_id = cr.catalog_registry_id
-                 WHERE cr.scope = 'SYSTEM'
+                SELECT cr.entities
+                  FROM QBL_CATALOG_REGISTRY cr
+                 WHERE cr.owner_user_id IS NULL
             """
             params = {}
+
         entities: list[Entity] = []
         with self._server_db.connect().cursor() as cur:
-            cur.execute(sql, **params)
-            for (json_val,) in cur:
-                if json_val is None:
+            cur.execute(sql, params)
+            rows = cur.fetchall()
+            logger.info("load_session: query returned %d catalog row(s) for username=%r", len(rows), username)
+            for (clob_val,) in rows:
+                if clob_val is None:
+                    logger.warning("load_session: catalog row has NULL entities CLOB")
                     continue
-                json_str: str = json_val.read() if hasattr(json_val, "read") else json_val
+                if isinstance(clob_val, list):
+                    entity_list = clob_val
+                else:
+                    raw: str = clob_val.read() if hasattr(clob_val, "read") else clob_val
+                    if not raw:
+                        logger.warning("load_session: catalog row has empty entities CLOB")
+                        continue
+                    logger.debug("load_session: raw CLOB (first 500 chars): %s", raw[:500])
+                    entity_list = json.loads(raw)
                 try:
-                    entities.append(Entity.model_validate_json(json_str))
-                except Exception:
-                    logger.warning("Skipping malformed entity row in CATALOG_ENTITIES")
+                    row_count = 0
+                    for e in (entity_list or []):
+                        try:
+                            entities.append(Entity.model_validate(e))
+                            row_count += 1
+                        except Exception as exc:
+                            logger.warning("load_session: skipping malformed entity %r  %s", e.get("name") if isinstance(e, dict) else e, exc)
+                    logger.info("load_session: loaded %d entities from catalog row", row_count)
+                except Exception as exc:
+                    logger.warning("load_session: failed to parse entities CLOB  %s", exc)
+        logger.info("load_session: returning %d total entities for username=%r", len(entities), username)
         return Catalog(entities=entities)
 
     def list_systems(self) -> list[str]:
-        """Return sorted distinct source_type values for SYSTEM-owned catalogs.
-        Reads the indexed scalar column — no JSON parsing required.
-        """
+        """Return sorted distinct source_type values for SYSTEM catalogs
+        (owner_user_id IS NULL).  Reads the indexed scalar column."""
         sql = """
             SELECT DISTINCT source_type
-              FROM CATALOG_REGISTRY
-             WHERE scope        = 'SYSTEM'
+              FROM QBL_CATALOG_REGISTRY
+             WHERE owner_user_id IS NULL
                AND source_type IS NOT NULL
                AND source_type != 'federation'
         """
@@ -119,14 +133,14 @@ class SessionService:
         ip_address: str | None = None,
         user_agent: str | None = None,
     ) -> int:
-        """Persist a new session row and return the generated USER_SESSION_ID."""
+        """Persist a new session row and return the generated QBL_USER_SESSION_ID."""
         import oracledb
         user_id = self._get_user_id(username)
         if user_id is None:
             raise ValueError(f"Cannot create session: user '{username}' not found in QBL_USERS")
         token_hash = _hash_token(token)
         sql = """
-            INSERT INTO USER_SESSION
+            INSERT INTO QBL_USER_SESSION
                 (qbl_user_id, TOKEN_HASH, ISSUED_AT, EXPIRES_AT, IS_ACTIVE,
                  IP_ADDRESS, USER_AGENT, SESSION_DATA,
                  created_at, created_by, updated_at, updated_by)
@@ -134,7 +148,7 @@ class SessionService:
                 (:user_id, :token_hash, CURRENT_TIMESTAMP, :expires_at, 1,
                  :ip_address, :user_agent, NULL,
                  SYSTIMESTAMP, :username, SYSTIMESTAMP, :username)
-            RETURNING USER_SESSION_ID INTO :session_id
+            RETURNING QBL_USER_SESSION_ID INTO :session_id
         """
         con = self._server_db.connect()
         with con.cursor() as cur:
@@ -157,7 +171,7 @@ class SessionService:
         """Mark the session for *token* as inactive."""
         token_hash = _hash_token(token)
         sql = """
-            UPDATE USER_SESSION
+            UPDATE QBL_USER_SESSION
                SET IS_ACTIVE  = 0,
                    updated_at = SYSTIMESTAMP,
                    updated_by = 'SYSTEM'
@@ -177,7 +191,7 @@ class SessionService:
         if user_id is None:
             return 0
         sql = """
-            UPDATE USER_SESSION
+            UPDATE QBL_USER_SESSION
                SET IS_ACTIVE  = 0,
                    updated_at = SYSTIMESTAMP,
                    updated_by = 'SYSTEM'
@@ -197,8 +211,8 @@ class SessionService:
         if user_id is None:
             return []
         sql = """
-            SELECT USER_SESSION_ID, IP_ADDRESS, USER_AGENT, ISSUED_AT, EXPIRES_AT
-              FROM USER_SESSION
+            SELECT QBL_USER_SESSION_ID, IP_ADDRESS, USER_AGENT, ISSUED_AT, EXPIRES_AT
+              FROM QBL_USER_SESSION
              WHERE qbl_user_id = :user_id
                AND IS_ACTIVE   = 1
                AND EXPIRES_AT  > CURRENT_TIMESTAMP
@@ -224,13 +238,13 @@ class SessionService:
         if user_id is None:
             return False
         sql = """
-            UPDATE USER_SESSION
+            UPDATE QBL_USER_SESSION
                SET IS_ACTIVE  = 0,
                    updated_at = SYSTIMESTAMP,
                    updated_by = 'SYSTEM'
-             WHERE USER_SESSION_ID = :sid
-               AND qbl_user_id     = :user_id
-               AND IS_ACTIVE       = 1
+             WHERE QBL_USER_SESSION_ID = :sid
+               AND qbl_user_id         = :user_id
+               AND IS_ACTIVE           = 1
         """
         con = self._server_db.connect()
         with con.cursor() as cur:
@@ -245,7 +259,7 @@ class SessionService:
         sql = """
             SELECT IS_ACTIVE,
                    CASE WHEN EXPIRES_AT > CURRENT_TIMESTAMP THEN 1 ELSE 0 END
-              FROM USER_SESSION
+              FROM QBL_USER_SESSION
              WHERE TOKEN_HASH = :th
         """
         con = self._server_db.connect()
@@ -262,7 +276,7 @@ class SessionService:
 
     def _deactivate_by_hash(self, token_hash: str) -> None:
         sql = """
-            UPDATE USER_SESSION
+            UPDATE QBL_USER_SESSION
                SET IS_ACTIVE  = 0,
                    updated_at = SYSTIMESTAMP,
                    updated_by = 'SYSTEM'
@@ -277,7 +291,7 @@ class SessionService:
     def deactivate_expired_sessions(self) -> int:
         """Bulk-deactivate all sessions whose EXPIRES_AT has passed. Returns row count."""
         sql = """
-            UPDATE USER_SESSION
+            UPDATE QBL_USER_SESSION
                SET IS_ACTIVE  = 0,
                    updated_at = SYSTIMESTAMP,
                    updated_by = 'SYSTEM'
@@ -296,11 +310,11 @@ class SessionService:
         """Return the full session row as a dict (with username via join), or None."""
         token_hash = _hash_token(token)
         sql = """
-            SELECT s.USER_SESSION_ID, u.USERNAME, s.ISSUED_AT, s.EXPIRES_AT,
+            SELECT s.QBL_USER_SESSION_ID, u.USERNAME, s.ISSUED_AT, s.EXPIRES_AT,
                    s.IS_ACTIVE, s.IP_ADDRESS, s.USER_AGENT, s.SESSION_DATA,
                    s.created_at, s.updated_at
-              FROM USER_SESSION s
-              JOIN QBL_USERS    u ON u.qbl_user_id = s.qbl_user_id
+              FROM QBL_USER_SESSION s
+              JOIN QBL_USERS        u ON u.qbl_user_id = s.qbl_user_id
              WHERE s.TOKEN_HASH = :th
         """
         with self._server_db.connect().cursor() as cur:
@@ -331,7 +345,7 @@ class SessionService:
         import oracledb
         token_hash = _hash_token(token)
         sql = """
-            UPDATE USER_SESSION
+            UPDATE QBL_USER_SESSION
                SET SESSION_DATA = :data,
                    updated_at   = SYSTIMESTAMP,
                    updated_by   = 'SYSTEM'
@@ -364,14 +378,14 @@ class SessionService:
         user_agent: str | None = None,
         failure_reason: str | None = None,
     ) -> None:
-        """Append one row to USER_SIGN_IN.
+        """Append one row to QBL_USER_SIGN_IN.
 
-        qbl_user_id is nullable — failed attempts for unknown usernames are
+        qbl_user_id is nullable  failed attempts for unknown usernames are
         recorded with qbl_user_id=NULL and the raw input in attempted_username.
         """
         user_id = self._get_user_id(username)
         sql = """
-            INSERT INTO USER_SIGN_IN
+            INSERT INTO QBL_USER_SIGN_IN
                 (qbl_user_id, attempted_username, IP_ADDRESS, USER_AGENT,
                  SUCCESS, FAILURE_REASON,
                  created_at, created_by, updated_at, updated_by)
@@ -409,7 +423,7 @@ class SessionService:
         """
         user_id = self._get_user_id(username)
         sql = """
-            SELECT COUNT(*) FROM USER_SIGN_IN
+            SELECT COUNT(*) FROM QBL_USER_SIGN_IN
              WHERE SUCCESS = 0
                AND created_at > (CURRENT_TIMESTAMP - NUMTODSINTERVAL(:window, 'MINUTE'))
                AND (:user_id IS NULL OR qbl_user_id       = :user_id)
@@ -430,7 +444,7 @@ class SessionService:
         """Return the raw count of failed attempts in the window."""
         user_id = self._get_user_id(username)
         sql = """
-            SELECT COUNT(*) FROM USER_SIGN_IN
+            SELECT COUNT(*) FROM QBL_USER_SIGN_IN
              WHERE SUCCESS = 0
                AND created_at > (CURRENT_TIMESTAMP - NUMTODSINTERVAL(:window, 'MINUTE'))
                AND (:user_id IS NULL OR qbl_user_id = :user_id)
@@ -461,7 +475,7 @@ class SessionService:
             raise ValueError(f"Cannot create refresh token: user '{username}' not found in QBL_USERS")
         token_hash = _hash_token(token)
         sql = """
-            INSERT INTO USER_REFRESH_TOKEN
+            INSERT INTO QBL_USER_REFRESH_TOKEN
                 (qbl_user_id, TOKEN_HASH, PARENT_SESSION_ID, ISSUED_AT, EXPIRES_AT, IS_ACTIVE,
                  IP_ADDRESS, USER_AGENT,
                  created_at, created_by, updated_at, updated_by)
@@ -469,7 +483,7 @@ class SessionService:
                 (:user_id, :token_hash, :session_id, CURRENT_TIMESTAMP, :expires_at, 1,
                  :ip_address, :user_agent,
                  SYSTIMESTAMP, :username, SYSTIMESTAMP, :username)
-            RETURNING USER_REFRESH_TOKEN_ID INTO :token_id
+            RETURNING QBL_USER_REFRESH_TOKEN_ID INTO :token_id
         """
         con = self._server_db.connect()
         with con.cursor() as cur:
@@ -492,14 +506,14 @@ class SessionService:
     def validate_refresh_token(self, token: str) -> dict | None:
         """
         Return a dict with username/is_active/not_expired, or None if the token
-        does not exist in USER_REFRESH_TOKEN.
+        does not exist in QBL_USER_REFRESH_TOKEN.
         """
         token_hash = _hash_token(token)
         sql = """
             SELECT u.USERNAME, rt.IS_ACTIVE,
                    CASE WHEN rt.EXPIRES_AT > CURRENT_TIMESTAMP THEN 1 ELSE 0 END
-              FROM USER_REFRESH_TOKEN rt
-              JOIN QBL_USERS          u  ON u.qbl_user_id = rt.qbl_user_id
+              FROM QBL_USER_REFRESH_TOKEN rt
+              JOIN QBL_USERS              u  ON u.qbl_user_id = rt.qbl_user_id
              WHERE rt.TOKEN_HASH = :th
         """
         with self._server_db.connect().cursor() as cur:
@@ -531,7 +545,7 @@ class SessionService:
         """Deactivate a single refresh token. Returns True if a row was updated."""
         token_hash = _hash_token(token)
         sql = """
-            UPDATE USER_REFRESH_TOKEN
+            UPDATE QBL_USER_REFRESH_TOKEN
                SET IS_ACTIVE  = 0,
                    updated_at = SYSTIMESTAMP,
                    updated_by = 'SYSTEM'
@@ -551,7 +565,7 @@ class SessionService:
         if user_id is None:
             return 0
         sql = """
-            UPDATE USER_REFRESH_TOKEN
+            UPDATE QBL_USER_REFRESH_TOKEN
                SET IS_ACTIVE  = 0,
                    updated_at = SYSTIMESTAMP,
                    updated_by = 'SYSTEM'

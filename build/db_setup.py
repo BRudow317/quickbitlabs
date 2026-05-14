@@ -19,7 +19,7 @@ VALID_SUFFIXES = {".sql", ".plsql", ".tbl", ".pkg", ".prc", ".fnc", ".trg", ".al
 
 def connection_string(username: str = "QBL", as_sysdba: bool = False) -> str:
     env_usr  = f"ORACLE_{username}_USER".upper()
-    env_pwd  = f"ORACLE_{username}_PWD".upper()
+    env_pass  = f"ORACLE_{username}_PASS".upper()
     env_host = f"ORACLE_{username}_HOST".upper()
     env_port = f"ORACLE_{username}_PORT".upper()
     env_sid  = f"ORACLE_{username}_SID".upper()
@@ -27,21 +27,21 @@ def connection_string(username: str = "QBL", as_sysdba: bool = False) -> str:
     env_role = f"ORACLE_{username}_ROLE".upper()
 
     db_user = os.getenv(env_usr)
-    db_pwd  = os.getenv(env_pwd)
+    db_pass  = os.getenv(env_pass)
     db_host = os.getenv(env_host, "localhost")
     db_port = os.getenv(env_port, "1521")
     db_role = os.getenv(env_role, "").upper()
     db_sid  = os.getenv(env_sid)
     db_svc  = os.getenv(env_svc)
 
-    missing = [v for v, val in [(env_usr, db_user), (env_pwd, db_pwd), (env_svc, db_svc)] if not val]
+    missing = [v for v, val in [(env_usr, db_user), (env_pass, db_pass), (env_svc, db_svc)] if not val]
     if missing:
         raise EnvironmentError(f"Missing required environment variables: {', '.join(missing)}")
 
     # SYSDBA connects to the CDB via SID; all other users connect via service name
     db_target = db_sid if (db_role == "SYSDBA" or as_sysdba) and db_sid else db_svc
 
-    conn_str = f"{db_user}/\"{db_pwd}\"@//{db_host}:{db_port}/{db_target}"
+    conn_str = f"{db_user}/\"{db_pass}\"@//{db_host}:{db_port}/{db_target}"
     if db_role:
         conn_str += f" AS {db_role}"
     elif as_sysdba:
@@ -51,27 +51,31 @@ def connection_string(username: str = "QBL", as_sysdba: bool = False) -> str:
     return conn_str
 
 
-def _container_sql(username: str) -> str:
-    """Returns ALTER SESSION SET CONTAINER when running as SYSDBA against a PDB."""
-    env_role = f"ORACLE_{username}_ROLE".upper()
-    if os.getenv(env_role, "").upper() != "SYSDBA":
+def _container_sql(pdb: str | None) -> str:
+    if not pdb:
         return ""
-    pdb = os.getenv("ORACLE_PDB")
-    return f"ALTER SESSION SET CONTAINER = {pdb.upper()};\n" if pdb else ""
+    return f"ALTER SESSION SET CONTAINER = {pdb.upper()};\n"
+
+
+def _schema_sql(schema: str | None) -> str:
+    if not schema:
+        return ""
+    return f"ALTER SESSION SET CURRENT_SCHEMA = {schema.upper()};\n"
 
 
 def sql_runner(
     raw_sql: str,
     username: str = "QBL",
-    as_sysdba: bool = False,
+    schema: str | None = None,
 ) -> subprocess.CompletedProcess:
+    
     env_role = f"ORACLE_{username}_ROLE".upper()
     db_role  = os.getenv(env_role, "").upper()
-    is_sysdba = db_role == "SYSDBA" or as_sysdba
+    is_sysdba = db_role == "SYSDBA"
 
-    conn_str = connection_string(username, as_sysdba)
-    container = _container_sql(username) if is_sysdba else ""
-    safe_sql = f"{SQL_CLI_PFX}{container}{raw_sql}{SQL_CLI_SFX}"
+    conn_str = connection_string(username, is_sysdba)
+    pdb = os.getenv("ORACLE_PDB") if is_sysdba else None
+    safe_sql = f"{SQL_CLI_PFX}{_container_sql(pdb)}{_schema_sql(schema)}{raw_sql}{SQL_CLI_SFX}"
     command = ["sqlplus", "-s", conn_str]
     return subprocess.run(
         command,
@@ -100,7 +104,7 @@ def get_file_map(root_dir: str) -> dict[str, str]:
 def sort_file_map(file_map: dict[str, str]) -> list[tuple[str, str]]:
     return sorted(file_map.items(), key=lambda item: item[0])
 
-def create_db_logger(username: str, as_sysdba: bool = False) -> None:
+def create_db_logger(username: str) -> None:
     logger.info("Creating DB_LOGGER table if it does not exist...")
     raw_sql = """
     BEGIN
@@ -122,8 +126,7 @@ def create_db_logger(username: str, as_sysdba: bool = False) -> None:
     """
     result = sql_runner(
         raw_sql,
-        username, 
-        as_sysdba
+        username
         )
     stdout_upper = result.stdout.upper()
     
@@ -133,14 +136,13 @@ def create_db_logger(username: str, as_sysdba: bool = False) -> None:
     else:   
         logger.info("DB_LOGGER Complete.")
 
-def insert_loop(username: str, as_sysdba: bool, sorted_files: list[tuple[str, str]]) -> None:
+def insert_loop(username: str, sorted_files: list[tuple[str, str]]) -> None:
     for file_name, file_path in sorted_files:
         raw_sql = get_sql(file_path)
         ext = Path(file_path).suffix.lower().strip(".")
         result = sql_runner(
             raw_sql,
-            username, 
-            as_sysdba
+            username
         )
         
         stdout_upper = result.stdout.upper()
@@ -163,7 +165,7 @@ def insert_loop(username: str, as_sysdba: bool, sorted_files: list[tuple[str, st
            COMMIT;
         END;
         """
-        sql_runner(log_sql, username,  as_sysdba)
+        sql_runner(log_sql, username)
         
         if status.upper() == "ERROR":
             if "ORA-00955" in output_msg:
@@ -176,7 +178,7 @@ def user_setup(username, email, password, role, is_active: bool = True) -> int:
     from server.core.security import get_password_hash
     username_ = username or os.getenv(f"QBL_{username.upper()}_USER")
     email_ = email or os.getenv(f"QBL_{username.upper()}_EMAIL")
-    password_: str = password or os.getenv(f"QBL_{username}_PWD") or ''
+    password_: str = password or os.getenv(f"QBL_{username}_PASS") or ''
     role_ = role or os.getenv(f"QBL_{username.upper()}_ROLE", "USER")
 
     hashed = get_password_hash(password_)
@@ -196,8 +198,8 @@ def user_setup(username, email, password, role, is_active: bool = True) -> int:
     return sql_runner(merge_sql).returncode
 
 def build_db(sql_dir: str, username: str = "QBL", as_sysdba: bool = False) -> None:    
-    create_db_logger(username,  as_sysdba)
+    create_db_logger(username)
     file_map = get_file_map(sql_dir)
     sorted_files = sort_file_map(file_map)
-    insert_loop(username,  as_sysdba, sorted_files)
+    insert_loop(username, sorted_files)
     

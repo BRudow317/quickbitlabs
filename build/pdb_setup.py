@@ -8,7 +8,7 @@ logger = logging.getLogger(__name__)
 
 def _run_sysdba_query(sql_command: str, container: str | None = None) -> str:
     sys_user = os.getenv("ORACLE_SYSDBA_USER", default="SYS")
-    sys_pass = os.getenv("ORACLE_SYSDBA_PWD")
+    sys_pass = os.getenv("ORACLE_SYSDBA_PASS")
     sys_host = os.getenv("ORACLE_SYSDBA_HOST", default="localhost")
     sys_port = os.getenv("ORACLE_SYSDBA_PORT", default="1521")
     sys_sid = os.getenv("ORACLE_SYSDBA_SID")
@@ -16,7 +16,7 @@ def _run_sysdba_query(sql_command: str, container: str | None = None) -> str:
     logger.debug("SYSDBA Connection Details: user=%s, host=%s, port=%s, sid=%s", sys_user, sys_host, sys_port, sys_sid)
 
     if not sys_pass:
-        logger.error("Missing 'ORACLE_SYSDBA_PWD' environment variable.")
+        logger.error("Missing 'ORACLE_SYSDBA_PASS' environment variable.")
         sys.exit(1)
 
     conn_str = f"{sys_user}/\"{sys_pass}\"@{sys_host}:{sys_port}/{sys_sid} AS SYSDBA"
@@ -25,7 +25,7 @@ def _run_sysdba_query(sql_command: str, container: str | None = None) -> str:
     
     safe_sql = f"""
     SET PAGESIZE 0 
-    SET FEEDBACK OFF 
+    SET FEEDBACK OFF
     SET VERIFY OFF 
     SET HEADING OFF 
     SET ECHO OFF 
@@ -56,10 +56,10 @@ def _run_sysdba_query(sql_command: str, container: str | None = None) -> str:
         logger.error("sqlplus not found on system PATH.")
         sys.exit(1)
 
-def create_pdb_from_seed(pdb_name: str, admin_user: str, admin_pwd: str) -> None:
+def create_pdb_from_seed(pdb_name: str, admin_user: str, admin_pass: str) -> None:
     create_sql = f"""
     CREATE PLUGGABLE DATABASE {pdb_name}
-    ADMIN USER {admin_user} IDENTIFIED BY "{admin_pwd}";
+    ADMIN USER {admin_user} IDENTIFIED BY "{admin_pass}";
 
     ALTER PLUGGABLE DATABASE {pdb_name} OPEN;
     ALTER PLUGGABLE DATABASE {pdb_name} SAVE STATE;
@@ -78,9 +78,9 @@ def create_pdb_from_seed(pdb_name: str, admin_user: str, admin_pwd: str) -> None
 def orchestrate_user(user_name: str, is_admin: bool = False) -> None:
     pdb_name = os.getenv("ORACLE_PDB", "QBLPDB").upper()
     app_user = os.getenv(f"ORACLE_{user_name.upper()}_USER")
-    app_pwd = os.getenv(f"ORACLE_{user_name.upper()}_PWD")
+    app_pass = os.getenv(f"ORACLE_{user_name.upper()}_PASS")
 
-    if not app_user or not app_pwd:
+    if not app_user or not app_pass:
         logger.error("Missing app user credentials in environment variables.")
         sys.exit(1)
     # Every user needs at least CREATE SESSION to log in
@@ -104,9 +104,9 @@ def orchestrate_user(user_name: str, is_admin: bool = False) -> None:
     BEGIN
        SELECT COUNT(*) INTO v_count FROM dba_users WHERE username = UPPER('{app_user}');
        IF v_count = 0 THEN
-          EXECUTE IMMEDIATE 'CREATE USER {app_user} IDENTIFIED BY "{app_pwd}"';
+          EXECUTE IMMEDIATE 'CREATE USER {app_user} IDENTIFIED BY "{app_pass}"';
        ELSE
-          EXECUTE IMMEDIATE 'ALTER USER {app_user} IDENTIFIED BY "{app_pwd}"';
+          EXECUTE IMMEDIATE 'ALTER USER {app_user} IDENTIFIED BY "{app_pass}"';
        END IF;
     END;
     /
@@ -119,7 +119,7 @@ def orchestrate_pdb(pgdb_base_name: str, force_rebuild: bool = False) -> None:
     logger.debug("Starting PDB orchestration with base name '%s' and force_rebuild=%s", pgdb_base_name, force_rebuild)
     pdb_name = f"{pgdb_base_name}PDB".upper()
     admin_user = os.getenv(f"ORACLE_{pdb_name}_ADMIN_USER", "admin")
-    admin_pwd = os.getenv(f"ORACLE_{pdb_name}_ADMIN_PWD", "password")
+    admin_pass = os.getenv(f"ORACLE_{pdb_name}_ADMIN_PASS", "password")
 
     count_output = _run_sysdba_query(f"SELECT COUNT(*) FROM V$PDBS WHERE UPPER(NAME) = '{pdb_name}';")
     exists = count_output == "1"
@@ -132,11 +132,11 @@ def orchestrate_pdb(pgdb_base_name: str, force_rebuild: bool = False) -> None:
                 DROP PLUGGABLE DATABASE {pdb_name} INCLUDING DATAFILES;
             """)
             logger.info("PDB '%s' dropped successfully.", pdb_name)
-            create_pdb_from_seed(pdb_name, admin_user, admin_pwd)
+            create_pdb_from_seed(pdb_name, admin_user, admin_pass)
         else:
             logger.info("PDB '%s' already exists. Skipping creation.", pdb_name)
     else:
-        create_pdb_from_seed(pdb_name, admin_user, admin_pwd)
+        create_pdb_from_seed(pdb_name, admin_user, admin_pass)
 
     orchestrate_user("QBL")
     orchestrate_user("DWH")
